@@ -45,9 +45,11 @@ export interface ChartDataPoint {
   price: number;     // This will represent avgHighPrice for Y-axis
   avgLowPrice?: number; // Optional average low price
   formattedDate: string; // For tooltip display (can be removed if CustomTooltip formats its own label)
+  highPriceVolume?: number; // Buy volume
+  lowPriceVolume?: number;  // Sell volume
 }
 
-export type Timespan = '5m' | '1h' | '6h' | '24h' | '7d' | '1mo' | '6mo' | '1y';
+export type Timespan = '1h' | '6h' | '1d' | '7d' | '1mo' | '3mo' | '6mo' | '1y';
 export type TimespanAPI = '5m' | '1h' | '6h' | '24h'; // Actual timesteps the API accepts
 
 export interface PriceAlert {
@@ -98,6 +100,8 @@ export interface ThemeColorPalette {
   '--chart-line': string;
   '--chart-line-active-dot': string;
   '--chart-line-glow': string;
+  '--chart-volume-buy': string; // For buy volume bars
+  '--chart-volume-sell': string; // For sell volume bars
   '--tooltip-bg': string;
   '--tooltip-border': string;
   '--tooltip-text': string;

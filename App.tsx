@@ -19,7 +19,7 @@ const App: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ItemMapInfo | null>(null);
   const [latestPrice, setLatestPrice] = useState<LatestPriceData | null>(null);
   const [historicalData, setHistoricalData] = useState<ChartDataPoint[]>([]);
-  const [selectedTimespan, setSelectedTimespan] = useState<Timespan>('7d'); // Updated default
+  const [selectedTimespan, setSelectedTimespan] = useState<Timespan>('1d');
   const [isLoadingItems, setIsLoadingItems] = useState<boolean>(true);
   const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +38,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('gePulseShowChartLineGlow');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [showVolumeChart, setShowVolumeChart] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gePulseShowVolumeChart');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
   const [activeThemeName, setActiveThemeName] = useState<string>(() => {
     return localStorage.getItem('gePulseActiveTheme') || 'ge-pulse-dark';
   });
@@ -48,9 +52,13 @@ const App: React.FC = () => {
   });
   const [desktopNotificationPermission, setDesktopNotificationPermission] = useState<NotificationPermission>(Notification.permission);
 
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(-1);
 
   const autoRefreshIntervalIdRef = useRef<number | null>(null);
   const countdownIntervalIdRef = useRef<number | null>(null);
+
+  const searchBarWrapperRef = useRef<HTMLDivElement>(null);
+  const itemListWrapperRef = useRef<HTMLDivElement>(null);
 
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
@@ -68,17 +76,17 @@ const App: React.FC = () => {
     }, 5000);
   }, []);
 
-  const { alerts, addAlert, removeAlert, checkAlerts } = usePriceAlerts(
+  const { alerts, addAlert, removeAlert, updateAlert, checkAlerts } = usePriceAlerts(
     (triggeredAlert) => {
       const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
       addNotification(message, 'success');
 
       if (enableDesktopNotifications && desktopNotificationPermission === 'granted') {
-        if (Notification.permission === 'granted') { // Double check permission before showing
+        if (Notification.permission === 'granted') {
           new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
             body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
             icon: getItemIconUrl(triggeredAlert.itemIcon),
-            tag: triggeredAlert.id, // Helps prevent duplicate notifications if rapidly triggered
+            tag: triggeredAlert.id,
           });
         }
       }
@@ -86,7 +94,6 @@ const App: React.FC = () => {
     fetchLatestPrice
   );
 
-  // Apply theme colors as CSS variables
   useEffect(() => {
     const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES[0];
     const root = document.documentElement;
@@ -123,20 +130,43 @@ const App: React.FC = () => {
   }, [showChartLineGlow]);
 
   useEffect(() => {
+    localStorage.setItem('gePulseShowVolumeChart', JSON.stringify(showVolumeChart));
+  }, [showVolumeChart]);
+
+  useEffect(() => {
     localStorage.setItem('gePulseEnableDesktopNotifications', JSON.stringify(enableDesktopNotifications));
   }, [enableDesktopNotifications]);
+
+  // Click-away listener for main search
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchTerm && // Only act if dropdown is potentially visible
+          searchBarWrapperRef.current && 
+          !searchBarWrapperRef.current.contains(event.target as Node) &&
+          itemListWrapperRef.current && 
+          !itemListWrapperRef.current.contains(event.target as Node)
+         ) {
+        setSearchTerm('');
+        setActiveSuggestionIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [searchTerm]); // Re-add listener if searchTerm changes to ensure it captures visibility
 
   const handleToggleDesktopNotifications = useCallback(async () => {
     if (desktopNotificationPermission === 'denied') {
       addNotification('Desktop notifications are blocked by your browser. Please enable them in your browser settings.', 'error');
-      setEnableDesktopNotifications(false); // Ensure toggle reflects blocked state
+      setEnableDesktopNotifications(false);
       return;
     }
-
-    if (enableDesktopNotifications) { // If currently enabled, user wants to disable
+    if (enableDesktopNotifications) {
       setEnableDesktopNotifications(false);
       addNotification('Desktop notifications disabled.', 'info');
-    } else { // If currently disabled, user wants to enable
+    } else {
       if (desktopNotificationPermission === 'granted') {
         setEnableDesktopNotifications(true);
         addNotification('Desktop notifications enabled.', 'success');
@@ -154,96 +184,54 @@ const App: React.FC = () => {
     }
   }, [desktopNotificationPermission, enableDesktopNotifications, addNotification]);
 
+  const toggleChartGrid = useCallback(() => setShowChartGrid(prev => !prev), []);
+  const toggleChartLineGlow = useCallback(() => setShowChartLineGlow(prev => !prev), []);
+  const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
 
-  const toggleChartGrid = useCallback(() => {
-    setShowChartGrid(prev => !prev);
-  }, []);
-
-  const toggleChartLineGlow = useCallback(() => {
-    setShowChartLineGlow(prev => !prev);
-  }, []);
 
   const refreshCurrentItemData = useCallback(async (options: { itemToRefresh?: ItemMapInfo, isUserInitiated?: boolean } = {}) => {
     const currentItem = options.itemToRefresh || selectedItem;
     const isUserInitiated = options.isUserInitiated !== undefined ? options.isUserInitiated : true;
-
     if (!currentItem) return;
-
     setIsLoadingPrice(true); 
     setError(null);
-
     try {
       let apiTimestepToFetch: TimespanAPI;
       switch (selectedTimespan) {
-        case '5m':
-        case '1h':
-          apiTimestepToFetch = '5m';
-          break;
-        case '6h':
-        case '24h':
-          apiTimestepToFetch = '1h';
-          break;
-        case '7d':
-          apiTimestepToFetch = '6h';
-          break;
-        case '1mo':
-        case '6mo':
-        case '1y':
-          apiTimestepToFetch = '24h';
-          break;
-        default:
-          apiTimestepToFetch = '6h'; // Fallback
+        case '1h': case '6h': apiTimestepToFetch = '5m'; break;
+        case '1d': case '7d': apiTimestepToFetch = '1h'; break;
+        case '1mo': apiTimestepToFetch = '6h'; break;
+        case '3mo': case '6mo': case '1y': apiTimestepToFetch = '24h'; break;
+        default: apiTimestepToFetch = '1h'; // Should not happen with defined types
       }
-
       const [latest, rawHistorical] = await Promise.all([
         fetchLatestPrice(currentItem.id),
         fetchHistoricalData(currentItem.id, apiTimestepToFetch),
       ]);
       setLatestPrice(latest);
-
       const nowMs = Date.now();
       let startTimeMs: number;
-
       switch (selectedTimespan) {
-        case '5m':
-          startTimeMs = nowMs - 5 * 60 * 1000;
-          break;
-        case '1h':
-          startTimeMs = nowMs - 60 * 60 * 1000;
-          break;
-        case '6h':
-          startTimeMs = nowMs - 6 * 60 * 60 * 1000;
-          break;
-        case '24h':
-          startTimeMs = nowMs - 24 * 60 * 60 * 1000;
-          break;
-        case '7d':
-          startTimeMs = nowMs - 7 * 24 * 60 * 60 * 1000;
-          break;
-        case '1mo':
-          startTimeMs = nowMs - 30 * 24 * 60 * 60 * 1000; // Approx 30 days
-          break;
-        case '6mo':
-           // API '24h' provides ~6 months, filter to ensure we don't exceed this if API changes
-          startTimeMs = nowMs - 180 * 24 * 60 * 60 * 1000; // Approx 180 days
-          break;
-        case '1y':
-          // API '24h' provides ~6 months, so '1y' will show this max available daily data
-          startTimeMs = nowMs - 365 * 24 * 60 * 60 * 1000; // Approx 365 days
-          break;
-        default:
-          startTimeMs = nowMs - 7 * 24 * 60 * 60 * 1000; // Default to 7 days if something unexpected
+        case '1h': startTimeMs = nowMs - (1 * 60 * 60 * 1000); break;
+        case '6h': startTimeMs = nowMs - (6 * 60 * 60 * 1000); break;
+        case '1d': startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000); break;
+        case '7d': startTimeMs = nowMs - (7 * 24 * 60 * 60 * 1000); break;
+        case '1mo': startTimeMs = nowMs - (30 * 24 * 60 * 60 * 1000); break;
+        case '3mo': startTimeMs = nowMs - (90 * 24 * 60 * 60 * 1000); break;
+        case '6mo': startTimeMs = nowMs - (180 * 24 * 60 * 60 * 1000); break;
+        case '1y': startTimeMs = nowMs - (365 * 24 * 60 * 60 * 1000); break;
+        default: startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000); // Default to 1 day
       }
-      
       const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= startTimeMs && dp.timestamp <= nowMs);
       setHistoricalData(filteredHistorical);
-
-
-      if (isUserInitiated && selectedTimespan === options.itemToRefresh?.name) { // Avoid double notification if timespan change also triggers this
+      
+      if (isUserInitiated && options.isUserInitiated !== false) { // Check explicitly for false to allow suppression
         addNotification(`${currentItem.name} data refreshed!`, 'success');
-      } else if (!isUserInitiated) {
-        console.log(`Background refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
+      } else if (options.isUserInitiated === false) {
+        // This means it was a timespan change or auto-refresh, no success toast
+        console.log(`Background/Timespan refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
       }
+      
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
         checkAlerts(itemAlerts, {[currentItem.id]: latest});
@@ -256,15 +244,25 @@ const App: React.FC = () => {
     } finally {
       setIsLoadingPrice(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, /* Removed getItemIconUrl from here as it's stable */]);
-
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts]);
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo) => {
     setSelectedItem(item);
-    setSearchTerm(''); 
+    setSearchTerm('');
+    setActiveSuggestionIndex(-1); 
     await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: true }); 
   }, [refreshCurrentItemData]);
+
+  const handleSelectItemById = useCallback((itemId: number) => {
+    const itemToSelect = allItems.find(item => item.id === itemId);
+    if (itemToSelect) {
+      handleSelectItem(itemToSelect);
+      // Scroll to top or to the chart view if needed
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      addNotification(`Could not find item with ID ${itemId}. It might have been removed or changed.`, 'error');
+    }
+  }, [allItems, handleSelectItem, addNotification]);
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
     setSelectedTimespan(timespan); 
@@ -272,6 +270,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (selectedItem) {
+      // Pass false for isUserInitiated to suppress notification on timespan change
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,43 +295,76 @@ const App: React.FC = () => {
     if (countdownIntervalIdRef.current) clearInterval(countdownIntervalIdRef.current);
     autoRefreshIntervalIdRef.current = null;
     countdownIntervalIdRef.current = null;
-
     if (isAutoRefreshEnabled && selectedItem) {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
-
       autoRefreshIntervalIdRef.current = setInterval(() => {
         if (selectedItem) { 
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
-
       countdownIntervalIdRef.current = setInterval(() => {
-        setTimeToNextRefresh(prev => {
-          if (prev <= 1) { 
-            return AUTO_REFRESH_INTERVAL_SECONDS;
-          }
-          return prev - 1;
-        });
+        setTimeToNextRefresh(prev => (prev <= 1 ? AUTO_REFRESH_INTERVAL_SECONDS : prev - 1));
       }, 1000);
-
     } else {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
     }
-
     return () => {
       if (autoRefreshIntervalIdRef.current) clearInterval(autoRefreshIntervalIdRef.current);
       if (countdownIntervalIdRef.current) clearInterval(countdownIntervalIdRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]); 
-
+  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]);
 
   const filteredItems = useMemo(() => {
-    if (!searchTerm) return [];
-    return allItems
+    if (!searchTerm) {
+      return [];
+    }
+    const results = allItems
       .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .slice(0, 20);
-  }, [allItems, searchTerm]);
+    return results;
+  }, [allItems, searchTerm]); 
+
+  useEffect(() => {
+    if (activeSuggestionIndex >= filteredItems.length && searchTerm) { 
+      setActiveSuggestionIndex(-1);
+    }
+  }, [filteredItems, activeSuggestionIndex, searchTerm]);
+
+  const handleSearchKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!filteredItems.length && !['Escape', 'ArrowDown', 'ArrowUp'].includes(event.key) && activeSuggestionIndex === -1) {
+        if (filteredItems.length === 0 && searchTerm && event.key !== 'Escape') return;
+    }
+
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        setActiveSuggestionIndex(prev => (prev + 1) % (filteredItems.length || 1)); // Ensure modulo works even if length is 0 temporarily
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        setActiveSuggestionIndex(prev => (prev - 1 + (filteredItems.length || 1)) % (filteredItems.length || 1));
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (activeSuggestionIndex >= 0 && activeSuggestionIndex < filteredItems.length) {
+          handleSelectItem(filteredItems[activeSuggestionIndex]);
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        setSearchTerm('');
+        setActiveSuggestionIndex(-1);
+        break;
+      default:
+        break;
+    }
+  }, [filteredItems, activeSuggestionIndex, handleSelectItem, searchTerm]);
+
+  const activeDescendantId = useMemo(() => {
+    return activeSuggestionIndex !== -1 ? `search-suggestion-${activeSuggestionIndex}` : undefined;
+  }, [activeSuggestionIndex]);
 
   const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
 
@@ -355,7 +387,7 @@ const App: React.FC = () => {
                 <svg width="80" height="50" viewBox="0 0 135 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-3">
                     <path d="M10 30 Q25 5 40 30 T70 30 Q85 55 90 30" stroke="var(--logo-pulse-color)" strokeWidth="5" fill="transparent"/>
                     <circle cx="90" cy="30" r="8" fill="var(--logo-coin-fill)" stroke="var(--logo-coin-stroke)" strokeWidth="2"/>
-                    <text x="101" y="30" dominant-baseline="middle" fill="var(--logo-gp-text-color)" fontSize="20" fontWeight="bold" className="hidden sm:inline">GP</text>
+                    {/* GP Text removed as per user request */}
                 </svg>
                 <h1 className="text-4xl md:text-5xl font-bold text-[var(--text-accent)]">GE Pulse</h1>
             </div>
@@ -372,6 +404,8 @@ const App: React.FC = () => {
           onToggleChartGrid={toggleChartGrid}
           showChartLineGlow={showChartLineGlow}
           onToggleChartLineGlow={toggleChartLineGlow}
+          showVolumeChart={showVolumeChart}
+          onToggleShowVolumeChart={toggleShowVolumeChart}
           activeThemeName={activeThemeName}
           onSetThemeName={setActiveThemeName}
           themes={APP_THEMES}
@@ -397,9 +431,24 @@ const App: React.FC = () => {
           <aside className="md:col-span-1 space-y-6">
             <div className="bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl">
               <h2 className="text-2xl font-semibold mb-4 text-[var(--text-accent)]">Search Item</h2>
-              <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+              <div ref={searchBarWrapperRef}>
+                <SearchBar 
+                  searchTerm={searchTerm} 
+                  setSearchTerm={setSearchTerm}
+                  onKeyDownHandler={handleSearchKeyDown}
+                  activeDescendantId={activeDescendantId}
+                  filteredItemsCount={filteredItems.length}
+                />
+              </div>
               {searchTerm && filteredItems.length > 0 && (
-                <ItemList items={filteredItems} onSelectItem={handleSelectItem} getItemIconUrl={getItemIconUrl} />
+                <div ref={itemListWrapperRef}>
+                  <ItemList 
+                      items={filteredItems} 
+                      onSelectItem={handleSelectItem} 
+                      getItemIconUrl={getItemIconUrl}
+                      activeSuggestionIndex={activeSuggestionIndex}
+                  />
+                </div>
               )}
               {searchTerm && filteredItems.length === 0 && !isLoadingItems && (
                 <p className="text-[var(--text-secondary)] mt-4">No items found matching "{searchTerm}".</p>
@@ -410,10 +459,12 @@ const App: React.FC = () => {
               alerts={alerts}
               addAlert={addAlert}
               removeAlert={removeAlert}
+              updateAlert={updateAlert} // Pass updateAlert here
               allItems={allItems}
               getItemName={getItemName}
               getItemIconUrl={getItemIconUrl}
               addNotification={addNotification}
+              onSelectAlertItemById={handleSelectItemById}
             />
           </aside>
 
@@ -440,6 +491,7 @@ const App: React.FC = () => {
                 getItemIconUrl={getItemIconUrl}
                 showChartGrid={showChartGrid}
                 showChartLineGlow={showChartLineGlow}
+                showVolumeChart={showVolumeChart}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">

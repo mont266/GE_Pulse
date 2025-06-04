@@ -43,6 +43,23 @@ export const usePriceAlerts = (
     setAlerts(prevAlerts => prevAlerts.filter(alert => alert.id !== alertId));
   }, []);
 
+  const updateAlert = useCallback((alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => {
+    setAlerts(prevAlerts =>
+      prevAlerts.map(alert => {
+        if (alert.id === alertId && alert.status === 'active') {
+          return {
+            ...alert,
+            targetPrice: updatedValues.targetPrice,
+            condition: updatedValues.condition,
+            // Potentially reset triggeredAt and priceAtTrigger if you want it to be re-triggerable
+            // status: 'active', // Ensure it remains active or can be re-triggered
+          };
+        }
+        return alert;
+      })
+    );
+  }, []);
+
   const checkAlerts = useCallback(async (alertsToCheck: PriceAlert[], specificPrices?: Record<number, LatestPriceData>) => {
     const updatedAlerts = [...alerts]; // Create a mutable copy
     let anyAlertTriggered = false;
@@ -104,6 +121,5 @@ export const usePriceAlerts = (
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerts, checkAlerts]); // Re-run if alerts list changes (e.g. new active alert)
 
-  return { alerts, addAlert, removeAlert, checkAlerts };
+  return { alerts, addAlert, removeAlert, updateAlert, checkAlerts };
 };
-    

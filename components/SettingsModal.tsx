@@ -9,6 +9,8 @@ interface SettingsModalProps {
   onToggleChartGrid: () => void;
   showChartLineGlow: boolean;
   onToggleChartLineGlow: () => void;
+  showVolumeChart: boolean;
+  onToggleShowVolumeChart: () => void;
   activeThemeName: string;
   onSetThemeName: (themeName: string) => void;
   themes: AppTheme[];
@@ -24,6 +26,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleChartGrid,
   showChartLineGlow,
   onToggleChartLineGlow,
+  showVolumeChart,
+  onToggleShowVolumeChart,
   activeThemeName,
   onSetThemeName,
   themes,
@@ -109,6 +113,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                     <div className={`block w-12 h-6 rounded-full transition-colors bg-[${showChartLineGlow ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
                     <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${showChartLineGlow ? 'translate-x-6' : ''}`}></div>
+                  </div>
+                </label>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
+                <span className="text-[var(--text-primary)]">Show Volume Chart</span>
+                <label htmlFor="volumeChartToggle" className="flex items-center cursor-pointer">
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      id="volumeChartToggle" 
+                      className="sr-only" 
+                      checked={showVolumeChart} 
+                      onChange={onToggleShowVolumeChart}
+                    />
+                    <div className={`block w-12 h-6 rounded-full transition-colors bg-[${showVolumeChart ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
+                    <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${showVolumeChart ? 'translate-x-6' : ''}`}></div>
                   </div>
                 </label>
               </div>

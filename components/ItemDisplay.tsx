@@ -16,6 +16,7 @@ interface ItemDisplayProps {
   getItemIconUrl: (iconName: string) => string;
   showChartGrid: boolean;
   showChartLineGlow: boolean;
+  showVolumeChart: boolean;
 }
 
 export const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -28,7 +29,8 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   error,
   getItemIconUrl,
   showChartGrid,
-  showChartLineGlow
+  showChartLineGlow,
+  showVolumeChart,
 }) => {
   return (
     <div className="space-y-6">
@@ -73,9 +75,14 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
       {!isLoading && !error && (
         <>
           <TimespanSelector selectedTimespan={selectedTimespan} onSelectTimespan={onTimespanChange} />
-          <div className="h-80 md:h-96 w-full">
+          <div className="h-[500px] md:h-[600px] w-full"> {/* Increased height for potential volume chart */}
             {historicalData.length > 0 ? (
-              <PriceChart data={historicalData} showGrid={showChartGrid} showLineGlow={showChartLineGlow} />
+              <PriceChart 
+                data={historicalData} 
+                showGrid={showChartGrid} 
+                showLineGlow={showChartLineGlow}
+                showVolumeChart={showVolumeChart} 
+              />
             ) : (
               <div className="flex items-center justify-center h-full text-[var(--text-muted)]">
                 <p>No historical data available for this timespan.</p>

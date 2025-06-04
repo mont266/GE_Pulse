@@ -7,6 +7,8 @@ interface PriceAlertListProps {
   onRemoveAlert: (alertId: string) => void;
   getItemName: (itemId: number) => string; 
   getItemIconUrl: (iconName: string) => string;
+  onSelectAlertItem: (itemId: number) => void;
+  onStartEdit: (alert: PriceAlert) => void; // New prop
 }
 
 const AlertIcon: React.FC<{ status: PriceAlert['status'] }> = ({ status }) => {
@@ -24,8 +26,14 @@ const AlertIcon: React.FC<{ status: PriceAlert['status'] }> = ({ status }) => {
   );
 };
 
+const EditIcon: React.FC = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+  </svg>
+);
 
-export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemoveAlert, getItemIconUrl }) => {
+
+export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemoveAlert, getItemIconUrl, onSelectAlertItem, onStartEdit }) => {
   if (alerts.length === 0) {
     return <p className="text-[var(--text-secondary)] text-center py-4">No active alerts.</p>;
   }
@@ -47,7 +55,7 @@ export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemove
               : 'bg-[var(--bg-tertiary)]'
             }`}
         >
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-grow">
             <AlertIcon status={alert.status} />
             <img 
               src={getItemIconUrl(alert.itemIcon)} 
@@ -55,8 +63,18 @@ export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemove
               className="w-10 h-10 object-contain flex-shrink-0" 
               onError={(e) => (e.currentTarget.style.display = 'none')}
             />
-            <div>
-              <p className={`font-semibold ${alert.status === 'triggered' ? 'text-[var(--alert-triggered-text)]' : 'text-[var(--text-primary)]'}`}>{alert.itemName}</p>
+            <div className="flex-grow">
+              <button
+                onClick={() => onSelectAlertItem(alert.itemId)}
+                className={`${alert.status === 'triggered' ? 'font-bold' : 'font-semibold'} text-left transition-colors 
+                  ${alert.status === 'triggered' 
+                    ? 'text-[var(--alert-triggered-text)] hover:text-[var(--alert-triggered-text)]/80' 
+                    : 'text-[var(--text-primary)] hover:text-[var(--text-accent)]'
+                  } focus:outline-none focus:underline`}
+                aria-label={`View chart for ${alert.itemName}`}
+              >
+                {alert.itemName}
+              </button>
               <p className={`text-sm ${alert.status === 'triggered' ? 'text-[var(--alert-triggered-text)] opacity-80' : 'text-[var(--text-secondary)]'}`}>
                 {alert.condition === 'above' ? 'Above' : 'Below'} {alert.targetPrice.toLocaleString()} GP
               </p>
@@ -67,16 +85,27 @@ export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemove
               )}
             </div>
           </div>
-          <button
-            onClick={() => onRemoveAlert(alert.id)}
-            className={`p-1 rounded-full hover:bg-[var(--price-low)]/30 focus:outline-none focus:ring-2 focus:ring-[var(--price-low)] 
-              ${alert.status === 'triggered' ? 'text-[var(--alert-triggered-text)] hover:text-[var(--price-low)]' : 'text-[var(--text-muted)] hover:text-[var(--price-low)]'}`}
-            aria-label="Remove alert"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex space-x-2 flex-shrink-0">
+            {alert.status === 'active' && (
+              <button
+                onClick={() => onStartEdit(alert)}
+                className={`p-1 rounded-full hover:bg-[var(--bg-interactive)]/30 focus:outline-none focus:ring-2 focus:ring-[var(--bg-interactive)] text-[var(--text-muted)] hover:text-[var(--bg-interactive)]`}
+                aria-label="Edit alert"
+              >
+                <EditIcon />
+              </button>
+            )}
+            <button
+              onClick={() => onRemoveAlert(alert.id)}
+              className={`p-1 rounded-full hover:bg-[var(--price-low)]/30 focus:outline-none focus:ring-2 focus:ring-[var(--price-low)] 
+                ${alert.status === 'triggered' ? 'text-[var(--alert-triggered-text)] hover:text-[var(--price-low)]' : 'text-[var(--text-muted)] hover:text-[var(--price-low)]'}`}
+              aria-label="Remove alert"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       ))}
     </div>

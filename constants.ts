@@ -5,12 +5,12 @@ export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
 export const ITEM_IMAGE_BASE_URL = 'https://oldschool.runescape.wiki/images/';
 
 export const TIMESPAN_OPTIONS: { label: string; value: Timespan }[] = [
-  { label: '5 Min', value: '5m' },
   { label: '1 Hour', value: '1h' },
   { label: '6 Hours', value: '6h' },
-  { label: '24 Hours', value: '24h' },
+  { label: '1 Day', value: '1d' },
   { label: '7 Days', value: '7d' },
   { label: '1 Month', value: '1mo' },
+  { label: '3 Months', value: '3mo' },
   { label: '6 Months', value: '6mo' },
   { label: '1 Year', value: '1y' },
 ];
@@ -52,6 +52,8 @@ export const APP_THEMES: AppTheme[] = [
       '--chart-line': '#8B5CF6', // purple-500
       '--chart-line-active-dot': '#A78BFA', // purple-400
       '--chart-line-glow': '#A78BFA', // purple-400
+      '--chart-volume-buy': 'rgba(74, 222, 128, 0.6)', // green-400 with alpha
+      '--chart-volume-sell': 'rgba(248, 113, 113, 0.6)', // red-400 with alpha
       '--tooltip-bg': 'rgba(39, 26, 60, 0.85)', // Dark purple
       '--tooltip-border': '#581C87', // purple-800
       '--tooltip-text': '#DDD6FE', // purple-200
@@ -59,11 +61,11 @@ export const APP_THEMES: AppTheme[] = [
       '--toggle-active-bg': '#0ea5e9', // sky-500
       '--toggle-inactive-bg': '#4b5563', // slate-600
       '--toggle-handle': '#ffffff', // white
-      '--alert-triggered-bg': 'rgba(250, 204, 21, 0.2)', // yellow-300 with alpha
-      '--alert-triggered-border': '#facc15', // yellow-400
-      '--alert-triggered-text': '#fde047', // yellow-300
+      '--alert-triggered-bg': 'rgba(74, 222, 128, 0.15)', // green-400 with light alpha
+      '--alert-triggered-border': '#4ade80', // green-400
+      '--alert-triggered-text': '#86efac', // green-300
       '--alert-active-icon': '#38bdf8', // sky-400
-      '--alert-triggered-icon': '#facc15', // yellow-400
+      '--alert-triggered-icon': '#4ade80', // green-400
       '--notification-success-bg': '#166534', // green-700
       '--notification-error-bg': '#991b1b', // red-700
       '--notification-info-bg': '#0c5480', // sky-700
@@ -109,6 +111,8 @@ export const APP_THEMES: AppTheme[] = [
       '--chart-line': '#006400', // darkgreen
       '--chart-line-active-dot': '#228B22', // forestgreen
       '--chart-line-glow': '#3CB371', // mediumseagreen
+      '--chart-volume-buy': 'rgba(56, 142, 60, 0.6)', // medium green with alpha
+      '--chart-volume-sell': 'rgba(211, 47, 47, 0.6)', // medium red with alpha
       '--tooltip-bg': 'rgba(245, 245, 220, 0.9)', // beige with opacity
       '--tooltip-border': '#a1887f', // brownish grey
       '--tooltip-text': '#5D4037', // dark brown
@@ -116,11 +120,11 @@ export const APP_THEMES: AppTheme[] = [
       '--toggle-active-bg': '#228B22', // forestgreen
       '--toggle-inactive-bg': '#bcaaa4', // lighter brownish grey
       '--toggle-handle': '#ffffff', // white
-      '--alert-triggered-bg': 'rgba(255, 235, 59, 0.3)', // yellow light
-      '--alert-triggered-border': '#FBC02D', // yellow dark
-      '--alert-triggered-text': '#795548', // medium brown
+      '--alert-triggered-bg': 'rgba(76, 175, 80, 0.2)', // material green 500 with alpha
+      '--alert-triggered-border': '#4CAF50', // material green 500
+      '--alert-triggered-text': '#2E7D32', // material green 800 (dark green)
       '--alert-active-icon': '#006400', // darkgreen
-      '--alert-triggered-icon': '#F9A825', // darker yellow
+      '--alert-triggered-icon': '#4CAF50', // material green 500
       '--notification-success-bg': '#c8e6c9', // light green
       '--notification-error-bg': '#ffcdd2', // light red
       '--notification-info-bg': '#bbdefb', // light blue
@@ -166,6 +170,8 @@ export const APP_THEMES: AppTheme[] = [
       '--chart-line': '#ff79c6', // pink
       '--chart-line-active-dot': '#ff93d0', // lighter pink
       '--chart-line-glow': '#ff93d0', // lighter pink
+      '--chart-volume-buy': 'rgba(100, 255, 218, 0.6)', // cyan/mint with alpha
+      '--chart-volume-sell': 'rgba(255, 121, 198, 0.6)', // pink with alpha
       '--tooltip-bg': 'rgba(17, 34, 64, 0.85)', // dark blue with opacity
       '--tooltip-border': '#64ffda', // cyan/mint accent
       '--tooltip-text': '#ccd6f6', // light blue/lavender
@@ -173,11 +179,11 @@ export const APP_THEMES: AppTheme[] = [
       '--toggle-active-bg': '#64ffda', // cyan/mint accent
       '--toggle-inactive-bg': '#4a5568', // darker slate blue
       '--toggle-handle': '#0b192f', // very dark blue
-      '--alert-triggered-bg': 'rgba(255, 121, 198, 0.2)', // pink with alpha
-      '--alert-triggered-border': '#ff79c6', // pink
-      '--alert-triggered-text': '#ffb8e3', // light pink
-      '--alert-active-icon': '#64ffda', // cyan/mint
-      '--alert-triggered-icon': '#ff79c6', // pink
+      '--alert-triggered-bg': 'rgba(100, 255, 218, 0.15)', // cyan/mint with light alpha
+      '--alert-triggered-border': '#64ffda', // cyan/mint
+      '--alert-triggered-text': '#a7fdec', // lighter cyan/mint
+      '--alert-active-icon': '#64ffda', // cyan/mint (active icon can match accent)
+      '--alert-triggered-icon': '#64ffda', // cyan/mint
       '--notification-success-bg': '#296157', // dark cyan
       '--notification-error-bg': '#5c1d3a', // dark pink
       '--notification-info-bg': '#2c3a79', // darkish blue
@@ -223,6 +229,8 @@ export const APP_THEMES: AppTheme[] = [
       '--chart-line': '#f472b6', // Neon pink/magenta line
       '--chart-line-active-dot': '#ec4899', // Pink-500
       '--chart-line-glow': '#f472b6', // Neon pink/magenta
+      '--chart-volume-buy': 'rgba(80, 250, 123, 0.6)', // Neon green with alpha
+      '--chart-volume-sell': 'rgba(255, 85, 85, 0.6)', // Neon red with alpha
       '--tooltip-bg': 'rgba(26, 20, 45, 0.9)', // Dark purple tooltip
       '--tooltip-border': '#ab57ff',
       '--tooltip-text': '#f2e7fe',
@@ -230,11 +238,11 @@ export const APP_THEMES: AppTheme[] = [
       '--toggle-active-bg': '#ab57ff',
       '--toggle-inactive-bg': '#581c87', // Purple-800
       '--toggle-handle': '#ffffff',
-      '--alert-triggered-bg': 'rgba(244, 114, 182, 0.2)', // Neon pink with alpha
-      '--alert-triggered-border': '#f472b6', // Neon pink
-      '--alert-triggered-text': '#fce7f3', // Pink-100
+      '--alert-triggered-bg': 'rgba(80, 250, 123, 0.15)', // Neon green with light alpha
+      '--alert-triggered-border': '#50fa7b', // Neon green
+      '--alert-triggered-text': '#b0fed0', // lighter neon green
       '--alert-active-icon': '#d8b4fe', // Purple-300
-      '--alert-triggered-icon': '#f472b6', // Neon pink
+      '--alert-triggered-icon': '#50fa7b', // Neon green
       '--notification-success-bg': '#035f1e', // Dark neon green
       '--notification-error-bg': '#7d0202', // Dark neon red
       '--notification-info-bg': '#3b0764', // Dark neon purple base

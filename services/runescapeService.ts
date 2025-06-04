@@ -52,6 +52,8 @@ export async function fetchHistoricalData(itemId: number, timespan: TimespanAPI)
       timestamp: dp.timestamp * 1000, // Convert seconds to milliseconds for JS Date
       price: dp.avgHighPrice as number, // This is avgHighPrice, already filtered for null
       avgLowPrice: dp.avgLowPrice === null ? undefined : dp.avgLowPrice, // Add avgLowPrice
+      highPriceVolume: dp.highPriceVolume,
+      lowPriceVolume: dp.lowPriceVolume,
       formattedDate: new Date(dp.timestamp * 1000).toLocaleString(), // Keep for potential use, though custom tooltip will format
     }));
 }
