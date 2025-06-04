@@ -1,0 +1,7 @@
+
+{
+  "name": "GE Pulse",
+  "description": "A web application to track Grand Exchange prices from Old School RuneScape, view historical data, and set price alerts. Uses the prices.runescape.wiki API.",
+  "requestFramePermissions": []
+}
+    
