@@ -1,4 +1,3 @@
-
 export interface ItemMapInfo {
   examine: string;
   id: number;
@@ -125,6 +124,8 @@ export interface ThemeColorPalette {
   '--icon-button-hover-bg': string;
   '--icon-button-default-text': string;
   '--icon-button-hover-text': string;
+  '--favorite-icon-default': string; // For empty favorite star
+  '--favorite-icon-favorited': string; // For filled favorite star
 }
 
 export interface AppTheme {
@@ -132,3 +133,20 @@ export interface AppTheme {
   id: string;
   colors: ThemeColorPalette;
 }
+
+export type FavoriteItemId = number; // Just for clarity, it's a number
+
+export interface FavoriteItemHourlyChangeData {
+  changeAbsolute: number;
+  changePercent: number;
+}
+
+// Represents the state for hourly change: could be loading, an error, no sufficient data, successfully loaded, or not yet processed.
+export type FavoriteItemHourlyChangeState = 
+  | FavoriteItemHourlyChangeData 
+  | 'loading' 
+  | 'error' 
+  | 'no_data' 
+  | null;
+
+export type WordingPreference = 'uk' | 'us';

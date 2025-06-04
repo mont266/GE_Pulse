@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI } from './types';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference } from './types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -10,8 +10,9 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { NotificationBar } from './components/NotificationBar';
 import { RefreshControls } from './components/RefreshControls';
 import { SettingsModal } from './components/SettingsModal';
+import { FavoritesList } from './components/FavoritesList';
 import { usePriceAlerts } from './hooks/usePriceAlerts';
-import { API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES } from './constants';
+import { API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE } from './constants';
 
 const App: React.FC = () => {
   const [allItems, setAllItems] = useState<ItemMapInfo[]>([]);
@@ -52,7 +53,25 @@ const App: React.FC = () => {
   });
   const [desktopNotificationPermission, setDesktopNotificationPermission] = useState<NotificationPermission>(Notification.permission);
 
+  const [wordingPreference, setWordingPreference] = useState<WordingPreference>(() => {
+    const saved = localStorage.getItem(WORDING_PREFERENCE_STORAGE_KEY) as WordingPreference | null;
+    return saved || DEFAULT_WORDING_PREFERENCE;
+  });
+
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(-1);
+
+  const [favoriteItemIds, setFavoriteItemIds] = useState<FavoriteItemId[]>(() => {
+    try {
+      const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      return storedFavorites ? JSON.parse(storedFavorites) : [];
+    } catch (e) {
+      console.error("Failed to load favourites from localStorage", e);
+      return [];
+    }
+  });
+  const [favoriteItemPrices, setFavoriteItemPrices] = useState<Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>>({});
+  const [favoriteItemHourlyChanges, setFavoriteItemHourlyChanges] = useState<Record<FavoriteItemId, FavoriteItemHourlyChangeState>>({});
+
 
   const autoRefreshIntervalIdRef = useRef<number | null>(null);
   const countdownIntervalIdRef = useRef<number | null>(null);
@@ -75,6 +94,155 @@ const App: React.FC = () => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
   }, []);
+  
+  useEffect(() => {
+    localStorage.setItem(WORDING_PREFERENCE_STORAGE_KEY, wordingPreference);
+  }, [wordingPreference]);
+
+  const addFavoriteItem = useCallback((itemId: FavoriteItemId) => {
+    setFavoriteItemIds(prevIds => {
+      if (!prevIds.includes(itemId)) {
+        const newIds = [...prevIds, itemId];
+        const favTerm = wordingPreference === 'uk' ? 'favourites' : 'favorites';
+        addNotification(`${getItemName(itemId)} added to ${favTerm}.`, 'success');
+        return newIds;
+      }
+      return prevIds;
+    });
+  }, [addNotification, getItemName, wordingPreference]);
+
+  const removeFavoriteItem = useCallback((itemId: FavoriteItemId) => {
+    setFavoriteItemIds(prevIds => {
+      if (prevIds.includes(itemId)) {
+        const favTerm = wordingPreference === 'uk' ? 'favourites' : 'favorites';
+        addNotification(`${getItemName(itemId)} removed from ${favTerm}.`, 'info');
+        setFavoriteItemPrices(currentPrices => {
+            const newPrices = {...currentPrices};
+            delete newPrices[itemId];
+            return newPrices;
+        });
+        setFavoriteItemHourlyChanges(currentChanges => {
+            const newChanges = {...currentChanges};
+            delete newChanges[itemId];
+            return newChanges;
+        });
+        return prevIds.filter(id => id !== itemId);
+      }
+      return prevIds;
+    });
+  }, [addNotification, getItemName, wordingPreference]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemIds));
+    } catch (e) {
+      console.error("Failed to save favourites to localStorage", e);
+    }
+  }, [favoriteItemIds]);
+
+  const calculateHourlyChange = async (
+    itemId: FavoriteItemId,
+    currentHighPrice: number | null,
+    isMountedRef: React.MutableRefObject<boolean>
+  ): Promise<FavoriteItemHourlyChangeState> => {
+    if (currentHighPrice === null) {
+      return 'no_data'; // Cannot calculate change if current price is unknown
+    }
+    try {
+      const rawHistorical = await fetchHistoricalData(itemId, '5m');
+      const nowMs = Date.now();
+      const oneHourAgoMsThreshold = nowMs - (60 * 60 * 1000);
+
+      // fetchHistoricalData returns ChartDataPoint[] which has timestamp in ms and is sorted.
+      // Find the most recent data point that is at least 1 hour old.
+      let priceThen: number | null = null;
+      // Iterate backwards to find the first point at or before 1 hour ago
+      for (let i = rawHistorical.length - 1; i >= 0; i--) {
+        if (rawHistorical[i].timestamp <= oneHourAgoMsThreshold) {
+          priceThen = rawHistorical[i].price;
+          break;
+        }
+      }
+
+      if (priceThen !== null) {
+        const changeAbsolute = currentHighPrice - priceThen;
+        const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (currentHighPrice > 0 ? Infinity : 0);
+        if (isMountedRef.current) {
+          return { changeAbsolute, changePercent } as FavoriteItemHourlyChangeData;
+        }
+      } else {
+        if (isMountedRef.current) return 'no_data';
+      }
+    } catch (histErr) {
+      console.error(`Failed to fetch historical for hourly change (item ${itemId})`, histErr);
+      if (isMountedRef.current) return 'error';
+    }
+    return 'error'; // Default to error if something went wrong and not caught
+  };
+
+
+  useEffect(() => {
+    if (!allItems.length) return;
+    const isMountedRef = { current: true };
+
+    const fetchAllFavoriteDataSequentially = async () => {
+      for (const itemId of favoriteItemIds) {
+        if (!isMountedRef.current) break;
+
+        const itemDetail = allItems.find(it => it.id === itemId);
+        if (itemDetail) {
+          let currentPriceData = favoriteItemPrices[itemId];
+          let hourlyChangeData = favoriteItemHourlyChanges[itemId];
+
+          // Fetch latest price if not available or was an error
+          if (currentPriceData === undefined || currentPriceData === 'loading' || currentPriceData === 'error' || currentPriceData === null) {
+            if (isMountedRef.current) setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
+            try {
+              const priceData = await fetchLatestPrice(itemId);
+              if (isMountedRef.current) {
+                setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
+                currentPriceData = priceData; // Update for subsequent hourly change calculation
+              }
+            } catch (err) {
+              console.error(`Failed to fetch price for favourite item ${itemId}`, err);
+              if (isMountedRef.current) {
+                setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
+                setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' })); // Cascade error
+              }
+              currentPriceData = 'error'; // Mark as error to skip hourly change
+            }
+          }
+          
+          // If latest price is successfully fetched (or already exists and is valid), calculate hourly change
+          if (typeof currentPriceData === 'object' && currentPriceData !== null && currentPriceData.high !== null) {
+            if (hourlyChangeData === undefined || hourlyChangeData === null || hourlyChangeData === 'error' || hourlyChangeData === 'loading') {
+              if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+              const changeResult = await calculateHourlyChange(itemId, currentPriceData.high, isMountedRef);
+              if (isMountedRef.current) {
+                // If changeResult is an object, it implies FavoriteItemHourlyChangeData
+                if (typeof changeResult === 'object' && changeResult !== null && 'changeAbsolute' in changeResult) {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as FavoriteItemHourlyChangeData }));
+                } else {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as 'error' | 'no_data' }));
+                }
+              }
+            }
+          } else if (currentPriceData !== 'loading' && currentPriceData !== 'error') { 
+            // Latest price is null or invalid, so hourly change is not possible or is an error
+             if (isMountedRef.current && (hourlyChangeData === undefined || hourlyChangeData === null || hourlyChangeData === 'loading')) {
+               setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
+             }
+          }
+        }
+         // Optional small delay between fetches
+         // if (isMountedRef.current) await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    };
+
+    fetchAllFavoriteDataSequentially();
+    return () => { isMountedRef.current = false; };
+  }, [favoriteItemIds, allItems]); // Only re-run when the list of favourites or all items mapping changes.
+
 
   const { alerts, addAlert, removeAlert, updateAlert, checkAlerts } = usePriceAlerts(
     (triggeredAlert) => {
@@ -137,10 +305,9 @@ const App: React.FC = () => {
     localStorage.setItem('gePulseEnableDesktopNotifications', JSON.stringify(enableDesktopNotifications));
   }, [enableDesktopNotifications]);
 
-  // Click-away listener for main search
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchTerm && // Only act if dropdown is potentially visible
+      if (searchTerm && 
           searchBarWrapperRef.current && 
           !searchBarWrapperRef.current.contains(event.target as Node) &&
           itemListWrapperRef.current && 
@@ -155,7 +322,7 @@ const App: React.FC = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [searchTerm]); // Re-add listener if searchTerm changes to ensure it captures visibility
+  }, [searchTerm]);
 
   const handleToggleDesktopNotifications = useCallback(async () => {
     if (desktopNotificationPermission === 'denied') {
@@ -195,6 +362,8 @@ const App: React.FC = () => {
     if (!currentItem) return;
     setIsLoadingPrice(true); 
     setError(null);
+    const isMountedRefreshRef = { current: true }; // For async operations within this callback
+
     try {
       let apiTimestepToFetch: TimespanAPI;
       switch (selectedTimespan) {
@@ -202,12 +371,16 @@ const App: React.FC = () => {
         case '1d': case '7d': apiTimestepToFetch = '1h'; break;
         case '1mo': apiTimestepToFetch = '6h'; break;
         case '3mo': case '6mo': case '1y': apiTimestepToFetch = '24h'; break;
-        default: apiTimestepToFetch = '1h'; // Should not happen with defined types
+        default: apiTimestepToFetch = '1h';
       }
-      const [latest, rawHistorical] = await Promise.all([
+      const [latest, rawHistoricalUnsorted] = await Promise.all([
         fetchLatestPrice(currentItem.id),
         fetchHistoricalData(currentItem.id, apiTimestepToFetch),
       ]);
+      
+      // Ensure rawHistorical is sorted if needed for filtering, fetchHistoricalData should return sorted
+      const rawHistorical = [...rawHistoricalUnsorted].sort((a,b) => a.timestamp - b.timestamp);
+
       setLatestPrice(latest);
       const nowMs = Date.now();
       let startTimeMs: number;
@@ -220,18 +393,42 @@ const App: React.FC = () => {
         case '3mo': startTimeMs = nowMs - (90 * 24 * 60 * 60 * 1000); break;
         case '6mo': startTimeMs = nowMs - (180 * 24 * 60 * 60 * 1000); break;
         case '1y': startTimeMs = nowMs - (365 * 24 * 60 * 60 * 1000); break;
-        default: startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000); // Default to 1 day
+        default: startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000);
       }
       const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= startTimeMs && dp.timestamp <= nowMs);
       setHistoricalData(filteredHistorical);
       
-      if (isUserInitiated && options.isUserInitiated !== false) { // Check explicitly for false to allow suppression
+      if (isUserInitiated && options.isUserInitiated !== false) { 
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       } else if (options.isUserInitiated === false) {
-        // This means it was a timespan change or auto-refresh, no success toast
         console.log(`Background/Timespan refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
       }
       
+      if (favoriteItemIds.includes(currentItem.id)) {
+        if (latest) {
+          setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
+          if (latest.high !== null) {
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'loading' }));
+            // Use rawHistorical (which is all 5m data for the day) or filteredHistorical if timespan is 1h
+            const hourlyChangeDataForRefresh = await calculateHourlyChange(currentItem.id, latest.high, isMountedRefreshRef);
+            if (isMountedRefreshRef.current) {
+               if (typeof hourlyChangeDataForRefresh === 'object' && hourlyChangeDataForRefresh !== null && 'changeAbsolute' in hourlyChangeDataForRefresh) {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: hourlyChangeDataForRefresh as FavoriteItemHourlyChangeData }));
+                } else {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: hourlyChangeDataForRefresh as 'error' | 'no_data' }));
+                }
+            }
+          } else {
+            if (isMountedRefreshRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
+          }
+        } else { // Error fetching latest for a favourite during refresh
+           if (isMountedRefreshRef.current) {
+            setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: 'error' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'error' }));
+           }
+        }
+      }
+
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
         checkAlerts(itemAlerts, {[currentItem.id]: latest});
@@ -241,10 +438,17 @@ const App: React.FC = () => {
       const errorMessage = `Failed to ${isUserInitiated ? 'refresh' : 'auto-refresh'} price data for ${currentItem.name}.`;
       setError(errorMessage);
       addNotification(errorMessage, 'error');
+      if (favoriteItemIds.includes(currentItem.id)) {
+        if (isMountedRefreshRef.current) {
+          setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: 'error' }));
+          setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'error' }));
+        }
+      }
     } finally {
-      setIsLoadingPrice(false);
+      if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, historicalData]); // historicalData added for recalculating 1hr change if timespan is 1h
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo) => {
     setSelectedItem(item);
@@ -257,7 +461,6 @@ const App: React.FC = () => {
     const itemToSelect = allItems.find(item => item.id === itemId);
     if (itemToSelect) {
       handleSelectItem(itemToSelect);
-      // Scroll to top or to the chart view if needed
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       addNotification(`Could not find item with ID ${itemId}. It might have been removed or changed.`, 'error');
@@ -270,7 +473,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (selectedItem) {
-      // Pass false for isUserInitiated to suppress notification on timespan change
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,11 +538,10 @@ const App: React.FC = () => {
         if (filteredItems.length === 0 && searchTerm && event.key !== 'Escape') return;
     }
 
-
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        setActiveSuggestionIndex(prev => (prev + 1) % (filteredItems.length || 1)); // Ensure modulo works even if length is 0 temporarily
+        setActiveSuggestionIndex(prev => (prev + 1) % (filteredItems.length || 1));
         break;
       case 'ArrowUp':
         event.preventDefault();
@@ -367,6 +568,7 @@ const App: React.FC = () => {
   }, [activeSuggestionIndex]);
 
   const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
+  const favTerm = wordingPreference === 'uk' ? 'favourite' : 'favorite';
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] p-4 md:p-8 flex flex-col items-center">
@@ -387,7 +589,6 @@ const App: React.FC = () => {
                 <svg width="80" height="50" viewBox="0 0 135 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-3">
                     <path d="M10 30 Q25 5 40 30 T70 30 Q85 55 90 30" stroke="var(--logo-pulse-color)" strokeWidth="5" fill="transparent"/>
                     <circle cx="90" cy="30" r="8" fill="var(--logo-coin-fill)" stroke="var(--logo-coin-stroke)" strokeWidth="2"/>
-                    {/* GP Text removed as per user request */}
                 </svg>
                 <h1 className="text-4xl md:text-5xl font-bold text-[var(--text-accent)]">GE Pulse</h1>
             </div>
@@ -412,6 +613,8 @@ const App: React.FC = () => {
           enableDesktopNotifications={enableDesktopNotifications}
           onToggleDesktopNotifications={handleToggleDesktopNotifications}
           desktopNotificationPermission={desktopNotificationPermission}
+          wordingPreference={wordingPreference}
+          onSetWordingPreference={setWordingPreference}
         />
       )}
 
@@ -454,12 +657,23 @@ const App: React.FC = () => {
                 <p className="text-[var(--text-secondary)] mt-4">No items found matching "{searchTerm}".</p>
               )}
             </div>
+            
+            <FavoritesList
+              favoriteItemIds={favoriteItemIds}
+              allItems={allItems}
+              onSelectItemById={handleSelectItemById}
+              onRemoveFavorite={removeFavoriteItem}
+              getItemIconUrl={getItemIconUrl}
+              favoriteItemPrices={favoriteItemPrices}
+              favoriteItemHourlyChanges={favoriteItemHourlyChanges}
+              wordingPreference={wordingPreference}
+            />
 
             <AlertsManager
               alerts={alerts}
               addAlert={addAlert}
               removeAlert={removeAlert}
-              updateAlert={updateAlert} // Pass updateAlert here
+              updateAlert={updateAlert}
               allItems={allItems}
               getItemName={getItemName}
               getItemIconUrl={getItemIconUrl}
@@ -492,6 +706,10 @@ const App: React.FC = () => {
                 showChartGrid={showChartGrid}
                 showChartLineGlow={showChartLineGlow}
                 showVolumeChart={showVolumeChart}
+                favoriteItemIds={favoriteItemIds}
+                onAddFavorite={addFavoriteItem}
+                onRemoveFavorite={removeFavoriteItem}
+                wordingPreference={wordingPreference}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
@@ -499,7 +717,7 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <p className="text-xl">Select an item to view its details.</p>
-                <p className="mt-1">Use the search bar on the left to find items.</p>
+                <p className="mt-1">Use the search bar on the left to find items, or select a {favTerm}.</p>
               </div>
             )}
           </main>

@@ -1,5 +1,4 @@
-
-import { Timespan, AppTheme } from './types';
+import { Timespan, AppTheme, WordingPreference } from './types';
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
 export const ITEM_IMAGE_BASE_URL = 'https://oldschool.runescape.wiki/images/';
@@ -18,6 +17,10 @@ export const TIMESPAN_OPTIONS: { label: string; value: Timespan }[] = [
 export const ALERT_CHECK_INTERVAL = 60 * 1000; // 60 seconds
 export const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const AUTO_REFRESH_INTERVAL_SECONDS = 300; // 5 minutes
+export const FAVORITES_STORAGE_KEY = 'gePulseFavoriteItems';
+export const WORDING_PREFERENCE_STORAGE_KEY = 'gePulseWordingPreference';
+export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
+
 
 export const APP_THEMES: AppTheme[] = [
   {
@@ -77,6 +80,8 @@ export const APP_THEMES: AppTheme[] = [
       '--icon-button-hover-bg': '#374151', // slate-700
       '--icon-button-default-text': '#9ca3af', // slate-400
       '--icon-button-hover-text': '#38bdf8', // sky-400
+      '--favorite-icon-default': '#9ca3af', // slate-400 (same as default icon text)
+      '--favorite-icon-favorited': '#ef4444', // red-500
     },
   },
   {
@@ -136,6 +141,8 @@ export const APP_THEMES: AppTheme[] = [
       '--icon-button-hover-bg': '#d2b48c', // tan
       '--icon-button-default-text': '#795548', // medium brown
       '--icon-button-hover-text': '#006400', // darkgreen
+      '--favorite-icon-default': '#795548', // medium brown
+      '--favorite-icon-favorited': '#ef4444', // red-500
     },
   },
   {
@@ -195,6 +202,8 @@ export const APP_THEMES: AppTheme[] = [
       '--icon-button-hover-bg': '#233554',
       '--icon-button-default-text': '#8892b0',
       '--icon-button-hover-text': '#64ffda',
+      '--favorite-icon-default': '#8892b0', // slate blue
+      '--favorite-icon-favorited': '#ef4444', // red-500
     },
   },
   {
@@ -254,6 +263,8 @@ export const APP_THEMES: AppTheme[] = [
       '--icon-button-hover-bg': '#2c234d',
       '--icon-button-default-text': '#c084fc',
       '--icon-button-hover-text': '#ab57ff',
+      '--favorite-icon-default': '#c084fc', // Lighter purple
+      '--favorite-icon-favorited': '#ef4444', // red-500
     },
   }
 ];

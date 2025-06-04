@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { AppTheme } from '../types';
+import { AppTheme, WordingPreference } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,6 +17,8 @@ interface SettingsModalProps {
   enableDesktopNotifications: boolean;
   onToggleDesktopNotifications: () => void;
   desktopNotificationPermission: NotificationPermission;
+  wordingPreference: WordingPreference;
+  onSetWordingPreference: (preference: WordingPreference) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -33,7 +35,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   themes,
   enableDesktopNotifications,
   onToggleDesktopNotifications,
-  desktopNotificationPermission
+  desktopNotificationPermission,
+  wordingPreference,
+  onSetWordingPreference,
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -165,6 +169,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Click the toggle to request notification permission from your browser.
                 </p>
               )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-3">Wording Style</h3>
+            <div className="flex space-x-3 p-3 bg-[var(--bg-input-secondary)] rounded-md">
+              {(['uk', 'us'] as WordingPreference[]).map(pref => (
+                <label key={pref} className="flex items-center space-x-2 cursor-pointer text-[var(--text-primary)]">
+                  <input
+                    type="radio"
+                    name="wordingPreference"
+                    value={pref}
+                    checked={wordingPreference === pref}
+                    onChange={() => onSetWordingPreference(pref)}
+                    className="form-radio h-4 w-4 text-[var(--bg-interactive)] bg-[var(--bg-input)] border-[var(--border-secondary)] focus:ring-[var(--border-accent)]"
+                  />
+                  <span>{pref === 'uk' ? 'UK English' : 'US English'}</span>
+                </label>
+              ))}
             </div>
           </div>
 
