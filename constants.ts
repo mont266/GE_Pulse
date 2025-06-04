@@ -9,6 +9,10 @@ export const TIMESPAN_OPTIONS: { label: string; value: Timespan }[] = [
   { label: '1 Hour', value: '1h' },
   { label: '6 Hours', value: '6h' },
   { label: '24 Hours', value: '24h' },
+  { label: '7 Days', value: '7d' },
+  { label: '1 Month', value: '1mo' },
+  { label: '6 Months', value: '6mo' },
+  { label: '1 Year', value: '1y' },
 ];
 
 export const ALERT_CHECK_INTERVAL = 60 * 1000; // 60 seconds

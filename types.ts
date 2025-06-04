@@ -47,7 +47,8 @@ export interface ChartDataPoint {
   formattedDate: string; // For tooltip display (can be removed if CustomTooltip formats its own label)
 }
 
-export type Timespan = '5m' | '1h' | '6h' | '24h';
+export type Timespan = '5m' | '1h' | '6h' | '24h' | '7d' | '1mo' | '6mo' | '1y';
+export type TimespanAPI = '5m' | '1h' | '6h' | '24h'; // Actual timesteps the API accepts
 
 export interface PriceAlert {
   id: string; // Unique ID for the alert

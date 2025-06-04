@@ -1,5 +1,5 @@
 
-import { ItemMapInfo, ItemMappingResponse, LatestPriceData, LatestPriceApiResponse, HistoricalDataPointAPI, TimeseriesApiResponse, ChartDataPoint, Timespan } from '../types';
+import { ItemMapInfo, ItemMappingResponse, LatestPriceData, LatestPriceApiResponse, HistoricalDataPointAPI, TimeseriesApiResponse, ChartDataPoint, TimespanAPI } from '../types';
 import { API_BASE_URL } from '../constants';
 
 // Helper to make API requests
@@ -37,12 +37,17 @@ export async function fetchLatestPrice(itemId: number): Promise<LatestPriceData 
   }
 }
 
-export async function fetchHistoricalData(itemId: number, timespan: Timespan): Promise<ChartDataPoint[]> {
+export async function fetchHistoricalData(itemId: number, timespan: TimespanAPI): Promise<ChartDataPoint[]> {
   const response = await apiRequest<TimeseriesApiResponse>(`/timeseries?timestep=${timespan}&id=${itemId}`);
   if (!response.data) return [];
   
+  const now = Date.now(); // Get current time in milliseconds
+
   return response.data
-    .filter(dp => dp.avgHighPrice !== null) // Ensure there's an average high price for the line
+    .filter(dp => {
+      const pointTimestampMs = dp.timestamp * 1000;
+      return dp.avgHighPrice !== null && pointTimestampMs <= now; // Filter out future timestamps and null prices
+    })
     .map(dp => ({
       timestamp: dp.timestamp * 1000, // Convert seconds to milliseconds for JS Date
       price: dp.avgHighPrice as number, // This is avgHighPrice, already filtered for null

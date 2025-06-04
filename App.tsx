@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme } from './types';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI } from './types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -19,7 +19,7 @@ const App: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ItemMapInfo | null>(null);
   const [latestPrice, setLatestPrice] = useState<LatestPriceData | null>(null);
   const [historicalData, setHistoricalData] = useState<ChartDataPoint[]>([]);
-  const [selectedTimespan, setSelectedTimespan] = useState<Timespan>('6h');
+  const [selectedTimespan, setSelectedTimespan] = useState<Timespan>('7d'); // Updated default
   const [isLoadingItems, setIsLoadingItems] = useState<boolean>(true);
   const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,17 +114,78 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const [latest, historical] = await Promise.all([
+      let apiTimestepToFetch: TimespanAPI;
+      switch (selectedTimespan) {
+        case '5m':
+        case '1h':
+          apiTimestepToFetch = '5m';
+          break;
+        case '6h':
+        case '24h':
+          apiTimestepToFetch = '1h';
+          break;
+        case '7d':
+          apiTimestepToFetch = '6h';
+          break;
+        case '1mo':
+        case '6mo':
+        case '1y':
+          apiTimestepToFetch = '24h';
+          break;
+        default:
+          apiTimestepToFetch = '6h'; // Fallback
+      }
+
+      const [latest, rawHistorical] = await Promise.all([
         fetchLatestPrice(currentItem.id),
-        fetchHistoricalData(currentItem.id, selectedTimespan),
+        fetchHistoricalData(currentItem.id, apiTimestepToFetch),
       ]);
       setLatestPrice(latest);
-      setHistoricalData(historical);
+
+      const nowMs = Date.now();
+      let startTimeMs: number;
+
+      switch (selectedTimespan) {
+        case '5m':
+          startTimeMs = nowMs - 5 * 60 * 1000;
+          break;
+        case '1h':
+          startTimeMs = nowMs - 60 * 60 * 1000;
+          break;
+        case '6h':
+          startTimeMs = nowMs - 6 * 60 * 60 * 1000;
+          break;
+        case '24h':
+          startTimeMs = nowMs - 24 * 60 * 60 * 1000;
+          break;
+        case '7d':
+          startTimeMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+          break;
+        case '1mo':
+          startTimeMs = nowMs - 30 * 24 * 60 * 60 * 1000; // Approx 30 days
+          break;
+        case '6mo':
+           // API '24h' provides ~6 months, filter to ensure we don't exceed this if API changes
+          startTimeMs = nowMs - 180 * 24 * 60 * 60 * 1000; // Approx 180 days
+          break;
+        case '1y':
+          // API '24h' provides ~6 months, so '1y' will show this max available daily data
+          startTimeMs = nowMs - 365 * 24 * 60 * 60 * 1000; // Approx 365 days
+          break;
+        default:
+          startTimeMs = nowMs - 7 * 24 * 60 * 60 * 1000; // Default to 7 days if something unexpected
+      }
+      
+      // Filter the rawHistorical data based on the calculated startTimeMs
+      // Also ensures we don't show future data points again (though service layer also does this)
+      const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= startTimeMs && dp.timestamp <= nowMs);
+      setHistoricalData(filteredHistorical);
+
 
       if (isUserInitiated) {
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       } else {
-        console.log(`Auto-refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
+        console.log(`Background refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
       }
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
@@ -137,9 +198,6 @@ const App: React.FC = () => {
       addNotification(errorMessage, 'error');
     } finally {
       setIsLoadingPrice(false);
-      if (options.isUserInitiated === false) {
-        setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
-      }
     }
   }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts]);
 
@@ -151,11 +209,17 @@ const App: React.FC = () => {
   }, [refreshCurrentItemData]);
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
-    setSelectedTimespan(timespan);
+    setSelectedTimespan(timespan); // Set state first
+    // refreshCurrentItemData will use the new selectedTimespan from state in its next call
+  }, []); // Removed selectedItem and refreshCurrentItemData as dependencies
+
+  // useEffect to trigger refresh when selectedTimespan changes AND an item is selected
+  useEffect(() => {
     if (selectedItem) {
-      await refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: true }); 
+      refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false });
     }
-  }, [selectedItem, refreshCurrentItemData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTimespan]); // Only run when selectedTimespan changes, selectedItem is checked inside. refreshCurrentItemData is stable.
 
   const handleToggleAutoRefresh = useCallback(() => {
     setIsAutoRefreshEnabled(prev => {
@@ -181,7 +245,7 @@ const App: React.FC = () => {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
 
       autoRefreshIntervalIdRef.current = setInterval(() => {
-        if(selectedItem){ 
+        if (selectedItem) { 
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
@@ -189,21 +253,22 @@ const App: React.FC = () => {
       countdownIntervalIdRef.current = setInterval(() => {
         setTimeToNextRefresh(prev => {
           if (prev <= 1) { 
-            return AUTO_REFRESH_INTERVAL_SECONDS; 
+            return AUTO_REFRESH_INTERVAL_SECONDS;
           }
           return prev - 1;
         });
       }, 1000);
 
     } else {
-      setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS);
+      setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
     }
 
     return () => {
       if (autoRefreshIntervalIdRef.current) clearInterval(autoRefreshIntervalIdRef.current);
       if (countdownIntervalIdRef.current) clearInterval(countdownIntervalIdRef.current);
     };
-  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]); 
 
 
   const filteredItems = useMemo(() => {
@@ -234,7 +299,7 @@ const App: React.FC = () => {
                 aria-label="Open settings"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
             </button>
