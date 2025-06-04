@@ -42,12 +42,46 @@ const App: React.FC = () => {
     return localStorage.getItem('gePulseActiveTheme') || 'ge-pulse-dark';
   });
 
+  const [enableDesktopNotifications, setEnableDesktopNotifications] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gePulseEnableDesktopNotifications');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [desktopNotificationPermission, setDesktopNotificationPermission] = useState<NotificationPermission>(Notification.permission);
+
+
   const autoRefreshIntervalIdRef = useRef<number | null>(null);
   const countdownIntervalIdRef = useRef<number | null>(null);
 
+  const getItemName = useCallback((itemId: number): string => {
+    return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
+  }, [allItems]);
+
+  const getItemIconUrl = useCallback((iconName: string): string => {
+    return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
+  }, []);
+
+  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+
   const { alerts, addAlert, removeAlert, checkAlerts } = usePriceAlerts(
     (triggeredAlert) => {
-      addNotification(`Alert Triggered: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`, 'success');
+      const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
+      addNotification(message, 'success');
+
+      if (enableDesktopNotifications && desktopNotificationPermission === 'granted') {
+        if (Notification.permission === 'granted') { // Double check permission before showing
+          new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
+            body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
+            icon: getItemIconUrl(triggeredAlert.itemIcon),
+            tag: triggeredAlert.id, // Helps prevent duplicate notifications if rapidly triggered
+          });
+        }
+      }
     },
     fetchLatestPrice
   );
@@ -61,14 +95,6 @@ const App: React.FC = () => {
     }
     localStorage.setItem('gePulseActiveTheme', activeThemeName);
   }, [activeThemeName]);
-
-  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Date.now().toString();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  }, []);
   
   useEffect(() => {
     const loadInitialData = async () => {
@@ -95,6 +121,39 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('gePulseShowChartLineGlow', JSON.stringify(showChartLineGlow));
   }, [showChartLineGlow]);
+
+  useEffect(() => {
+    localStorage.setItem('gePulseEnableDesktopNotifications', JSON.stringify(enableDesktopNotifications));
+  }, [enableDesktopNotifications]);
+
+  const handleToggleDesktopNotifications = useCallback(async () => {
+    if (desktopNotificationPermission === 'denied') {
+      addNotification('Desktop notifications are blocked by your browser. Please enable them in your browser settings.', 'error');
+      setEnableDesktopNotifications(false); // Ensure toggle reflects blocked state
+      return;
+    }
+
+    if (enableDesktopNotifications) { // If currently enabled, user wants to disable
+      setEnableDesktopNotifications(false);
+      addNotification('Desktop notifications disabled.', 'info');
+    } else { // If currently disabled, user wants to enable
+      if (desktopNotificationPermission === 'granted') {
+        setEnableDesktopNotifications(true);
+        addNotification('Desktop notifications enabled.', 'success');
+      } else if (desktopNotificationPermission === 'default') {
+        const permission = await Notification.requestPermission();
+        setDesktopNotificationPermission(permission);
+        if (permission === 'granted') {
+          setEnableDesktopNotifications(true);
+          addNotification('Desktop notifications enabled.', 'success');
+        } else {
+          setEnableDesktopNotifications(false);
+          addNotification('Desktop notification permission denied by user.', 'info');
+        }
+      }
+    }
+  }, [desktopNotificationPermission, enableDesktopNotifications, addNotification]);
+
 
   const toggleChartGrid = useCallback(() => {
     setShowChartGrid(prev => !prev);
@@ -176,15 +235,13 @@ const App: React.FC = () => {
           startTimeMs = nowMs - 7 * 24 * 60 * 60 * 1000; // Default to 7 days if something unexpected
       }
       
-      // Filter the rawHistorical data based on the calculated startTimeMs
-      // Also ensures we don't show future data points again (though service layer also does this)
       const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= startTimeMs && dp.timestamp <= nowMs);
       setHistoricalData(filteredHistorical);
 
 
-      if (isUserInitiated) {
+      if (isUserInitiated && selectedTimespan === options.itemToRefresh?.name) { // Avoid double notification if timespan change also triggers this
         addNotification(`${currentItem.name} data refreshed!`, 'success');
-      } else {
+      } else if (!isUserInitiated) {
         console.log(`Background refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
       }
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
@@ -199,7 +256,8 @@ const App: React.FC = () => {
     } finally {
       setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, /* Removed getItemIconUrl from here as it's stable */]);
 
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo) => {
@@ -209,17 +267,15 @@ const App: React.FC = () => {
   }, [refreshCurrentItemData]);
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
-    setSelectedTimespan(timespan); // Set state first
-    // refreshCurrentItemData will use the new selectedTimespan from state in its next call
-  }, []); // Removed selectedItem and refreshCurrentItemData as dependencies
+    setSelectedTimespan(timespan); 
+  }, []); 
 
-  // useEffect to trigger refresh when selectedTimespan changes AND an item is selected
   useEffect(() => {
     if (selectedItem) {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTimespan]); // Only run when selectedTimespan changes, selectedItem is checked inside. refreshCurrentItemData is stable.
+  }, [selectedTimespan]); 
 
   const handleToggleAutoRefresh = useCallback(() => {
     setIsAutoRefreshEnabled(prev => {
@@ -278,14 +334,6 @@ const App: React.FC = () => {
       .slice(0, 20);
   }, [allItems, searchTerm]);
 
-  const getItemName = useCallback((itemId: number): string => {
-    return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
-  }, [allItems]);
-
-  const getItemIconUrl = useCallback((iconName: string): string => {
-    return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
-  }, []);
-
   const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
 
   return (
@@ -299,7 +347,7 @@ const App: React.FC = () => {
                 aria-label="Open settings"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
             </button>
@@ -327,6 +375,9 @@ const App: React.FC = () => {
           activeThemeName={activeThemeName}
           onSetThemeName={setActiveThemeName}
           themes={APP_THEMES}
+          enableDesktopNotifications={enableDesktopNotifications}
+          onToggleDesktopNotifications={handleToggleDesktopNotifications}
+          desktopNotificationPermission={desktopNotificationPermission}
         />
       )}
 

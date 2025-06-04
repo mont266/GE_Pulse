@@ -12,6 +12,9 @@ interface SettingsModalProps {
   activeThemeName: string;
   onSetThemeName: (themeName: string) => void;
   themes: AppTheme[];
+  enableDesktopNotifications: boolean;
+  onToggleDesktopNotifications: () => void;
+  desktopNotificationPermission: NotificationPermission;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -23,7 +26,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleChartLineGlow,
   activeThemeName,
   onSetThemeName,
-  themes
+  themes,
+  enableDesktopNotifications,
+  onToggleDesktopNotifications,
+  desktopNotificationPermission
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -43,6 +49,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return null;
   }
 
+  const isNotificationToggleDisabled = desktopNotificationPermission === 'denied';
+
   return (
     <div 
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -52,7 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       aria-labelledby="settings-modal-title"
     >
       <div 
-        className="bg-[var(--bg-modal)] p-6 rounded-lg shadow-xl w-full max-w-md text-[var(--text-primary)]"
+        className="bg-[var(--bg-modal)] p-6 rounded-lg shadow-xl w-full max-w-md text-[var(--text-primary)] max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
@@ -108,6 +116,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           <div>
+            <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">Notification Settings</h3>
+            <div className="space-y-3">
+              <div className={`flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md ${isNotificationToggleDisabled ? 'opacity-70' : ''}`}>
+                <span className="text-[var(--text-primary)]">Desktop Alert Notifications</span>
+                <label htmlFor="desktopNotificationToggle" className={`flex items-center ${isNotificationToggleDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      id="desktopNotificationToggle" 
+                      className="sr-only" 
+                      checked={enableDesktopNotifications} 
+                      onChange={onToggleDesktopNotifications}
+                      disabled={isNotificationToggleDisabled}
+                    />
+                    <div className={`block w-12 h-6 rounded-full transition-colors bg-[${enableDesktopNotifications && !isNotificationToggleDisabled ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
+                    <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${enableDesktopNotifications && !isNotificationToggleDisabled ? 'translate-x-6' : ''}`}></div>
+                  </div>
+                </label>
+              </div>
+              {isNotificationToggleDisabled && (
+                <p className="text-xs text-[var(--text-muted)] px-1">
+                  Notifications are blocked by your browser. Please enable them in your browser/OS settings and refresh the page.
+                </p>
+              )}
+               {desktopNotificationPermission === 'default' && !enableDesktopNotifications && (
+                <p className="text-xs text-[var(--text-muted)] px-1">
+                  Click the toggle to request notification permission from your browser.
+                </p>
+              )}
+            </div>
+          </div>
+
+
+          <div>
             <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-3">Theme Selection</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {themes.map(theme => (
@@ -127,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           
           <div className="text-center text-[var(--text-muted)] pt-4">
-             <p className="italic">More customization options coming soon!</p>
+             <p className="italic">Thank you for using GE Pulse!</p>
           </div>
         </div>
 
