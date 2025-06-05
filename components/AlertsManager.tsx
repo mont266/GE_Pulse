@@ -8,12 +8,13 @@ interface AlertsManagerProps {
   alerts: PriceAlert[];
   addAlert: (alert: Omit<PriceAlert, 'id' | 'createdAt' | 'status'>) => void;
   removeAlert: (alertId: string) => void;
-  updateAlert: (alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => void; // New prop
+  updateAlert: (alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => void;
   allItems: ItemMapInfo[];
   getItemName: (itemId: number) => string;
   getItemIconUrl: (iconName: string) => string;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   onSelectAlertItemById: (itemId: number) => void;
+  isConsentGranted: boolean; // New prop
 }
 
 export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
@@ -29,9 +30,20 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
 
   const handleUpdateAlert = (alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => {
     props.updateAlert(alertId, updatedValues);
-    setEditingAlert(null); // Close form after update
+    setEditingAlert(null); 
     props.addNotification('Alert updated successfully!', 'success');
   };
+
+  if (!props.isConsentGranted && props.alerts.length === 0 && !editingAlert) {
+    return (
+      <div className="bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl space-y-6">
+        <h2 className="text-2xl font-semibold text-[var(--text-accent)]">Price Alerts</h2>
+        <p className="text-[var(--text-secondary)] text-center py-4">
+          Enable preference storage in settings to use Price Alerts.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl space-y-6">
@@ -42,18 +54,19 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
         allItems={props.allItems} 
         onAddAlert={props.addAlert}
         addNotification={props.addNotification}
-        editingAlert={editingAlert} // Pass editingAlert
-        onUpdateAlert={handleUpdateAlert} // Pass handler for updating
-        onCancelEdit={handleCancelEdit} // Pass handler for cancelling edit
+        editingAlert={editingAlert}
+        onUpdateAlert={handleUpdateAlert}
+        onCancelEdit={handleCancelEdit}
+        isConsentGranted={props.isConsentGranted}
       />
-      {!editingAlert && ( // Only show list if not editing, or form is above it and separated
+      {!editingAlert && (
         <PriceAlertList 
           alerts={props.alerts} 
           onRemoveAlert={props.removeAlert} 
           getItemName={props.getItemName} 
           getItemIconUrl={props.getItemIconUrl}
           onSelectAlertItem={props.onSelectAlertItemById}
-          onStartEdit={handleStartEditAlert} // Pass handler to start editing
+          onStartEdit={handleStartEditAlert}
         />
       )}
     </div>

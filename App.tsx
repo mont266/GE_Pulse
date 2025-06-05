@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference } from './types';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference } from './types'; // Assuming main types are in root types.ts
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -11,10 +11,32 @@ import { NotificationBar } from './components/NotificationBar';
 import { RefreshControls } from './components/RefreshControls';
 import { SettingsModal } from './components/SettingsModal';
 import { FavoritesList } from './components/FavoritesList';
+import { ConsentBanner } from './components/ConsentBanner';
+import { ChangelogModal } from './src/components/ChangelogModal'; // Corrected path
+import { changelogEntries } from './src/changelogData'; // Corrected path
 import { usePriceAlerts } from './hooks/usePriceAlerts';
-import { API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE } from './constants';
+import { 
+  API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
+  FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
+  ALL_USER_PREFERENCE_KEYS, DEFAULT_THEME_ID, CHART_GRID_STORAGE_KEY, CHART_LINE_GLOW_STORAGE_KEY,
+  VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY
+} from './constants'; // Assuming main constants are in root constants.ts
+
+// Helper to get initial consent status
+const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
+  const storedConsent = localStorage.getItem(CONSENT_STORAGE_KEY);
+  if (storedConsent === 'granted' || storedConsent === 'denied') {
+    return storedConsent;
+  }
+  return 'pending';
+};
+
+const APP_VERSION = "Beta v0.05";
 
 const App: React.FC = () => {
+  const initialConsent = getInitialConsentStatus();
+  const [consentStatus, setConsentStatus] = useState<'pending' | 'granted' | 'denied'>(initialConsent);
+
   const [allItems, setAllItems] = useState<ItemMapInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<ItemMapInfo | null>(null);
@@ -31,53 +53,142 @@ const App: React.FC = () => {
   const [manualRefreshTrigger, setManualRefreshTrigger] = useState<number>(0);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false); // State for changelog modal
+
+  // Preferences states with consent-aware initialization
   const [showChartGrid, setShowChartGrid] = useState<boolean>(() => {
-    const saved = localStorage.getItem('gePulseShowChartGrid');
-    return saved !== null ? JSON.parse(saved) : true;
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(CHART_GRID_STORAGE_KEY);
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
   });
   const [showChartLineGlow, setShowChartLineGlow] = useState<boolean>(() => {
-    const saved = localStorage.getItem('gePulseShowChartLineGlow');
-    return saved !== null ? JSON.parse(saved) : true;
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(CHART_LINE_GLOW_STORAGE_KEY);
+      return saved !== null ? JSON.parse(saved) : true;
+    }
+    return true;
   });
   const [showVolumeChart, setShowVolumeChart] = useState<boolean>(() => {
-    const saved = localStorage.getItem('gePulseShowVolumeChart');
-    return saved !== null ? JSON.parse(saved) : false;
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(VOLUME_CHART_STORAGE_KEY);
+      return saved !== null ? JSON.parse(saved) : false;
+    }
+    return false;
   });
   const [activeThemeName, setActiveThemeName] = useState<string>(() => {
-    return localStorage.getItem('gePulseActiveTheme') || 'ge-pulse-dark';
+    if (initialConsent === 'granted') {
+      return localStorage.getItem(ACTIVE_THEME_STORAGE_KEY) || DEFAULT_THEME_ID;
+    }
+    return DEFAULT_THEME_ID;
   });
 
   const [enableDesktopNotifications, setEnableDesktopNotifications] = useState<boolean>(() => {
-    const saved = localStorage.getItem('gePulseEnableDesktopNotifications');
-    return saved !== null ? JSON.parse(saved) : false;
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(DESKTOP_NOTIFICATIONS_ENABLED_KEY);
+      return saved !== null ? JSON.parse(saved) : false;
+    }
+    return false;
   });
   const [desktopNotificationPermission, setDesktopNotificationPermission] = useState<NotificationPermission>(Notification.permission);
 
   const [wordingPreference, setWordingPreference] = useState<WordingPreference>(() => {
-    const saved = localStorage.getItem(WORDING_PREFERENCE_STORAGE_KEY) as WordingPreference | null;
-    return saved || DEFAULT_WORDING_PREFERENCE;
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(WORDING_PREFERENCE_STORAGE_KEY) as WordingPreference | null;
+      return saved || DEFAULT_WORDING_PREFERENCE;
+    }
+    return DEFAULT_WORDING_PREFERENCE;
   });
-
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(-1);
 
   const [favoriteItemIds, setFavoriteItemIds] = useState<FavoriteItemId[]>(() => {
-    try {
-      const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      return storedFavorites ? JSON.parse(storedFavorites) : [];
-    } catch (e) {
-      console.error("Failed to load favourites from localStorage", e);
-      return [];
+    if (initialConsent === 'granted') {
+      try {
+        const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        return storedFavorites ? JSON.parse(storedFavorites) : [];
+      } catch (e) {
+        console.error("Failed to load favourites from localStorage", e);
+      }
     }
+    return [];
   });
+
   const [favoriteItemPrices, setFavoriteItemPrices] = useState<Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>>({});
   const [favoriteItemHourlyChanges, setFavoriteItemHourlyChanges] = useState<Record<FavoriteItemId, FavoriteItemHourlyChangeState>>({});
-
+  const [isRefreshingFavorites, setIsRefreshingFavorites] = useState<boolean>(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(-1);
 
   const autoRefreshIntervalIdRef = useRef<number | null>(null);
   const countdownIntervalIdRef = useRef<number | null>(null);
-
   const searchBarWrapperRef = useRef<HTMLDivElement>(null);
   const itemListWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Persist consent status
+  useEffect(() => {
+    if (consentStatus !== 'pending') {
+      localStorage.setItem(CONSENT_STORAGE_KEY, consentStatus);
+    }
+  }, [consentStatus]);
+
+  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+
+  const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
+    (triggeredAlert) => {
+      const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
+      addNotification(message, 'success');
+
+      if (enableDesktopNotifications && desktopNotificationPermission === 'granted' && consentStatus === 'granted') {
+        if (Notification.permission === 'granted') {
+          new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
+            body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
+            icon: getItemIconUrl(triggeredAlert.itemIcon),
+            tag: triggeredAlert.id,
+          });
+        }
+      }
+    },
+    fetchLatestPrice,
+    consentStatus === 'granted' // Pass consent status to hook
+  );
+
+  // Reset preferences to default values
+  const resetPreferencesToDefault = useCallback(() => {
+    setShowChartGrid(true);
+    setShowChartLineGlow(true);
+    setShowVolumeChart(false);
+    setActiveThemeName(DEFAULT_THEME_ID);
+    setEnableDesktopNotifications(false);
+    setWordingPreference(DEFAULT_WORDING_PREFERENCE);
+    setFavoriteItemIds([]);
+    setFavoriteItemPrices({});
+    setFavoriteItemHourlyChanges({});
+    if(clearAllAlertsAndStorage) clearAllAlertsAndStorage(); // Clear alerts managed by hook
+    addNotification('Preferences have been reset and will no longer be saved.', 'info');
+  }, [clearAllAlertsAndStorage, addNotification]);
+
+  const handleConsentGranted = useCallback(() => {
+    setConsentStatus('granted');
+    addNotification('Thanks! Your preferences will now be saved.', 'success');
+  }, [addNotification]);
+
+  const handleConsentDenied = useCallback(() => {
+    setConsentStatus('denied');
+    ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
+    resetPreferencesToDefault(); // This already shows a notification
+  }, [resetPreferencesToDefault]);
+
+  const handleRevokeConsent = useCallback(() => {
+    ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
+    resetPreferencesToDefault();
+    setConsentStatus('denied'); // This will be saved by the useEffect for consentStatus
+  }, [resetPreferencesToDefault]);
+
 
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
@@ -87,17 +198,12 @@ const App: React.FC = () => {
     return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
   }, []);
 
-  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Date.now().toString();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  }, []);
   
   useEffect(() => {
-    localStorage.setItem(WORDING_PREFERENCE_STORAGE_KEY, wordingPreference);
-  }, [wordingPreference]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(WORDING_PREFERENCE_STORAGE_KEY, wordingPreference);
+    }
+  }, [wordingPreference, consentStatus]);
 
   const addFavoriteItem = useCallback((itemId: FavoriteItemId) => {
     setFavoriteItemIds(prevIds => {
@@ -133,30 +239,29 @@ const App: React.FC = () => {
   }, [addNotification, getItemName, wordingPreference]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemIds));
-    } catch (e) {
-      console.error("Failed to save favourites to localStorage", e);
+    if (consentStatus === 'granted') {
+      try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemIds));
+      } catch (e) {
+        console.error("Failed to save favourites to localStorage", e);
+      }
     }
-  }, [favoriteItemIds]);
+  }, [favoriteItemIds, consentStatus]);
 
-  const calculateHourlyChange = async (
+  const calculateHourlyChange = useCallback(async (
     itemId: FavoriteItemId,
     currentHighPrice: number | null,
     isMountedRef: React.MutableRefObject<boolean>
   ): Promise<FavoriteItemHourlyChangeState> => {
     if (currentHighPrice === null) {
-      return 'no_data'; // Cannot calculate change if current price is unknown
+      return 'no_data'; 
     }
     try {
       const rawHistorical = await fetchHistoricalData(itemId, '5m');
       const nowMs = Date.now();
       const oneHourAgoMsThreshold = nowMs - (60 * 60 * 1000);
 
-      // fetchHistoricalData returns ChartDataPoint[] which has timestamp in ms and is sorted.
-      // Find the most recent data point that is at least 1 hour old.
       let priceThen: number | null = null;
-      // Iterate backwards to find the first point at or before 1 hour ago
       for (let i = rawHistorical.length - 1; i >= 0; i--) {
         if (rawHistorical[i].timestamp <= oneHourAgoMsThreshold) {
           priceThen = rawHistorical[i].price;
@@ -177,8 +282,8 @@ const App: React.FC = () => {
       console.error(`Failed to fetch historical for hourly change (item ${itemId})`, histErr);
       if (isMountedRef.current) return 'error';
     }
-    return 'error'; // Default to error if something went wrong and not caught
-  };
+    return 'error'; 
+  }, []);
 
 
   useEffect(() => {
@@ -192,84 +297,59 @@ const App: React.FC = () => {
         const itemDetail = allItems.find(it => it.id === itemId);
         if (itemDetail) {
           let currentPriceData = favoriteItemPrices[itemId];
-          let hourlyChangeData = favoriteItemHourlyChanges[itemId];
-
-          // Fetch latest price if not available or was an error
+          
           if (currentPriceData === undefined || currentPriceData === 'loading' || currentPriceData === 'error' || currentPriceData === null) {
             if (isMountedRef.current) setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
             try {
               const priceData = await fetchLatestPrice(itemId);
               if (isMountedRef.current) {
                 setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-                currentPriceData = priceData; // Update for subsequent hourly change calculation
+                currentPriceData = priceData; 
               }
             } catch (err) {
               console.error(`Failed to fetch price for favourite item ${itemId}`, err);
               if (isMountedRef.current) {
                 setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
-                setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' })); // Cascade error
+                setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' })); 
               }
-              currentPriceData = 'error'; // Mark as error to skip hourly change
+              currentPriceData = 'error'; 
             }
           }
           
-          // If latest price is successfully fetched (or already exists and is valid), calculate hourly change
           if (typeof currentPriceData === 'object' && currentPriceData !== null && currentPriceData.high !== null) {
-            if (hourlyChangeData === undefined || hourlyChangeData === null || hourlyChangeData === 'error' || hourlyChangeData === 'loading') {
-              if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-              const changeResult = await calculateHourlyChange(itemId, currentPriceData.high, isMountedRef);
-              if (isMountedRef.current) {
-                // If changeResult is an object, it implies FavoriteItemHourlyChangeData
-                if (typeof changeResult === 'object' && changeResult !== null && 'changeAbsolute' in changeResult) {
-                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as FavoriteItemHourlyChangeData }));
-                } else {
-                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as 'error' | 'no_data' }));
-                }
+            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+            const changeResult = await calculateHourlyChange(itemId, currentPriceData.high, isMountedRef);
+            if (isMountedRef.current) {
+              if (typeof changeResult === 'object' && changeResult !== null && 'changeAbsolute' in changeResult) {
+                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as FavoriteItemHourlyChangeData }));
+              } else {
+                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as 'error' | 'no_data' }));
               }
             }
           } else if (currentPriceData !== 'loading' && currentPriceData !== 'error') { 
-            // Latest price is null or invalid, so hourly change is not possible or is an error
-             if (isMountedRef.current && (hourlyChangeData === undefined || hourlyChangeData === null || hourlyChangeData === 'loading')) {
-               setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
+             if (isMountedRef.current ) {
+               setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: (currentPriceData === null ? 'no_data' : 'error') }));
              }
           }
         }
-         // Optional small delay between fetches
-         // if (isMountedRef.current) await new Promise(resolve => setTimeout(resolve, 150));
       }
     };
 
     fetchAllFavoriteDataSequentially();
     return () => { isMountedRef.current = false; };
-  }, [favoriteItemIds, allItems]); // Only re-run when the list of favourites or all items mapping changes.
+  }, [favoriteItemIds, allItems, calculateHourlyChange, favoriteItemPrices]);
 
-
-  const { alerts, addAlert, removeAlert, updateAlert, checkAlerts } = usePriceAlerts(
-    (triggeredAlert) => {
-      const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
-      addNotification(message, 'success');
-
-      if (enableDesktopNotifications && desktopNotificationPermission === 'granted') {
-        if (Notification.permission === 'granted') {
-          new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
-            body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
-            icon: getItemIconUrl(triggeredAlert.itemIcon),
-            tag: triggeredAlert.id,
-          });
-        }
-      }
-    },
-    fetchLatestPrice
-  );
 
   useEffect(() => {
-    const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES[0];
+    const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
     const root = document.documentElement;
     for (const [key, value] of Object.entries(activeTheme.colors)) {
       root.style.setProperty(key, value);
     }
-    localStorage.setItem('gePulseActiveTheme', activeThemeName);
-  }, [activeThemeName]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(ACTIVE_THEME_STORAGE_KEY, activeThemeName);
+    }
+  }, [activeThemeName, consentStatus]);
   
   useEffect(() => {
     const loadInitialData = async () => {
@@ -290,20 +370,28 @@ const App: React.FC = () => {
   }, [addNotification]);
 
   useEffect(() => {
-    localStorage.setItem('gePulseShowChartGrid', JSON.stringify(showChartGrid));
-  }, [showChartGrid]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(CHART_GRID_STORAGE_KEY, JSON.stringify(showChartGrid));
+    }
+  }, [showChartGrid, consentStatus]);
 
   useEffect(() => {
-    localStorage.setItem('gePulseShowChartLineGlow', JSON.stringify(showChartLineGlow));
-  }, [showChartLineGlow]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(CHART_LINE_GLOW_STORAGE_KEY, JSON.stringify(showChartLineGlow));
+    }
+  }, [showChartLineGlow, consentStatus]);
 
   useEffect(() => {
-    localStorage.setItem('gePulseShowVolumeChart', JSON.stringify(showVolumeChart));
-  }, [showVolumeChart]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(VOLUME_CHART_STORAGE_KEY, JSON.stringify(showVolumeChart));
+    }
+  }, [showVolumeChart, consentStatus]);
 
   useEffect(() => {
-    localStorage.setItem('gePulseEnableDesktopNotifications', JSON.stringify(enableDesktopNotifications));
-  }, [enableDesktopNotifications]);
+    if (consentStatus === 'granted') {
+      localStorage.setItem(DESKTOP_NOTIFICATIONS_ENABLED_KEY, JSON.stringify(enableDesktopNotifications));
+    }
+  }, [enableDesktopNotifications, consentStatus]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -362,7 +450,7 @@ const App: React.FC = () => {
     if (!currentItem) return;
     setIsLoadingPrice(true); 
     setError(null);
-    const isMountedRefreshRef = { current: true }; // For async operations within this callback
+    const isMountedRefreshRef = { current: true }; 
 
     try {
       let apiTimestepToFetch: TimespanAPI;
@@ -378,7 +466,6 @@ const App: React.FC = () => {
         fetchHistoricalData(currentItem.id, apiTimestepToFetch),
       ]);
       
-      // Ensure rawHistorical is sorted if needed for filtering, fetchHistoricalData should return sorted
       const rawHistorical = [...rawHistoricalUnsorted].sort((a,b) => a.timestamp - b.timestamp);
 
       setLatestPrice(latest);
@@ -401,7 +488,7 @@ const App: React.FC = () => {
       if (isUserInitiated && options.isUserInitiated !== false) { 
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       } else if (options.isUserInitiated === false) {
-        console.log(`Background/Timespan refreshed data for ${currentItem.name} at ${new Date().toLocaleTimeString()}`);
+        // No notification for automatic refreshes (e.g., item selection, timespan change, auto-refresh interval)
       }
       
       if (favoriteItemIds.includes(currentItem.id)) {
@@ -409,7 +496,6 @@ const App: React.FC = () => {
           setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
           if (latest.high !== null) {
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'loading' }));
-            // Use rawHistorical (which is all 5m data for the day) or filteredHistorical if timespan is 1h
             const hourlyChangeDataForRefresh = await calculateHourlyChange(currentItem.id, latest.high, isMountedRefreshRef);
             if (isMountedRefreshRef.current) {
                if (typeof hourlyChangeDataForRefresh === 'object' && hourlyChangeDataForRefresh !== null && 'changeAbsolute' in hourlyChangeDataForRefresh) {
@@ -421,7 +507,7 @@ const App: React.FC = () => {
           } else {
             if (isMountedRefreshRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
           }
-        } else { // Error fetching latest for a favourite during refresh
+        } else { 
            if (isMountedRefreshRef.current) {
             setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: 'error' }));
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'error' }));
@@ -448,13 +534,73 @@ const App: React.FC = () => {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, historicalData]); // historicalData added for recalculating 1hr change if timespan is 1h
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, calculateHourlyChange]);
+
+  const handleRefreshAllFavorites = useCallback(async () => {
+    if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length) return;
+
+    setIsRefreshingFavorites(true);
+    const isMountedRef = { current: true };
+    let allSucceeded = true;
+
+    for (const itemId of favoriteItemIds) {
+      if (!isMountedRef.current) break;
+
+      const itemDetail = allItems.find(it => it.id === itemId);
+      if (itemDetail) {
+        if (isMountedRef.current) {
+          setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
+          setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+        }
+
+        try {
+          const priceData = await fetchLatestPrice(itemId);
+          if (isMountedRef.current) {
+            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
+            if (priceData && priceData.high !== null) {
+              const changeResult = await calculateHourlyChange(itemId, priceData.high, isMountedRef);
+              if (isMountedRef.current) {
+                 if (typeof changeResult === 'object' && changeResult !== null && 'changeAbsolute' in changeResult) {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as FavoriteItemHourlyChangeData }));
+                  } else {
+                   setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: changeResult as 'error' | 'no_data' }));
+                  }
+              }
+            } else {
+              if (isMountedRef.current) {
+                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to refresh data for favourite item ${itemId}`, err);
+          allSucceeded = false;
+          if (isMountedRef.current) {
+            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
+          }
+        }
+      }
+    }
+
+    if (isMountedRef.current) {
+      setIsRefreshingFavorites(false);
+      if (allSucceeded && favoriteItemIds.length > 0) {
+        addNotification('Favorite items data refreshed!', 'success');
+      } else if (!allSucceeded && favoriteItemIds.length > 0) {
+        addNotification('Some favorite items could not be refreshed.', 'error');
+      } else if (favoriteItemIds.length === 0) {
+        // No notification if no favorites to refresh
+      }
+    }
+  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, calculateHourlyChange]);
+
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo) => {
     setSelectedItem(item);
     setSearchTerm('');
     setActiveSuggestionIndex(-1); 
-    await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: true }); 
+    await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false }); 
   }, [refreshCurrentItemData]);
 
   const handleSelectItemById = useCallback((itemId: number) => {
@@ -568,7 +714,20 @@ const App: React.FC = () => {
   }, [activeSuggestionIndex]);
 
   const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
+  const toggleChangelogModal = () => setIsChangelogModalOpen(prev => !prev); // Function to toggle changelog modal
   const favTerm = wordingPreference === 'uk' ? 'favourite' : 'favorite';
+
+  const handleResetView = useCallback(() => {
+    if (selectedItem) {
+      setSelectedItem(null);
+      setLatestPrice(null);
+      setHistoricalData([]);
+      setError(null);
+      // setSearchTerm(''); // Optional: clear search term as well
+      // setActiveSuggestionIndex(-1); // Optional
+      addNotification('Item view has been reset.', 'info');
+    }
+  }, [selectedItem, addNotification]);
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] p-4 md:p-8 flex flex-col items-center">
@@ -585,14 +744,19 @@ const App: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
             </button>
-            <div className="flex items-center justify-center">
-                <svg width="80" height="50" viewBox="0 0 135 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-3">
+            <button 
+              onClick={handleResetView}
+              className="flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] rounded-md p-1"
+              aria-label="GE Pulse - Click to reset item view"
+              disabled={!selectedItem} // Disable if no item is selected
+            >
+                <svg width="80" height="50" viewBox="0 0 135 60" fill="none" xmlns="http://www.w3.org/2000/svg" className={`mr-3 transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>
                     <path d="M10 30 Q25 5 40 30 T70 30 Q85 55 90 30" stroke="var(--logo-pulse-color)" strokeWidth="5" fill="transparent"/>
                     <circle cx="90" cy="30" r="8" fill="var(--logo-coin-fill)" stroke="var(--logo-coin-stroke)" strokeWidth="2"/>
                 </svg>
-                <h1 className="text-4xl md:text-5xl font-bold text-[var(--text-accent)]">GE Pulse</h1>
-            </div>
-            <div className="w-7 h-7"></div> 
+                <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
+            </button>
+            <div className="w-7 h-7"></div> {/* Spacer to balance settings button */}
         </div>
         <p className="text-[var(--text-secondary)] mt-1">Live prices & insights for Old School RuneScape.</p>
       </header>
@@ -615,6 +779,17 @@ const App: React.FC = () => {
           desktopNotificationPermission={desktopNotificationPermission}
           wordingPreference={wordingPreference}
           onSetWordingPreference={setWordingPreference}
+          consentStatus={consentStatus}
+          onGrantConsent={handleConsentGranted}
+          onRevokeConsent={handleRevokeConsent}
+        />
+      )}
+
+      {isChangelogModalOpen && (
+        <ChangelogModal 
+          isOpen={isChangelogModalOpen} 
+          onClose={toggleChangelogModal} 
+          entries={changelogEntries}
         />
       )}
 
@@ -667,6 +842,9 @@ const App: React.FC = () => {
               favoriteItemPrices={favoriteItemPrices}
               favoriteItemHourlyChanges={favoriteItemHourlyChanges}
               wordingPreference={wordingPreference}
+              isRefreshingFavorites={isRefreshingFavorites}
+              onRefreshAllFavorites={handleRefreshAllFavorites}
+              isConsentGranted={consentStatus === 'granted'}
             />
 
             <AlertsManager
@@ -679,6 +857,7 @@ const App: React.FC = () => {
               getItemIconUrl={getItemIconUrl}
               addNotification={addNotification}
               onSelectAlertItemById={handleSelectItemById}
+              isConsentGranted={consentStatus === 'granted'}
             />
           </aside>
 
@@ -726,7 +905,27 @@ const App: React.FC = () => {
        <footer className="w-full max-w-6xl mt-12 pt-6 border-t border-[var(--border-primary)] text-center text-[var(--text-muted)] text-sm">
         <p>Data sourced from <a href="https://prices.runescape.wiki/api/v1/osrs/mapping" target="_blank" rel="noopener noreferrer" className="text-[var(--link-text)] hover:text-[var(--link-text-hover)]">prices.runescape.wiki API</a>.</p>
         <p>This is a fan-made project and is not affiliated with Jagex Ltd.</p>
+        <p className="mt-2">
+          <button onClick={toggleChangelogModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
+            View Changelog
+          </button>
+           <span className="mx-2 text-[var(--text-muted)]">|</span>
+           {APP_VERSION}
+        </p>
+        {consentStatus !== 'pending' && (
+            <p className="mt-2">
+                <button onClick={toggleSettingsModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
+                    Manage Cookie Preferences
+                </button>
+            </p>
+        )}
       </footer>
+      {consentStatus === 'pending' && (
+        <ConsentBanner 
+          onGrant={handleConsentGranted}
+          onDeny={handleConsentDenied}
+        />
+      )}
     </div>
   );
 };

@@ -17,9 +17,35 @@ export const TIMESPAN_OPTIONS: { label: string; value: Timespan }[] = [
 export const ALERT_CHECK_INTERVAL = 60 * 1000; // 60 seconds
 export const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const AUTO_REFRESH_INTERVAL_SECONDS = 300; // 5 minutes
+
+// Storage Keys
 export const FAVORITES_STORAGE_KEY = 'gePulseFavoriteItems';
 export const WORDING_PREFERENCE_STORAGE_KEY = 'gePulseWordingPreference';
+export const ALERTS_STORAGE_KEY = 'runescapePriceAlerts'; // Used by usePriceAlerts
+export const CHART_GRID_STORAGE_KEY = 'gePulseShowChartGrid';
+export const CHART_LINE_GLOW_STORAGE_KEY = 'gePulseShowChartLineGlow';
+export const VOLUME_CHART_STORAGE_KEY = 'gePulseShowVolumeChart';
+export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
+export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
+
+export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; // For storing user's consent decision
+
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
+export const DEFAULT_THEME_ID = 'ge-pulse-dark';
+
+// List of all keys for user preferences that should be cleared if consent is revoked
+export const ALL_USER_PREFERENCE_KEYS = [
+  FAVORITES_STORAGE_KEY,
+  WORDING_PREFERENCE_STORAGE_KEY,
+  ALERTS_STORAGE_KEY,
+  CHART_GRID_STORAGE_KEY,
+  CHART_LINE_GLOW_STORAGE_KEY,
+  VOLUME_CHART_STORAGE_KEY,
+  ACTIVE_THEME_STORAGE_KEY,
+  DESKTOP_NOTIFICATIONS_ENABLED_KEY,
+  // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,
+  // as we need to remember the consent choice itself.
+];
 
 
 export const APP_THEMES: AppTheme[] = [
