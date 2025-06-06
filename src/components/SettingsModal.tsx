@@ -12,6 +12,8 @@ interface SettingsModalProps {
   onToggleChartLineGlow: () => void;
   showVolumeChart: boolean;
   onToggleShowVolumeChart: () => void;
+  showFavoriteSparklines: boolean;
+  onToggleFavoriteSparklines: () => void;
   activeThemeName: string;
   onSetThemeName: (themeName: string) => void;
   themes: AppTheme[];
@@ -34,6 +36,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleChartLineGlow,
   showVolumeChart,
   onToggleShowVolumeChart,
+  showFavoriteSparklines,
+  onToggleFavoriteSparklines,
   activeThemeName,
   onSetThemeName,
   themes,
@@ -136,7 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {consentStatus === 'granted' && (
               <>
                 <div>
-                  <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">Chart Settings</h3>
+                  <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">Chart & Display Settings</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
                       <span className="text-[var(--text-primary)]">Show Chart Grid</span>
@@ -183,6 +187,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           />
                           <div className={`block w-12 h-6 rounded-full transition-colors bg-[${showVolumeChart ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
                           <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${showVolumeChart ? 'translate-x-6' : ''}`}></div>
+                        </div>
+                      </label>
+                    </div>
+                     <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
+                      <span className="text-[var(--text-primary)]">Show Favorite Sparklines</span>
+                      <label htmlFor="favoriteSparklinesToggle" className="flex items-center cursor-pointer">
+                        <div className="relative">
+                          <input 
+                            type="checkbox" 
+                            id="favoriteSparklinesToggle" 
+                            className="sr-only" 
+                            checked={showFavoriteSparklines} 
+                            onChange={onToggleFavoriteSparklines}
+                          />
+                          <div className={`block w-12 h-6 rounded-full transition-colors bg-[${showFavoriteSparklines ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${showFavoriteSparklines ? 'translate-x-6' : ''}`}></div>
                         </div>
                       </label>
                     </div>

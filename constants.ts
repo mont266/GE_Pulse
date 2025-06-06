@@ -25,6 +25,7 @@ export const ALERTS_STORAGE_KEY = 'runescapePriceAlerts'; // Used by usePriceAle
 export const CHART_GRID_STORAGE_KEY = 'gePulseShowChartGrid';
 export const CHART_LINE_GLOW_STORAGE_KEY = 'gePulseShowChartLineGlow';
 export const VOLUME_CHART_STORAGE_KEY = 'gePulseShowVolumeChart';
+export const FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY = 'gePulseShowFavoriteSparklines';
 export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
 
@@ -41,6 +42,7 @@ export const ALL_USER_PREFERENCE_KEYS = [
   CHART_GRID_STORAGE_KEY,
   CHART_LINE_GLOW_STORAGE_KEY,
   VOLUME_CHART_STORAGE_KEY,
+  FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY,
   ACTIVE_THEME_STORAGE_KEY,
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,

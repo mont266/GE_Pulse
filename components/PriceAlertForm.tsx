@@ -10,7 +10,7 @@ interface PriceAlertFormProps {
   editingAlert: PriceAlert | null; 
   onUpdateAlert: (alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => void; 
   onCancelEdit: () => void; 
-  isConsentGranted: boolean; // New prop
+  isConsentGranted: boolean;
 }
 
 const parseShorthandPrice = (value: string): number | null => {
@@ -63,7 +63,7 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
   editingAlert,
   onUpdateAlert,
   onCancelEdit,
-  isConsentGranted
+  isConsentGranted,
 }) => {
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [targetPriceInput, setTargetPriceInput] = useState<string>('');
@@ -73,9 +73,10 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
 
   const alertSuggestionListRef = useRef<HTMLUListElement | null>(null);
   const alertItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
+  const priceInputRef = useRef<HTMLInputElement>(null);
   const alertSearchInputWrapperRef = useRef<HTMLDivElement>(null);
   const alertItemListWrapperRef = useRef<HTMLDivElement | null>(null);
+  const itemSearchInputRef = useRef<HTMLInputElement>(null); // Ref for item search input
 
   const isEditing = !!editingAlert;
 
@@ -86,12 +87,18 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
       setTargetPriceInput(editingAlert.targetPrice.toString());
       setCondition(editingAlert.condition);
       setActiveAlertSuggestionIndex(-1); 
-    } else {
+      if (priceInputRef.current) { // Focus price input when editing
+        priceInputRef.current.focus();
+      }
+    } else if (!isEditing) { 
       setSelectedItemId('');
       setItemSearch('');
       setTargetPriceInput('');
       setCondition('below');
       setActiveAlertSuggestionIndex(-1);
+      if (itemSearchInputRef.current) { // Focus item search when adding new
+          itemSearchInputRef.current.focus();
+      }
     }
   }, [editingAlert, isEditing]);
 
@@ -147,12 +154,16 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
     setSelectedItemId(item.id.toString());
     setItemSearch(item.name); 
     setActiveAlertSuggestionIndex(-1); 
+    if (priceInputRef.current) { 
+        priceInputRef.current.focus();
+    }
   }, []);
 
   const handleClearSelection = useCallback(() => {
     setSelectedItemId('');
     setItemSearch('');
     setActiveAlertSuggestionIndex(-1);
+    if(itemSearchInputRef.current) itemSearchInputRef.current.focus();
   }, []);
 
   const handleAlertSearchKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -233,11 +244,12 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
       handleClearSelection(); 
       setTargetPriceInput(''); 
       setCondition('below');
+      if(itemSearchInputRef.current) itemSearchInputRef.current.focus();
     }
   };
   
   const currentSelectedItemDetails = useMemo(() => {
-    if (selectedItemId && !isEditing) {
+    if (selectedItemId && !isEditing) { 
       return allItems.find(i => i.id.toString() === selectedItemId);
     }
     return null;
@@ -246,22 +258,22 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
   const isAlertListVisible = itemSearch && !selectedItemId && filteredAlertItems.length > 0 && !isEditing;
   const currentItemForEditingDisplay = isEditing && editingAlert ? allItems.find(i => i.id === editingAlert.itemId) : null;
 
-  const formDisabled = !isConsentGranted && !isEditing; // Disable entire form if consent not granted unless editing an existing (in-memory) one.
+  const formDisabled = !isConsentGranted && !isEditing;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label htmlFor="alertItemSearch" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-          {isEditing ? 'Item (Editing)' : 'Search Item for Alert'}
+          {isEditing ? `Item: ${editingAlert.itemName}` : 'Search Item for Alert'}
         </label>
         {isEditing && currentItemForEditingDisplay ? (
           <div className="flex items-center p-2 bg-[var(--bg-input-secondary)] rounded-md">
             <img 
-              src={`${ITEM_IMAGE_BASE_URL}${currentItemForEditingDisplay.icon.replace(/ /g, '_')}`} 
-              alt={currentItemForEditingDisplay.name} 
+              src={`${ITEM_IMAGE_BASE_URL}${(currentItemForEditingDisplay?.icon || '').replace(/ /g, '_')}`} 
+              alt={currentItemForEditingDisplay?.name} 
               className="w-8 h-8 mr-3 object-contain"
             />
-            <span className="text-[var(--text-primary)]">{currentItemForEditingDisplay.name}</span>
+            <span className="text-[var(--text-primary)]">{currentItemForEditingDisplay?.name}</span>
           </div>
         ) : (
           <>
@@ -274,6 +286,7 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
                 />
               )}
               <input
+                ref={itemSearchInputRef}
                 type="text"
                 id="alertItemSearch"
                 placeholder={formDisabled ? "Enable preferences in settings" : "Search item..."}
@@ -354,20 +367,22 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
         )}
       </div>
       
-      {((selectedItemId || isEditing) && !formDisabled) && (
+      {((selectedItemId || isEditing) && (!formDisabled || isEditing)) && (
         <>
           <div>
             <label htmlFor="targetPrice" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Target Price (GP)
             </label>
             <input
+              ref={priceInputRef}
               type="text"
               id="targetPrice"
               value={targetPriceInput}
               onChange={(e) => setTargetPriceInput(e.target.value)}
               placeholder="E.g., 100k, 2.5m, 100000"
-              className="w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+              className={`w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] ${formDisabled && !isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
               disabled={formDisabled && !isEditing}
+              required
             />
           </div>
           <div>
@@ -378,7 +393,7 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
               id="condition"
               value={condition}
               onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
-              className="w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none"
+              className={`w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none ${formDisabled && !isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
               disabled={formDisabled && !isEditing}
             >
               <option value="below">Price drops below</option>

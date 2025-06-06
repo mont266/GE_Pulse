@@ -150,3 +150,11 @@ export type FavoriteItemHourlyChangeState =
   | null;
 
 export type WordingPreference = 'uk' | 'us';
+
+// Represents the state for sparkline data: could be loading, an error, no sufficient data, successfully loaded, or not yet processed.
+export type FavoriteItemSparklineState =
+  | ChartDataPoint[] // Array of data points for the sparkline
+  | 'loading'
+  | 'error'
+  | 'no_data'
+  | null; // Initial state or not applicable
