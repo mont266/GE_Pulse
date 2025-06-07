@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { PriceAlert, ItemMapInfo, SectionRenderProps } from '../src/types'; // Corrected path
 import { PriceAlertForm } from './PriceAlertForm';
 import { PriceAlertList } from './PriceAlertList';
-import { ChevronDownIcon } from './Icons'; 
+import { ChevronDownIcon, BellIcon } from './Icons'; 
 
 interface AlertsManagerProps extends SectionRenderProps { // Inherit drag props
   alerts: PriceAlert[];
@@ -94,8 +95,9 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
         aria-expanded={!isCollapsed}
         aria-controls="alerts-section-content"
       >
-        <div className="flex-grow flex items-center min-w-0"> {/* Wrapper for title, pointer-events-none removed */}
-          <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none"> {/* pointer-events-none added here */}
+        <div className="flex-grow flex items-center min-w-0">
+          <BellIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
+          <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none"> 
             {editingAlert ? 'Edit Price Alert' : 'Manage Price Alerts'}
           </h2>
         </div>

@@ -183,12 +183,16 @@ export interface MoverItem {
   id: number;
   name: string;
   icon: string;
-  currentPrice: number;
-  pastPrice: number;
-  percentChange: number;
+  currentPrice: number; // Relevant for price metric or for context
+  currentVolume?: number; // Relevant for volume metric or for context
+  pastPrice: number; // Relevant for price metric
+  pastVolume?: number; // Relevant for volume metric
+  percentChange: number; // Can be price % or volume %
 }
 
 export type TopMoversTimespan = '1h' | '24h';
+export type TopMoversCalculationMode = 'performance' | 'accuracy';
+export type TopMoversMetricType = 'price' | 'volume'; // New type
 
 export interface TopMoversData {
   winners: MoverItem[];

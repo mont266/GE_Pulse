@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData } from './src/types'; // Updated path for types
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -18,14 +18,14 @@ import { TopMoversSection } from './components/TopMoversSection';
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon } from './components/Icons';
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, BellIcon, TrendingUpIcon } from './components/Icons';
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
   ALL_USER_PREFERENCE_KEYS, DEFAULT_THEME_ID, CHART_GRID_STORAGE_KEY, CHART_LINE_GLOW_STORAGE_KEY,
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
-  DRAG_DROP_ENABLED_STORAGE_KEY
+  DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -85,6 +85,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
         aria-controls="search-section-content"
       >
         <div className="flex-grow flex items-center min-w-0">
+          <SearchIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
           <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none">Search Item</h2>
         </div>
         <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 pointer-events-none ${isSearchSectionCollapsed ? '-rotate-90' : ''}`} />
@@ -123,11 +124,6 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
   );
 });
 
-// Define prop types for other section components if they don't already exist
-// For FavoritesList, TopMoversSection, AlertsManager - assume their Props interfaces
-// are defined in their respective files or types.ts and extend SectionRenderProps.
-
-// Example placeholder if not defined (actual props are more complex)
 interface FavoritesListProps extends SectionRenderProps {
   favoriteItemIds: FavoriteItemId[];
   allItems: ItemMapInfo[];
@@ -156,10 +152,13 @@ interface TopMoversSectionProps extends SectionRenderProps {
   onRefresh: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  onSelectItemById: (itemId: number) => void;
+  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => void; 
   getItemIconUrl: (iconName: string) => string; 
-  isConsentGranted: boolean;
   lastFetchedTimestamp: number;
+  topMoversCalculationMode: TopMoversCalculationMode;
+  onSetTopMoversCalculationMode: (mode: TopMoversCalculationMode) => void;
+  topMoversMetricType: TopMoversMetricType; 
+  onSetTopMoversMetricType: (metric: TopMoversMetricType) => void; 
 }
 
 interface AlertsManagerProps extends SectionRenderProps {
@@ -308,6 +307,10 @@ const App: React.FC = () => {
     return DEFAULT_WORDING_PREFERENCE;
   });
 
+  const [topMoversCalculationMode, setTopMoversCalculationMode] = useState<TopMoversCalculationMode>(DEFAULT_TOP_MOVERS_CALCULATION_MODE);
+  const [topMoversMetricType, setTopMoversMetricType] = useState<TopMoversMetricType>(DEFAULT_TOP_MOVERS_METRIC_TYPE);
+
+
   const [favoriteItemIds, setFavoriteItemIds] = useState<FavoriteItemId[]>(() => {
     if (initialConsent === 'granted') {
       try {
@@ -330,7 +333,7 @@ const App: React.FC = () => {
   const countdownIntervalIdRef = useRef<number | null>(null);
   const searchBarWrapperRef = useRef<HTMLDivElement>(null);
   const itemListWrapperRef = useRef<HTMLDivElement>(null);
-  const sharedItemIdProcessedRef = useRef<boolean>(false); // Ref to track if shared item ID has been processed
+  const sharedItemIdProcessedRef = useRef<boolean>(false); 
 
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
@@ -367,19 +370,19 @@ const App: React.FC = () => {
     refreshMovers: refreshTopMovers,
     fetchMovers, 
     lastFetchedTimestamp: topMoversLastFetched,
-  } = useTopMovers(allItems); 
+  } = useTopMovers(allItems, topMoversCalculationMode, topMoversMetricType);
 
   const toggleTopMoversSection = useCallback(() => {
     setIsTopMoversSectionCollapsed(prev => {
         const newCollapsedState = !prev;
         if (!newCollapsedState && !topMoversData && !isLoadingTopMovers && topMoversError === null && allItems.length > 0) {
-            fetchMovers(selectedMoversTimespan);
+            fetchMovers(selectedMoversTimespan, topMoversMetricType);
         }
         return newCollapsedState;
     });
-  }, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems]);
+  }, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems, topMoversMetricType]);
 
-  const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems]);
+  const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems, topMoversMetricType]);
 
   useEffect(() => {
     if (consentStatus !== 'pending') {
@@ -812,9 +815,16 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
 
-  const refreshCurrentItemData = useCallback(async (options: { itemToRefresh?: ItemMapInfo, isUserInitiated?: boolean } = {}) => {
+  const refreshCurrentItemData = useCallback(async (options: { 
+    itemToRefresh?: ItemMapInfo, 
+    isUserInitiated?: boolean, 
+    timespanToUse?: Timespan,
+    snapshotTimestampMs?: number // Added for aligning historical window
+  } = {}) => {
     const currentItem = options.itemToRefresh || selectedItem;
     const isUserInitiated = options.isUserInitiated !== undefined ? options.isUserInitiated : true;
+    const currentTimespan = options.timespanToUse || selectedTimespan;
+
     if (!currentItem) return;
     setIsLoadingPrice(true); 
     setError(null);
@@ -822,7 +832,7 @@ const App: React.FC = () => {
 
     try {
       let apiTimestepToFetch: TimespanAPI;
-      switch (selectedTimespan) {
+      switch (currentTimespan) {
         case '1h': case '6h': apiTimestepToFetch = '5m'; break;
         case '1d': case '7d': apiTimestepToFetch = '1h'; break;
         case '1mo': apiTimestepToFetch = '6h'; break;
@@ -837,20 +847,23 @@ const App: React.FC = () => {
       const rawHistorical = [...rawHistoricalUnsorted].sort((a,b) => a.timestamp - b.timestamp);
 
       setLatestPrice(latest);
-      const nowMs = Date.now();
-      let startTimeMs: number;
-      switch (selectedTimespan) {
-        case '1h': startTimeMs = nowMs - (1 * 60 * 60 * 1000); break;
-        case '6h': startTimeMs = nowMs - (6 * 60 * 60 * 1000); break;
-        case '1d': startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000); break;
-        case '7d': startTimeMs = nowMs - (7 * 24 * 60 * 60 * 1000); break;
-        case '1mo': startTimeMs = nowMs - (30 * 24 * 60 * 60 * 1000); break;
-        case '3mo': startTimeMs = nowMs - (90 * 24 * 60 * 60 * 1000); break;
-        case '6mo': startTimeMs = nowMs - (180 * 24 * 60 * 60 * 1000); break;
-        case '1y': startTimeMs = nowMs - (365 * 24 * 60 * 60 * 1000); break;
-        default: startTimeMs = nowMs - (1 * 24 * 60 * 60 * 1000);
+
+      const currentInstantMs = Date.now();
+      const historyEndDateMs = options.snapshotTimestampMs || currentInstantMs;
+      let historyStartDateMs: number;
+
+      switch (currentTimespan) {
+        case '1h': historyStartDateMs = historyEndDateMs - (1 * 60 * 60 * 1000); break;
+        case '6h': historyStartDateMs = historyEndDateMs - (6 * 60 * 60 * 1000); break;
+        case '1d': historyStartDateMs = historyEndDateMs - (1 * 24 * 60 * 60 * 1000); break;
+        case '7d': historyStartDateMs = historyEndDateMs - (7 * 24 * 60 * 60 * 1000); break;
+        case '1mo': historyStartDateMs = historyEndDateMs - (30 * 24 * 60 * 60 * 1000); break;
+        case '3mo': historyStartDateMs = historyEndDateMs - (90 * 24 * 60 * 60 * 1000); break;
+        case '6mo': historyStartDateMs = historyEndDateMs - (180 * 24 * 60 * 60 * 1000); break;
+        case '1y': historyStartDateMs = historyEndDateMs - (365 * 24 * 60 * 60 * 1000); break;
+        default: historyStartDateMs = historyEndDateMs - (1 * 24 * 60 * 60 * 1000);
       }
-      const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= startTimeMs && dp.timestamp <= nowMs);
+      const filteredHistorical = rawHistorical.filter(dp => dp.timestamp >= historyStartDateMs && dp.timestamp <= historyEndDateMs);
       setHistoricalData(filteredHistorical);
       
       if (isUserInitiated && options.isUserInitiated !== false) { 
@@ -866,19 +879,19 @@ const App: React.FC = () => {
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'loading' }));
           }
           try {
+            // For favorites, always use live 1-hour window for sparkline/hourly change, not snapshot window
             const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
+            const nowForFavMs = Date.now(); // Use current time for favorite's own 1h window
 
-            const nowMsSpark = Date.now();
-            const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
-            const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
+            const oneHourAgoMsThresholdSpark = nowForFavMs - (60 * 60 * 1000);
+            const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowForFavMs);
             if (isMountedRefreshRef.current) {
                 setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
             }
             
             let priceThen: number | null = null;
             const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-            const nowMsCalc = Date.now();
-            const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
+            const oneHourAgoMsThresholdCalc = nowForFavMs - (60 * 60 * 1000);
             for (let i = sortedHistorical.length - 1; i >= 0; i--) {
                 if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
                     priceThen = sortedHistorical[i].price;
@@ -946,24 +959,28 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, handleRefreshAllFavorites]);
 
-  const handleSelectItem = useCallback(async (item: ItemMapInfo) => {
+  const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
     setSelectedItem(item);
     setSearchTerm('');
     setActiveSuggestionIndex(-1); 
-    await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false }); 
-  }, [refreshCurrentItemData]);
+    if (originTimespan) {
+        setSelectedTimespan(originTimespan); 
+        await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false, timespanToUse: originTimespan, snapshotTimestampMs: originSnapshotTimestampMs });
+    } else {
+        await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false, snapshotTimestampMs: originSnapshotTimestampMs }); 
+    }
+  }, [refreshCurrentItemData]); 
 
-  const handleSelectItemById = useCallback((itemId: number) => {
+  const handleSelectItemById = useCallback((itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
     const itemToSelect = allItems.find(item => item.id === itemId);
     if (itemToSelect) {
-      handleSelectItem(itemToSelect);
+      handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs); 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       addNotification(`Could not find item with ID ${itemId}. It might have been removed or changed.`, 'error');
     }
   }, [allItems, handleSelectItem, addNotification]);
 
-  // Effect to handle shared item ID from URL
   useEffect(() => {
     if (allItems.length > 0 && !sharedItemIdProcessedRef.current) {
       const urlParams = new URLSearchParams(window.location.search);
@@ -972,14 +989,13 @@ const App: React.FC = () => {
         const numericItemId = parseInt(itemIdFromUrl, 10);
         if (!isNaN(numericItemId)) {
           handleSelectItemById(numericItemId);
-          // Clean the URL parameter
-          const newUrl = window.location.pathname + window.location.hash; // Keep hash if any
+          const newUrl = window.location.pathname + window.location.hash; 
           window.history.replaceState({}, document.title, newUrl);
         } else {
           addNotification('Invalid shared item ID in URL.', 'error');
         }
       }
-      sharedItemIdProcessedRef.current = true; // Mark as processed
+      sharedItemIdProcessedRef.current = true; 
     }
   }, [allItems, handleSelectItemById, addNotification]);
 
@@ -990,10 +1006,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (selectedItem) {
-      refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false });
+      // When timespan changes for an already selected item, do not pass snapshotTimestampMs
+      // as we want the window to be relative to Date.now()
+      refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTimespan]); 
+  }, [selectedTimespan]);
 
   const handleToggleAutoRefresh = useCallback(() => {
     setIsAutoRefreshEnabled(prev => {
@@ -1005,6 +1023,7 @@ const App: React.FC = () => {
 
   const handleManualRefresh = useCallback(async () => {
     if (!selectedItem || isLoadingPrice) return;
+    // Manual refresh uses Date.now() as anchor, not a snapshot time
     await refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: true }); 
     setManualRefreshTrigger(c => c + 1); 
   }, [selectedItem, isLoadingPrice, refreshCurrentItemData]);
@@ -1018,6 +1037,7 @@ const App: React.FC = () => {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
       autoRefreshIntervalIdRef.current = setInterval(() => {
         if (selectedItem) { 
+            // Auto-refresh uses Date.now() as anchor
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
@@ -1136,11 +1156,11 @@ const App: React.FC = () => {
   const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
     if (allItems.length > 0) { 
       setSelectedMoversTimespan(timespan);
-      fetchMovers(timespan); 
+      fetchMovers(timespan, topMoversMetricType); 
     } else {
       addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
     }
-  }, [setSelectedMoversTimespan, fetchMovers, allItems, addNotification]);
+  }, [setSelectedMoversTimespan, fetchMovers, allItems, addNotification, topMoversMetricType]);
 
   const handleRefreshTopMovers = useCallback(() => {
     if (allItems.length > 0) { 
@@ -1223,10 +1243,26 @@ const App: React.FC = () => {
   }, [isDragAndDropEnabled]);
   
   const sectionsConfig = useMemo(() => ({
-    [SECTION_KEYS.SEARCH]: { Component: SearchSectionLayout },
-    [SECTION_KEYS.FAVORITES]: { Component: FavoritesList },
-    [SECTION_KEYS.TOP_MOVERS]: { Component: TopMoversSection },
-    [SECTION_KEYS.ALERTS]: { Component: AlertsManager },
+    [SECTION_KEYS.SEARCH]: { 
+        Component: SearchSectionLayout, 
+        Icon: SearchIcon,
+        title: "Search Item" 
+    },
+    [SECTION_KEYS.FAVORITES]: { 
+        Component: FavoritesList,
+        Icon: FilledHeartIcon, 
+        titleDynamic: (wp: WordingPreference) => wp === 'uk' ? 'Favourite Items' : 'Favorite Items'
+    },
+    [SECTION_KEYS.TOP_MOVERS]: { 
+        Component: TopMoversSection,
+        Icon: TrendingUpIcon,
+        title: "Top Market Movers"
+    },
+    [SECTION_KEYS.ALERTS]: { 
+        Component: AlertsManager,
+        Icon: BellIcon,
+        titleDynamic: (editing: boolean) => editing ? 'Edit Price Alert' : 'Manage Price Alerts'
+    },
   }), []);
 
 
@@ -1284,10 +1320,14 @@ const App: React.FC = () => {
           onRefresh: handleRefreshTopMovers,
           isCollapsed: isTopMoversSectionCollapsed,
           onToggleCollapse: memoizedToggleTopMoversSection,
-          onSelectItemById: handleSelectItemById,
+          onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => 
+            handleSelectItemById(itemId, originTimespan, originSnapshotTimestampMs),
           getItemIconUrl,
-          isConsentGranted,
           lastFetchedTimestamp: topMoversLastFetched,
+          topMoversCalculationMode,
+          onSetTopMoversCalculationMode: setTopMoversCalculationMode,
+          topMoversMetricType,
+          onSetTopMoversMetricType: setTopMoversMetricType,
         };
       case SECTION_KEYS.ALERTS:
         return {
@@ -1306,14 +1346,12 @@ const App: React.FC = () => {
           onToggleCollapse: toggleAlertsSection,
         };
       default:
-        // This case should be unreachable due to the `if (!config) return null;` check before calling.
-        // Throwing an error here helps satisfy TypeScript's type checking for the function's return signature.
         throw new Error(`[App.tsx] getSectionProps: Unhandled sectionId "${sectionId}". This should have been caught earlier.`);
     }
   }, [
-    isSearchSectionCollapsed, toggleSearchSection, searchBarWrapperRef, searchTerm, setSearchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, itemListWrapperRef, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
+    isSearchSectionCollapsed, toggleSearchSection, searchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
     allItems, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection, removeFavoriteItem, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, handleSelectItemById,
-    topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched,
+    topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched, topMoversCalculationMode, topMoversMetricType,
     alerts, addAlert, removeAlert, updateAlert, getItemName, addNotification, isAlertsSectionCollapsed, toggleAlertsSection
   ]);
 

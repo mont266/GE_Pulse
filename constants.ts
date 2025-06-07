@@ -1,5 +1,5 @@
 
-import { Timespan, AppTheme, WordingPreference } from './types';
+import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated import path
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
 export const ITEM_IMAGE_BASE_URL = 'https://oldschool.runescape.wiki/images/';
@@ -30,12 +30,17 @@ export const FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY = 'gePulseShowFavoriteSpark
 export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
-export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled'; // New key for D&D toggle
+export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
+// TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY is removed as this setting is no longer stored
+// TOP_MOVERS_METRIC_TYPE_STORAGE_KEY is not added as this setting is session-only
 
 export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; // For storing user's consent decision
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
 export const DEFAULT_THEME_ID = 'ge-pulse-dark';
+export const DEFAULT_TOP_MOVERS_CALCULATION_MODE: TopMoversCalculationMode = 'performance';
+export const DEFAULT_TOP_MOVERS_METRIC_TYPE: TopMoversMetricType = 'price';
+
 
 // Sidebar section keys - must match keys used in App.tsx's sectionsConfig
 export const SECTION_KEYS = {
@@ -45,6 +50,10 @@ export const SECTION_KEYS = {
   ALERTS: 'alerts',
 };
 export const DEFAULT_SIDEBAR_ORDER: string[] = [SECTION_KEYS.SEARCH, SECTION_KEYS.FAVORITES, SECTION_KEYS.TOP_MOVERS, SECTION_KEYS.ALERTS];
+
+// Top Movers constants
+export const MAX_CANDIDATE_ITEMS_PERFORMANCE = 50;
+export const MIN_PRICE_FOR_MOVER_CONSIDERATION = 100;
 
 
 // List of all keys for user preferences that should be cleared if consent is revoked
@@ -59,7 +68,9 @@ export const ALL_USER_PREFERENCE_KEYS = [
   ACTIVE_THEME_STORAGE_KEY,
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   SIDEBAR_ORDER_STORAGE_KEY,
-  DRAG_DROP_ENABLED_STORAGE_KEY, // Added D&D toggle key
+  DRAG_DROP_ENABLED_STORAGE_KEY,
+  // TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY removed
+  // TOP_MOVERS_METRIC_TYPE_STORAGE_KEY not added
   // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,
   // as we need to remember the consent choice itself.
 ];

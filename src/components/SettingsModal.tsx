@@ -1,7 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { AppTheme, WordingPreference } from '../types';
-// ChangelogModal and changelogEntries imports removed
+import { AppTheme, WordingPreference } from '../types'; // TopMoversCalculationMode import removed
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,6 +24,8 @@ interface SettingsModalProps {
   consentStatus: 'pending' | 'granted' | 'denied';
   onGrantConsent: () => void;
   onRevokeConsent: () => void;
+  // topMoversCalculationMode prop removed
+  // onSetTopMoversCalculationMode prop removed
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -49,13 +50,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   consentStatus,
   onGrantConsent,
   onRevokeConsent,
+  // topMoversCalculationMode, // destructured prop removed
+  // onSetTopMoversCalculationMode, // destructured prop removed
 }) => {
-  // isChangelogModalOpen state removed
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        // Logic for closing changelog modal removed
         onClose();
       }
     };
@@ -65,7 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen, onClose]); // isChangelogModalOpen dependency removed
+  }, [isOpen, onClose]);
 
   if (!isOpen) {
     return null;
@@ -74,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const isNotificationToggleDisabled = desktopNotificationPermission === 'denied';
 
   return (
-    <> {/* Fragment kept in case other top-level modals are added here in future, though unlikely for settings */}
+    <>
       <div 
         className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
         onClick={onClose}
@@ -209,6 +210,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* Top Market Movers Settings section removed */}
+
                 <div>
                   <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">Notification Settings</h3>
                   <div className="space-y-3">
@@ -283,8 +286,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </>
             )}
             
-            {/* "About" section with Changelog button removed from here */}
-            
             <div className="text-center text-[var(--text-muted)] pt-4">
               <p className="italic">Thank you for using GE Pulse!</p>
             </div>
@@ -292,7 +293,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         </div>
       </div>
-      {/* ChangelogModal rendering removed from here */}
     </>
   );
 };

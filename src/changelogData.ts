@@ -7,19 +7,19 @@ export const changelogEntries: ChangelogEntry[] = [
     version: "Beta v0.07",
     date: "2024-08-01", // Placeholder: Adjust to actual date
     changes: [
-      "Added 'Top Market Movers' section: Users can now see the top 5 item price winners and losers over the last 1 hour or 24 hours.",
-      "The Top Movers section is collapsible and located in the left sidebar.",
-      "Data for Top Movers is calculated based on the 50 most actively traded items to manage API usage.",
-      "Movers data can be manually refreshed.",
-      "Item names in the Top Movers list are clickable, loading the item in the main display.",
-      "Appropriate loading, error, and empty states are handled for the Movers section.",
-      "Added a note in the Movers section about how data is derived.",
+      "Added 'Top Market Movers' section: View top 5 item price/volume winners & losers (1h/24h). Section is collapsible and in the sidebar.",
+      "Enhanced 'Top Market Movers' with a 'Fast Scan' (top 50 actively traded items >100GP) vs. 'Full Scan' (all items >100GP) toggle, directly in the section. This setting is session-only and defaults to Fast Scan.",
+      "Added a 'Price %' vs. 'Volume %' toggle to 'Top Market Movers', allowing ranking by either price fluctuation or trade volume change. This setting is session-only and defaults to Price %.",
+      "Top Movers data can be manually refreshed. Item names are clickable, loading the item in the main display with synced timespan.",
+      "Loading, error, and empty states are handled for the Movers section. Descriptive note dynamically reflects current scan mode and metric.",
       "Sidebar sections (Search, Favorites, Alerts, Top Movers) can now be re-ordered via drag and drop. This preference is saved if consent is granted.",
-      "Drag and drop reordering for sidebar sections is disabled by default and can be toggled via a new header icon.",
-      "Implemented shareable links: Users can now copy a direct link to an item's view from the item display header. Opening this link loads the specific item's chart and details.",
+      "Drag and drop reordering for sidebar sections is disabled by default and can be toggled via a header icon.",
+      "Implemented shareable links: Users can copy a direct link to an item's view from the item display header. Opening this link loads the specific item.",
+      "Added icons to section headers (Search, Favorites, Top Movers, Alerts) for improved visual navigation.",
+      "Improved consistency of price fluctuation percentages between 'Top Market Movers' and the main 'Item Display' by aligning historical data reference points.",
       "Updated type definitions for API responses and new feature data.",
     ],
-    notes: "This update introduces market trend analysis, shareable item views, and customizable sidebar layout. Due to API limitations, mover calculations are based on a subset of actively traded items."
+    notes: "This update introduces market trend analysis with customizable scan modes (Fast/Full) and metric types (Price/Volume), shareable item views, and a customizable sidebar layout. UI enhancements include section icons and improved data consistency between movers and item views."
   },
   {
     version: "Beta v0.06",

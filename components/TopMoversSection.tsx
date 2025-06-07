@@ -1,9 +1,11 @@
 
 import React from 'react';
-import { MoverItem, TopMoversData, TopMoversTimespan, SectionRenderProps } from '../src/types';
-import { ChevronDownIcon } from './Icons';
+import { MoverItem, TopMoversData, TopMoversTimespan, SectionRenderProps, TopMoversCalculationMode, TopMoversMetricType, Timespan } from '../src/types'; // Added Timespan
+import { ChevronDownIcon, TrendingUpIcon } from './Icons';
+import { MAX_CANDIDATE_ITEMS_PERFORMANCE, MIN_PRICE_FOR_MOVER_CONSIDERATION } from '../constants';
 
-interface TopMoversSectionProps extends SectionRenderProps { // Inherit drag props
+
+interface TopMoversSectionProps extends SectionRenderProps {
   topMoversData: TopMoversData | null;
   isLoading: boolean;
   error: string | null;
@@ -12,11 +14,13 @@ interface TopMoversSectionProps extends SectionRenderProps { // Inherit drag pro
   onRefresh: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  onSelectItemById: (itemId: number) => void;
+  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => void; 
   getItemIconUrl: (iconName: string) => string; 
-  isConsentGranted: boolean;
   lastFetchedTimestamp: number;
-  // sectionId, isDragAndDropEnabled, handleDragStart, draggedItem are now part of SectionRenderProps
+  topMoversCalculationMode: TopMoversCalculationMode;
+  onSetTopMoversCalculationMode: (mode: TopMoversCalculationMode) => void;
+  topMoversMetricType: TopMoversMetricType;
+  onSetTopMoversMetricType: (metric: TopMoversMetricType) => void;
 }
 
 const SmallSpinner: React.FC = () => (
@@ -29,19 +33,33 @@ const RefreshIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const MoverListItem: React.FC<{ item: MoverItem; onSelectItemById: (id: number) => void; getItemIconUrl: (icon: string) => string; isWinner: boolean }> = ({ item, onSelectItemById, getItemIconUrl, isWinner }) => {
+const MoverListItem: React.FC<{ 
+  item: MoverItem; 
+  onSelectItemById: (id: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => void; 
+  getItemIconUrl: (icon: string) => string; 
+  isWinner: boolean;
+  metricType: TopMoversMetricType;
+  currentMoversTimespan: TopMoversTimespan;
+  snapshotTimestamp: number; // Added to pass snapshot time
+}> = ({ item, onSelectItemById, getItemIconUrl, isWinner, metricType, currentMoversTimespan, snapshotTimestamp }) => {
   const SvgIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3 h-3 mr-1 ${isWinner ? 'text-[var(--price-high)] transform rotate-0' : 'text-[var(--price-low)] transform rotate-180'}`}>
         <path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.56l-2.47 2.47a.75.75 0 01-1.06-1.06l3.75-3.75a.75.75 0 011.06 0l3.75 3.75a.75.75 0 01-1.06 1.06L10.75 5.56v10.69A.75.75 0 0110 17z" clipRule="evenodd" />
     </svg>
   );
+  
+  let displayChange = item.percentChange.toFixed(1) + '%';
+  if (metricType === 'volume' && Math.abs(item.percentChange) >= 99999 && item.percentChange > 0 ) {
+      displayChange = "New Vol.";
+  }
+
 
   return (
     <li className="p-2 bg-[var(--bg-tertiary)] rounded-md hover:bg-[var(--bg-input-secondary)] transition-colors group">
       <button
-        onClick={() => onSelectItemById(item.id)}
+        onClick={() => onSelectItemById(item.id, currentMoversTimespan as Timespan, snapshotTimestamp)}
         className="w-full flex items-center space-x-2 text-left focus:outline-none"
-        aria-label={`View details for ${item.name}, price change ${item.percentChange.toFixed(1)}%`}
+        aria-label={`View details for ${item.name}, ${metricType} change ${displayChange}`}
       >
         <img
           src={getItemIconUrl(item.icon)}
@@ -61,7 +79,7 @@ const MoverListItem: React.FC<{ item: MoverItem; onSelectItemById: (id: number) 
         <div className="flex items-center flex-shrink-0 text-xs font-medium">
           <SvgIcon />
           <span className={`${isWinner ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`}>
-            {item.percentChange.toFixed(1)}%
+            {displayChange}
           </span>
         </div>
       </button>
@@ -80,8 +98,11 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
   onToggleCollapse,
   onSelectItemById,
   getItemIconUrl,
-  isConsentGranted, 
   lastFetchedTimestamp,
+  topMoversCalculationMode,
+  onSetTopMoversCalculationMode,
+  topMoversMetricType,
+  onSetTopMoversMetricType,
   // Drag props from SectionRenderProps
   sectionId,
   isDragAndDropEnabled,
@@ -114,6 +135,14 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
     return '';
   };
   
+  const scanModeText = topMoversCalculationMode === 'accuracy' ? 'Full Scan - may be slow' : 'Fast Scan';
+  const metricTypeText = topMoversMetricType === 'price' ? 'price' : 'total volume';
+  const candidateDescription = topMoversCalculationMode === 'accuracy' 
+    ? `all eligible items priced >${MIN_PRICE_FOR_MOVER_CONSIDERATION} GP`
+    : `top ${MAX_CANDIDATE_ITEMS_PERFORMANCE} actively traded items priced >${MIN_PRICE_FOR_MOVER_CONSIDERATION} GP`;
+  const noteText = `Movers based on % ${metricTypeText} change of ${candidateDescription}. (${scanModeText})`;
+
+
   return (
     <div className="bg-[var(--bg-secondary)] rounded-lg shadow-xl">
       <button
@@ -125,12 +154,13 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
         aria-expanded={!isCollapsed}
         aria-controls="top-movers-section-content"
       >
-        <div className="flex-grow flex items-center min-w-0"> {/* Wrapper for title and refresh button */}
+        <div className="flex-grow flex items-center min-w-0">
+          <TrendingUpIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
           <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none">Top Market Movers</h2>
           {!isCollapsed && (
              <button
               onClick={handleRefreshClick} 
-              draggable="false" // Explicitly not draggable
+              draggable="false"
               disabled={isLoading}
               className="ml-3 p-1.5 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-accent)] disabled:opacity-50 disabled:cursor-not-allowed" 
               aria-label="Refresh market movers"
@@ -146,7 +176,7 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
       {!isCollapsed && (
         <div id="top-movers-section-content" className="p-4 md:p-6 rounded-b-lg space-y-4">
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-wrap">
                 <div className="flex gap-2">
                   {(['1h', '24h'] as TopMoversTimespan[]).map(ts => (
                     <button
@@ -163,17 +193,48 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
                     </button>
                   ))}
                 </div>
-                 {lastFetchedTimestamp > 0 && !isLoading && (
-                    <p className="text-xs text-[var(--text-muted)] text-right flex-shrink-0 ml-2">
-                        Updated {getTimeAgo(lastFetchedTimestamp)}
-                    </p>
-                )}
+                
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--text-muted)]">Metric:</span>
+                  {(['price', 'volume'] as TopMoversMetricType[]).map(mt => (
+                    <button
+                      key={mt}
+                      onClick={(e) => {e.stopPropagation(); onSetTopMoversMetricType(mt);}}
+                      disabled={isLoading}
+                      className={`px-2 py-1 text-xs rounded-md ${topMoversMetricType === mt ? 'bg-[var(--bg-interactive)] text-[var(--text-on-interactive)]' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-input-secondary)]'} transition-colors disabled:opacity-70`}
+                      title={mt === 'price' ? "Rank by % price change" : "Rank by % volume change"}
+                    >
+                      {mt === 'price' ? 'Price %' : 'Volume %'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--text-muted)]">Scan:</span>
+                  {(['performance', 'accuracy'] as TopMoversCalculationMode[]).map(cm => (
+                    <button
+                      key={cm}
+                      onClick={(e) => { e.stopPropagation(); onSetTopMoversCalculationMode(cm);}}
+                      disabled={isLoading}
+                      className={`px-2 py-1 text-xs rounded-md ${topMoversCalculationMode === cm ? 'bg-[var(--bg-interactive)] text-[var(--text-on-interactive)]' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-input-secondary)]'} transition-colors disabled:opacity-70`}
+                      title={cm === 'performance' ? "Fast Scan: Top 50 actively traded items." : "Full Scan: All items >100GP. May be slow."}
+                    >
+                      {cm === 'performance' ? 'Fast' : 'Full'}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {lastFetchedTimestamp > 0 && !isLoading && (
+                  <p className="text-xs text-[var(--text-muted)] text-right -mt-2 sm:mt-0">
+                      Updated {getTimeAgo(lastFetchedTimestamp)}
+                  </p>
+              )}
+
 
               {isLoading && (
                 <div className="flex flex-col items-center justify-center h-40">
                   <SmallSpinner />
-                  <p className="mt-2 text-sm text-[var(--text-muted)]">Calculating movers...</p>
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">Calculating movers... {topMoversCalculationMode === 'accuracy' && '(Full Scan may take a moment)'}</p>
                 </div>
               )}
               {error && !isLoading && (
@@ -182,11 +243,20 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
               {!isLoading && !error && topMoversData && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-[var(--price-high)] mb-2">Top 5 Winners</h3>
+                    <h3 className="text-lg font-semibold text-[var(--price-high)] mb-2">Top 5 Winners ({topMoversMetricType === 'price' ? 'Price' : 'Volume'} %)</h3>
                     {topMoversData.winners.length > 0 ? (
                       <ul className="space-y-1.5">
                         {topMoversData.winners.map(item => (
-                          <MoverListItem key={`winner-${item.id}`} item={item} onSelectItemById={onSelectItemById} getItemIconUrl={getItemIconUrl} isWinner={true} />
+                          <MoverListItem 
+                            key={`winner-${item.id}`} 
+                            item={item} 
+                            onSelectItemById={onSelectItemById} 
+                            getItemIconUrl={getItemIconUrl} 
+                            isWinner={true} 
+                            metricType={topMoversMetricType} 
+                            currentMoversTimespan={selectedTimespan}
+                            snapshotTimestamp={lastFetchedTimestamp} 
+                          />
                         ))}
                       </ul>
                     ) : (
@@ -194,11 +264,20 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
                     )}
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-[var(--price-low)] mb-2">Top 5 Losers</h3>
+                    <h3 className="text-lg font-semibold text-[var(--price-low)] mb-2">Top 5 Losers ({topMoversMetricType === 'price' ? 'Price' : 'Volume'} %)</h3>
                     {topMoversData.losers.length > 0 ? (
                       <ul className="space-y-1.5">
                         {topMoversData.losers.map(item => (
-                          <MoverListItem key={`loser-${item.id}`} item={item} onSelectItemById={onSelectItemById} getItemIconUrl={getItemIconUrl} isWinner={false} />
+                          <MoverListItem 
+                            key={`loser-${item.id}`} 
+                            item={item} 
+                            onSelectItemById={onSelectItemById} 
+                            getItemIconUrl={getItemIconUrl} 
+                            isWinner={false} 
+                            metricType={topMoversMetricType} 
+                            currentMoversTimespan={selectedTimespan}
+                            snapshotTimestamp={lastFetchedTimestamp}
+                          />
                         ))}
                       </ul>
                     ) : (
@@ -209,7 +288,7 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
               )}
               {!isLoading && !error && (
                  <p className="text-xs text-[var(--text-muted)] text-center pt-3 mt-2 border-t border-[var(--border-primary)]">
-                    Movers based on % change of top 50 actively traded items priced &gt;100 GP.
+                    {noteText}
                 </p>
               )}
             </>
