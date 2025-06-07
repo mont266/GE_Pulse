@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint } from './types'; // Assuming main types are in root types.ts
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -9,23 +9,26 @@ import { AlertsManager } from './components/AlertsManager';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { NotificationBar } from './components/NotificationBar';
 import { RefreshControls } from './components/RefreshControls';
-import { SettingsModal } from './src/components/SettingsModal'; // Updated path
+import { SettingsModal } from './src/components/SettingsModal';
 import { FavoritesList } from './components/FavoritesList';
 import { ConsentBanner } from './components/ConsentBanner';
 import { ChangelogModal } from './src/components/ChangelogModal';
 import { SetAlertModal } from './components/SetAlertModal'; 
+import { TopMoversSection } from './components/TopMoversSection';
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
-import { ChevronDownIcon } from './components/Icons';
+import { useTopMovers } from './hooks/useTopMovers';
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon } from './components/Icons';
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
   ALL_USER_PREFERENCE_KEYS, DEFAULT_THEME_ID, CHART_GRID_STORAGE_KEY, CHART_LINE_GLOW_STORAGE_KEY,
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
-  FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY
+  FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
+  DRAG_DROP_ENABLED_STORAGE_KEY
 } from './constants'; 
+import { DragEvent } from 'react';
 
-// Helper to get initial consent status
 const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   const storedConsent = localStorage.getItem(CONSENT_STORAGE_KEY);
   if (storedConsent === 'granted' || storedConsent === 'denied') {
@@ -34,7 +37,152 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.06";
+const APP_VERSION = "Beta v0.07";
+
+// Define SearchSectionLayout component
+interface SearchSectionLayoutProps extends SectionRenderProps {
+  isSearchSectionCollapsed: boolean;
+  toggleSearchSection: () => void;
+  searchBarWrapperRef: React.RefObject<HTMLDivElement>;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  handleSearchKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  activeDescendantId?: string;
+  filteredItems: ItemMapInfo[];
+  itemListWrapperRef: React.RefObject<HTMLDivElement>;
+  handleSelectItem: (item: ItemMapInfo) => void;
+  getItemIconUrl: (iconName: string) => string;
+  activeSuggestionIndex: number;
+  favoriteItemIds: FavoriteItemId[];
+  handleToggleFavoriteQuickAction: (itemId: FavoriteItemId) => void;
+  wordingPreference: WordingPreference;
+  isConsentGranted: boolean;
+  isLoadingItems: boolean;
+}
+
+const SearchSectionLayout = React.memo(function SearchSectionLayout({
+  sectionId, isDragAndDropEnabled, handleDragStart, draggedItem,
+  isSearchSectionCollapsed, toggleSearchSection, searchBarWrapperRef, searchTerm, setSearchTerm, handleSearchKeyDown,
+  activeDescendantId, filteredItems, itemListWrapperRef, handleSelectItem, getItemIconUrl, activeSuggestionIndex,
+  favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems
+}: SearchSectionLayoutProps) {
+  const getButtonCursorClass = (currentSectionId: string) => {
+    if (isDragAndDropEnabled) {
+      return draggedItem === currentSectionId ? 'cursor-grabbing' : 'cursor-grab';
+    }
+    return '';
+  };
+
+  return (
+    <div className="bg-[var(--bg-secondary)] rounded-lg shadow-xl">
+      <button
+        onClick={toggleSearchSection}
+        draggable={isDragAndDropEnabled}
+        onDragStart={(e) => handleDragStart(e, sectionId)}
+        aria-grabbed={isDragAndDropEnabled && draggedItem === sectionId ? 'true' : 'false'}
+        className={`${getButtonCursorClass(sectionId)} w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors ${!isSearchSectionCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
+        aria-expanded={!isSearchSectionCollapsed}
+        aria-controls="search-section-content"
+      >
+        <div className="flex-grow flex items-center min-w-0">
+          <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none">Search Item</h2>
+        </div>
+        <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 pointer-events-none ${isSearchSectionCollapsed ? '-rotate-90' : ''}`} />
+      </button>
+      {!isSearchSectionCollapsed && (
+        <div id="search-section-content" className="p-4 md:p-6 rounded-b-lg space-y-4">
+          <div ref={searchBarWrapperRef}>
+            <SearchBar
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onKeyDownHandler={handleSearchKeyDown}
+              activeDescendantId={activeDescendantId}
+              filteredItemsCount={filteredItems.length}
+            />
+          </div>
+          {searchTerm && filteredItems.length > 0 && (
+            <div ref={itemListWrapperRef}>
+              <ItemList
+                items={filteredItems}
+                onSelectItem={handleSelectItem}
+                getItemIconUrl={getItemIconUrl}
+                activeSuggestionIndex={activeSuggestionIndex}
+                favoriteItemIds={favoriteItemIds}
+                onToggleFavoriteQuickAction={handleToggleFavoriteQuickAction}
+                wordingPreference={wordingPreference}
+                isConsentGranted={isConsentGranted}
+              />
+            </div>
+          )}
+          {searchTerm && filteredItems.length === 0 && !isLoadingItems && (
+            <p className="text-[var(--text-secondary)]">No items found matching "{searchTerm}".</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// Define prop types for other section components if they don't already exist
+// For FavoritesList, TopMoversSection, AlertsManager - assume their Props interfaces
+// are defined in their respective files or types.ts and extend SectionRenderProps.
+
+// Example placeholder if not defined (actual props are more complex)
+interface FavoritesListProps extends SectionRenderProps {
+  favoriteItemIds: FavoriteItemId[];
+  allItems: ItemMapInfo[];
+  onSelectItemById: (itemId: FavoriteItemId) => void;
+  onRemoveFavorite: (itemId: FavoriteItemId) => void;
+  getItemIconUrl: (iconName: string) => string;
+  favoriteItemPrices: Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>;
+  favoriteItemHourlyChanges: Record<FavoriteItemId, FavoriteItemHourlyChangeState>;
+  favoriteItemSparklineData: Record<FavoriteItemId, FavoriteItemSparklineState>;
+  showFavoriteSparklines: boolean;
+  wordingPreference: WordingPreference;
+  isRefreshingFavorites: boolean;
+  onRefreshAllFavorites: () => Promise<void>;
+  isConsentGranted: boolean;
+  onQuickSetAlert: (item: ItemMapInfo) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+interface TopMoversSectionProps extends SectionRenderProps {
+  topMoversData: TopMoversData | null;
+  isLoading: boolean;
+  error: string | null;
+  selectedTimespan: TopMoversTimespan;
+  onSetTimespan: (timespan: TopMoversTimespan) => void;
+  onRefresh: () => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  onSelectItemById: (itemId: number) => void;
+  getItemIconUrl: (iconName: string) => string; 
+  isConsentGranted: boolean;
+  lastFetchedTimestamp: number;
+}
+
+interface AlertsManagerProps extends SectionRenderProps {
+  alerts: PriceAlert[];
+  addAlert: (alert: Omit<PriceAlert, 'id' | 'createdAt' | 'status'>) => void;
+  removeAlert: (alertId: string) => void;
+  updateAlert: (alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => void;
+  allItems: ItemMapInfo[];
+  getItemName: (itemId: number) => string;
+  getItemIconUrl: (iconName: string) => string;
+  addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onSelectAlertItemById: (itemId: number) => void;
+  isConsentGranted: boolean;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+type SpecificAppSectionProps = 
+  | SearchSectionLayoutProps 
+  | FavoritesListProps 
+  | TopMoversSectionProps 
+  | AlertsManagerProps;
+
 
 const App: React.FC = () => {
   const initialConsent = getInitialConsentStatus();
@@ -51,6 +199,14 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
 
+  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
   const [timeToNextRefresh, setTimeToNextRefresh] = useState<number>(AUTO_REFRESH_INTERVAL_SECONDS);
   const [manualRefreshTrigger, setManualRefreshTrigger] = useState<number>(0);
@@ -61,17 +217,45 @@ const App: React.FC = () => {
   const [isSetAlertModalOpen, setIsSetAlertModalOpen] = useState<boolean>(false);
   const [itemForSetAlertModal, setItemForSetAlertModal] = useState<ItemMapInfo | null>(null);
 
-  // Collapsible section states
-  const [isSearchSectionCollapsed, setIsSearchSectionCollapsed] = useState<boolean>(false);
-  const [isFavoritesSectionCollapsed, setIsFavoritesSectionCollapsed] = useState<boolean>(false);
-  const [isAlertsSectionCollapsed, setIsAlertsSectionCollapsed] = useState<boolean>(false);
+  const [isSearchSectionCollapsed, setIsSearchSectionCollapsed] = useState<boolean>(true);
+  const [isFavoritesSectionCollapsed, setIsFavoritesSectionCollapsed] = useState<boolean>(true);
+  const [isAlertsSectionCollapsed, setIsAlertsSectionCollapsed] = useState<boolean>(true);
+  const [isTopMoversSectionCollapsed, setIsTopMoversSectionCollapsed] = useState<boolean>(true); 
+
+  const [isDragAndDropEnabled, setIsDragAndDropEnabled] = useState<boolean>(() => {
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(DRAG_DROP_ENABLED_STORAGE_KEY);
+      return saved !== null ? JSON.parse(saved) : false; 
+    }
+    return false; 
+  });
+
+  const [sidebarSectionOrder, setSidebarSectionOrder] = useState<string[]>(() => {
+    if (initialConsent === 'granted') {
+      const savedOrder = localStorage.getItem(SIDEBAR_ORDER_STORAGE_KEY);
+      try {
+        if (savedOrder) {
+          const parsedOrder = JSON.parse(savedOrder) as string[];
+          const defaultKeysSet = new Set(DEFAULT_SIDEBAR_ORDER);
+          const savedKeysSet = new Set(parsedOrder);
+          if (parsedOrder.length === DEFAULT_SIDEBAR_ORDER.length && [...defaultKeysSet].every(key => savedKeysSet.has(key))) {
+            return parsedOrder;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse sidebar order from localStorage", e);
+      }
+    }
+    return [...DEFAULT_SIDEBAR_ORDER]; 
+  });
+
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
 
   const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => !prev);
   const toggleFavoritesSection = () => setIsFavoritesSectionCollapsed(prev => !prev);
   const toggleAlertsSection = () => setIsAlertsSectionCollapsed(prev => !prev);
-
-
-  // Preferences states with consent-aware initialization
+ 
   const [showChartGrid, setShowChartGrid] = useState<boolean>(() => {
     if (initialConsent === 'granted') {
       const saved = localStorage.getItem(CHART_GRID_STORAGE_KEY);
@@ -96,9 +280,9 @@ const App: React.FC = () => {
   const [showFavoriteSparklines, setShowFavoriteSparklines] = useState<boolean>(() => {
     if (initialConsent === 'granted') {
       const saved = localStorage.getItem(FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY);
-      return saved !== null ? JSON.parse(saved) : true; // Default to true
+      return saved !== null ? JSON.parse(saved) : true; 
     }
-    return true; // Default to true if no consent
+    return true; 
   });
   const [activeThemeName, setActiveThemeName] = useState<string>(() => {
     if (initialConsent === 'granted') {
@@ -146,23 +330,62 @@ const App: React.FC = () => {
   const countdownIntervalIdRef = useRef<number | null>(null);
   const searchBarWrapperRef = useRef<HTMLDivElement>(null);
   const itemListWrapperRef = useRef<HTMLDivElement>(null);
+  const sharedItemIdProcessedRef = useRef<boolean>(false); // Ref to track if shared item ID has been processed
 
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
-  // Persist consent status
+  useEffect(() => {
+    if (isConsentGranted) {
+      localStorage.setItem(DRAG_DROP_ENABLED_STORAGE_KEY, JSON.stringify(isDragAndDropEnabled));
+    }
+  }, [isDragAndDropEnabled, isConsentGranted]);
+
+  const toggleDragAndDrop = useCallback(() => {
+    setIsDragAndDropEnabled(prev => {
+      const newState = !prev;
+      addNotification(`Section reordering ${newState ? 'enabled' : 'disabled'}.`, 'info');
+      return newState;
+    });
+  }, [addNotification]);
+
+  useEffect(() => {
+    if (isConsentGranted) {
+      try {
+        localStorage.setItem(SIDEBAR_ORDER_STORAGE_KEY, JSON.stringify(sidebarSectionOrder));
+      } catch (e) {
+        console.error("Failed to save sidebar order to localStorage", e);
+      }
+    }
+  }, [sidebarSectionOrder, isConsentGranted]);
+
+  const { 
+    topMoversData, 
+    isLoading: isLoadingTopMovers, 
+    error: topMoversError, 
+    selectedTimespan: selectedMoversTimespan, 
+    setSelectedTimespan: setSelectedMoversTimespan,
+    refreshMovers: refreshTopMovers,
+    fetchMovers, 
+    lastFetchedTimestamp: topMoversLastFetched,
+  } = useTopMovers(allItems); 
+
+  const toggleTopMoversSection = useCallback(() => {
+    setIsTopMoversSectionCollapsed(prev => {
+        const newCollapsedState = !prev;
+        if (!newCollapsedState && !topMoversData && !isLoadingTopMovers && topMoversError === null && allItems.length > 0) {
+            fetchMovers(selectedMoversTimespan);
+        }
+        return newCollapsedState;
+    });
+  }, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems]);
+
+  const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems]);
+
   useEffect(() => {
     if (consentStatus !== 'pending') {
       localStorage.setItem(CONSENT_STORAGE_KEY, consentStatus);
     }
   }, [consentStatus]);
-
-  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Date.now().toString();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  }, []);
 
   const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
     (triggeredAlert) => {
@@ -187,7 +410,7 @@ const App: React.FC = () => {
     setShowChartGrid(true);
     setShowChartLineGlow(true);
     setShowVolumeChart(false);
-    setShowFavoriteSparklines(true); // Reset new preference
+    setShowFavoriteSparklines(true); 
     setActiveThemeName(DEFAULT_THEME_ID);
     setEnableDesktopNotifications(false);
     setWordingPreference(DEFAULT_WORDING_PREFERENCE);
@@ -195,6 +418,8 @@ const App: React.FC = () => {
     setFavoriteItemPrices({});
     setFavoriteItemHourlyChanges({});
     setFavoriteItemSparklineData({});
+    setSidebarSectionOrder([...DEFAULT_SIDEBAR_ORDER]); 
+    setIsDragAndDropEnabled(false); 
     if(clearAllAlertsAndStorage) clearAllAlertsAndStorage(); 
     addNotification('Preferences have been reset and will no longer be saved.', 'info');
   }, [clearAllAlertsAndStorage, addNotification]);
@@ -216,15 +441,14 @@ const App: React.FC = () => {
     setConsentStatus('denied'); 
   }, [resetPreferencesToDefault]);
 
-
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
   }, [allItems]);
 
   const getItemIconUrl = useCallback((iconName: string): string => {
+    if(!iconName) return 'https://via.placeholder.com/36?text=N/A'; 
     return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
   }, []);
-
   
   useEffect(() => {
     if (isConsentGranted) {
@@ -280,7 +504,6 @@ const App: React.FC = () => {
     }
   }, [favoriteItemIds, isConsentGranted]);
 
-
   useEffect(() => {
     if (!allItems.length || !isConsentGranted) return;
     const isMountedRef = { current: true };
@@ -293,7 +516,6 @@ const App: React.FC = () => {
         if (itemDetail) {
           let currentPriceData = favoriteItemPrices[itemId];
           
-          // Fetch price data if not available or errored
           if (currentPriceData === undefined || currentPriceData === 'loading' || currentPriceData === 'error' || currentPriceData === null) {
             if (isMountedRef.current) setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
             try {
@@ -313,7 +535,6 @@ const App: React.FC = () => {
             }
           }
           
-          // If price data successfully fetched (or already existed and was valid)
           if (typeof currentPriceData === 'object' && currentPriceData !== null && currentPriceData.high !== null) {
             if (isMountedRef.current) {
               setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
@@ -322,7 +543,6 @@ const App: React.FC = () => {
             try {
               const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
               
-              // Process for Sparkline
               const nowMsSpark = Date.now();
               const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
               const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
@@ -330,7 +550,6 @@ const App: React.FC = () => {
                 setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
               }
 
-              // Process for Hourly Change (using the same fetched historical data)
               let priceThen: number | null = null;
               const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
               const nowMsCalc = Date.now();
@@ -344,7 +563,6 @@ const App: React.FC = () => {
               }
               
               if (priceThen === null && sortedHistorical.length > 0) {
-                // Fallback: find the latest point older than one hour ago or the oldest if all are within an hour.
                 let bestFallbackCandidate: ChartDataPoint | null = null;
                 for (let i = sortedHistorical.length - 1; i >= 0; i--) {
                     if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
@@ -352,15 +570,14 @@ const App: React.FC = () => {
                         break;
                     }
                 }
-                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { // All data is within the last hour
-                    priceThen = sortedHistorical[0].price; // Use oldest point as base for change
+                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
+                    priceThen = sortedHistorical[0].price; 
                 } else if (bestFallbackCandidate) {
                     priceThen = bestFallbackCandidate.price;
                 }
               }
 
-
-              if (priceThen !== null && currentPriceData.high !== null) { // currentPriceData.high check is redundant here but good practice
+              if (priceThen !== null && currentPriceData.high !== null) { 
                 const changeAbsolute = currentPriceData.high - priceThen;
                 const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (currentPriceData.high > 0 ? Infinity : 0);
                 if (isMountedRef.current) {
@@ -389,8 +606,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentially();
     return () => { isMountedRef.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); // favoriteItemPrices added to re-trigger if a specific item's price was fetched by other means
-
+  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); 
 
   useEffect(() => {
     const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
@@ -502,7 +718,6 @@ const App: React.FC = () => {
   const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
   const toggleShowFavoriteSparklines = useCallback(() => setShowFavoriteSparklines(prev => !prev), []);
 
-
   const handleRefreshAllFavorites = useCallback(async () => {
     if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
 
@@ -569,7 +784,7 @@ const App: React.FC = () => {
           } else {
             if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
           }
-        } else { // priceData is null or priceData.high is null
+        } else { 
           if (isMountedRef.current) {
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
             setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
@@ -596,7 +811,6 @@ const App: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
-
 
   const refreshCurrentItemData = useCallback(async (options: { itemToRefresh?: ItemMapInfo, isUserInitiated?: boolean } = {}) => {
     const currentItem = options.itemToRefresh || selectedItem;
@@ -643,7 +857,6 @@ const App: React.FC = () => {
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       }
       
-      // If the refreshed item is a favorite, update its price, hourly change, and sparkline
       if (favoriteItemIds.includes(currentItem.id) && isConsentGranted) {
         if (isMountedRefreshRef.current) setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
         
@@ -655,7 +868,6 @@ const App: React.FC = () => {
           try {
             const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
 
-            // Sparkline
             const nowMsSpark = Date.now();
             const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
             const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
@@ -663,7 +875,6 @@ const App: React.FC = () => {
                 setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
             }
             
-            // Hourly Change
             let priceThen: number | null = null;
             const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
             const nowMsCalc = Date.now();
@@ -703,7 +914,7 @@ const App: React.FC = () => {
                 setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'error' }));
              }
           }
-        } else { // latest price is null or latest.high is null
+        } else { 
           if (isMountedRefreshRef.current) {
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
@@ -711,10 +922,7 @@ const App: React.FC = () => {
         }
       }
 
-      // After main item data is processed, trigger refresh for all favorites
       if (favoriteItemIds.length > 0 && isConsentGranted) {
-        // No need to await, let it run in background. 
-        // handleRefreshAllFavorites has its own loading state (isRefreshingFavorites) and notification.
         handleRefreshAllFavorites();
       }
 
@@ -754,6 +962,27 @@ const App: React.FC = () => {
       addNotification(`Could not find item with ID ${itemId}. It might have been removed or changed.`, 'error');
     }
   }, [allItems, handleSelectItem, addNotification]);
+
+  // Effect to handle shared item ID from URL
+  useEffect(() => {
+    if (allItems.length > 0 && !sharedItemIdProcessedRef.current) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const itemIdFromUrl = urlParams.get('itemId');
+      if (itemIdFromUrl) {
+        const numericItemId = parseInt(itemIdFromUrl, 10);
+        if (!isNaN(numericItemId)) {
+          handleSelectItemById(numericItemId);
+          // Clean the URL parameter
+          const newUrl = window.location.pathname + window.location.hash; // Keep hash if any
+          window.history.replaceState({}, document.title, newUrl);
+        } else {
+          addNotification('Invalid shared item ID in URL.', 'error');
+        }
+      }
+      sharedItemIdProcessedRef.current = true; // Mark as processed
+    }
+  }, [allItems, handleSelectItemById, addNotification]);
+
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
     setSelectedTimespan(timespan); 
@@ -872,7 +1101,7 @@ const App: React.FC = () => {
   const openSetAlertModalForItem = useCallback((item: ItemMapInfo) => {
     setItemForSetAlertModal(item);
     setIsSetAlertModalOpen(true);
-    if (isSettingsOpen) setIsSettingsOpen(false); // Close settings if open
+    if (isSettingsOpen) setIsSettingsOpen(false); 
   }, [isSettingsOpen]);
 
   const closeSetAlertModal = useCallback(() => {
@@ -904,22 +1133,218 @@ const App: React.FC = () => {
     openSetAlertModalForItem(item);
   }, [openSetAlertModalForItem]);
 
+  const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
+    if (allItems.length > 0) { 
+      setSelectedMoversTimespan(timespan);
+      fetchMovers(timespan); 
+    } else {
+      addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
+    }
+  }, [setSelectedMoversTimespan, fetchMovers, allItems, addNotification]);
+
+  const handleRefreshTopMovers = useCallback(() => {
+    if (allItems.length > 0) { 
+      refreshTopMovers();
+    } else {
+       addNotification("Item data still loading, please wait before refreshing Top Movers.", "info");
+    }
+  },[refreshTopMovers, allItems, addNotification]);
+
+  const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => {
+    if (!isDragAndDropEnabled) return;
+    
+    event.dataTransfer.setData('text/plain', sectionId);
+    event.dataTransfer.effectAllowed = 'move';
+    
+    requestAnimationFrame(() => {
+      setDraggedItem(sectionId);
+    });
+  }, [isDragAndDropEnabled]);
+
+  const handleDragEnterItem = useCallback((sectionId: string) => {
+    if (!isDragAndDropEnabled || !draggedItem || draggedItem === sectionId) return;
+    setDragOverItem(sectionId);
+  }, [isDragAndDropEnabled, draggedItem]);
+  
+  const handleDragLeaveItem = useCallback((sectionId: string) => {
+    if (!isDragAndDropEnabled) return;
+    if (dragOverItem === sectionId) {
+       setDragOverItem(null);
+    }
+  }, [isDragAndDropEnabled, dragOverItem]);
+
+  const handleDragOverItem = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!isDragAndDropEnabled) return;
+    event.preventDefault(); 
+    event.dataTransfer.dropEffect = 'move'; 
+  }, [isDragAndDropEnabled]);
+  
+  const handleDrop = useCallback((targetSectionId: string) => {
+    if (!isDragAndDropEnabled || !draggedItem || draggedItem === targetSectionId) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+
+    const localDraggedItem = draggedItem;
+
+    setSidebarSectionOrder(currentOrder => {
+      const newOrder = [...currentOrder];
+      const currentIndex = newOrder.indexOf(localDraggedItem);
+      const targetIndex = newOrder.indexOf(targetSectionId);
+
+      if (currentIndex === -1 || targetIndex === -1) {
+        console.error("Drag/drop error: An item ID was not found in the sidebar order array.", { 
+          draggedItem: localDraggedItem, 
+          targetSectionId, 
+          currentOrder: currentOrder.join(', ') 
+        });
+        return currentOrder; 
+      }
+      
+      const [removed] = newOrder.splice(currentIndex, 1);
+      newOrder.splice(targetIndex, 0, removed);
+      return newOrder;
+    });
+    
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }, [isDragAndDropEnabled, draggedItem]); 
+
+  const handleDragEnd = useCallback(() => {
+    if (!isDragAndDropEnabled) return;
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }, [isDragAndDropEnabled]);
+  
+  const handleDragOverContainer = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!isDragAndDropEnabled) return;
+    event.preventDefault(); 
+  }, [isDragAndDropEnabled]);
+  
+  const sectionsConfig = useMemo(() => ({
+    [SECTION_KEYS.SEARCH]: { Component: SearchSectionLayout },
+    [SECTION_KEYS.FAVORITES]: { Component: FavoritesList },
+    [SECTION_KEYS.TOP_MOVERS]: { Component: TopMoversSection },
+    [SECTION_KEYS.ALERTS]: { Component: AlertsManager },
+  }), []);
+
+
+  const getSectionProps = useCallback((sectionId: string, dndProps: SectionRenderProps): SpecificAppSectionProps => {
+    switch (sectionId) {
+      case SECTION_KEYS.SEARCH:
+        return {
+          ...dndProps,
+          isSearchSectionCollapsed,
+          toggleSearchSection,
+          searchBarWrapperRef,
+          searchTerm,
+          setSearchTerm,
+          handleSearchKeyDown,
+          activeDescendantId,
+          filteredItems,
+          itemListWrapperRef,
+          handleSelectItem,
+          getItemIconUrl,
+          activeSuggestionIndex,
+          favoriteItemIds,
+          handleToggleFavoriteQuickAction,
+          wordingPreference,
+          isConsentGranted,
+          isLoadingItems,
+        };
+      case SECTION_KEYS.FAVORITES:
+        return {
+          ...dndProps,
+          favoriteItemIds,
+          allItems,
+          onSelectItemById: handleSelectItemById,
+          onRemoveFavorite: removeFavoriteItem,
+          getItemIconUrl,
+          favoriteItemPrices,
+          favoriteItemHourlyChanges,
+          favoriteItemSparklineData,
+          showFavoriteSparklines,
+          wordingPreference,
+          isRefreshingFavorites,
+          onRefreshAllFavorites: handleRefreshAllFavorites,
+          isConsentGranted,
+          onQuickSetAlert: handleQuickSetAlertFromFavorites,
+          isCollapsed: isFavoritesSectionCollapsed,
+          onToggleCollapse: toggleFavoritesSection,
+        };
+      case SECTION_KEYS.TOP_MOVERS:
+        return {
+          ...dndProps,
+          topMoversData,
+          isLoading: isLoadingTopMovers,
+          error: topMoversError,
+          selectedTimespan: selectedMoversTimespan,
+          onSetTimespan: handleSetTopMoversTimespan,
+          onRefresh: handleRefreshTopMovers,
+          isCollapsed: isTopMoversSectionCollapsed,
+          onToggleCollapse: memoizedToggleTopMoversSection,
+          onSelectItemById: handleSelectItemById,
+          getItemIconUrl,
+          isConsentGranted,
+          lastFetchedTimestamp: topMoversLastFetched,
+        };
+      case SECTION_KEYS.ALERTS:
+        return {
+          ...dndProps,
+          alerts,
+          addAlert,
+          removeAlert,
+          updateAlert,
+          allItems,
+          getItemName,
+          getItemIconUrl,
+          addNotification,
+          onSelectAlertItemById: handleSelectItemById,
+          isConsentGranted,
+          isCollapsed: isAlertsSectionCollapsed,
+          onToggleCollapse: toggleAlertsSection,
+        };
+      default:
+        // This case should be unreachable due to the `if (!config) return null;` check before calling.
+        // Throwing an error here helps satisfy TypeScript's type checking for the function's return signature.
+        throw new Error(`[App.tsx] getSectionProps: Unhandled sectionId "${sectionId}". This should have been caught earlier.`);
+    }
+  }, [
+    isSearchSectionCollapsed, toggleSearchSection, searchBarWrapperRef, searchTerm, setSearchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, itemListWrapperRef, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
+    allItems, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection, removeFavoriteItem, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, handleSelectItemById,
+    topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched,
+    alerts, addAlert, removeAlert, updateAlert, getItemName, addNotification, isAlertsSectionCollapsed, toggleAlertsSection
+  ]);
+
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] p-4 md:p-8 flex flex-col items-center">
       <NotificationBar notifications={notifications} />
       <header className="w-full max-w-6xl mb-8 text-center flex flex-col items-center">
          <div className="flex items-center justify-between w-full">
-            <button 
-                onClick={toggleSettingsModal} 
-                className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
-                aria-label="Open settings"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-            </button>
+            <div className="flex items-center gap-1">
+                <button 
+                    onClick={toggleSettingsModal} 
+                    className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
+                    aria-label="Open settings"
+                    title="Open settings"
+                >
+                  <SettingsIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
+                </button>
+                <button
+                    onClick={toggleDragAndDrop}
+                    className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
+                    aria-label={isDragAndDropEnabled ? "Disable section reordering" : "Enable section reordering"}
+                    title={isDragAndDropEnabled ? "Disable section reordering" : "Enable section reordering"}
+                >
+                    {isDragAndDropEnabled ? (
+                        <ReorderIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
+                    ) : (
+                        <ReorderDisabledIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
+                    )}
+                </button>
+            </div>
             <button 
               onClick={handleResetView}
               className="flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] rounded-md p-1"
@@ -932,7 +1357,7 @@ const App: React.FC = () => {
                 </svg>
                 <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
             </button>
-            <div className="w-7 h-7"></div> 
+            <div style={{ width: 'calc(2 * (1.75rem + 0.5rem) + 0.25rem)' }}></div> 
         </div>
         <p className="text-[var(--text-secondary)] mt-1">Live prices & insights for Old School RuneScape.</p>
       </header>
@@ -995,83 +1420,40 @@ const App: React.FC = () => {
         </div>
       ) : (
         <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6">
-          <aside className="md:col-span-1 space-y-6">
-            <div className="bg-[var(--bg-secondary)] rounded-lg shadow-xl">
-              <button
-                onClick={toggleSearchSection}
-                className={`w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors
-                  ${!isSearchSectionCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
-                aria-expanded={!isSearchSectionCollapsed}
-                aria-controls="search-section-content"
-              >
-                <h2 className="text-2xl font-semibold text-[var(--text-accent)]">Search Item</h2>
-                <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 ${isSearchSectionCollapsed ? '-rotate-90' : ''}`} />
-              </button>
-              {!isSearchSectionCollapsed && (
-                <div id="search-section-content" className="p-4 md:p-6 rounded-b-lg space-y-4">
-                  <div ref={searchBarWrapperRef}>
-                    <SearchBar 
-                      searchTerm={searchTerm} 
-                      setSearchTerm={setSearchTerm}
-                      onKeyDownHandler={handleSearchKeyDown}
-                      activeDescendantId={activeDescendantId}
-                      filteredItemsCount={filteredItems.length}
-                    />
-                  </div>
-                  {searchTerm && filteredItems.length > 0 && (
-                    <div ref={itemListWrapperRef}>
-                      <ItemList 
-                          items={filteredItems} 
-                          onSelectItem={handleSelectItem} 
-                          getItemIconUrl={getItemIconUrl}
-                          activeSuggestionIndex={activeSuggestionIndex}
-                          favoriteItemIds={favoriteItemIds}
-                          onToggleFavoriteQuickAction={handleToggleFavoriteQuickAction}
-                          wordingPreference={wordingPreference}
-                          isConsentGranted={isConsentGranted}
-                      />
-                    </div>
-                  )}
-                  {searchTerm && filteredItems.length === 0 && !isLoadingItems && (
-                    <p className="text-[var(--text-secondary)]">No items found matching "{searchTerm}".</p>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            <FavoritesList
-              favoriteItemIds={favoriteItemIds}
-              allItems={allItems}
-              onSelectItemById={handleSelectItemById}
-              onRemoveFavorite={removeFavoriteItem}
-              getItemIconUrl={getItemIconUrl}
-              favoriteItemPrices={favoriteItemPrices}
-              favoriteItemHourlyChanges={favoriteItemHourlyChanges}
-              favoriteItemSparklineData={favoriteItemSparklineData}
-              showFavoriteSparklines={showFavoriteSparklines}
-              wordingPreference={wordingPreference}
-              isRefreshingFavorites={isRefreshingFavorites}
-              onRefreshAllFavorites={handleRefreshAllFavorites}
-              isConsentGranted={isConsentGranted}
-              onQuickSetAlert={handleQuickSetAlertFromFavorites}
-              isCollapsed={isFavoritesSectionCollapsed}
-              onToggleCollapse={toggleFavoritesSection}
-            />
+          <aside 
+            className="md:col-span-1 space-y-6"
+            onDragOver={handleDragOverContainer} 
+          >
+            {sidebarSectionOrder.map(sectionId => {
+              const config = sectionsConfig[sectionId as keyof typeof sectionsConfig];
+              if (!config) return null;
+              const ComponentToRender = config.Component;
+              const dndRenderProps: SectionRenderProps = { sectionId, isDragAndDropEnabled, handleDragStart, draggedItem };
+              const componentProps = getSectionProps(sectionId, dndRenderProps);
 
-            <AlertsManager
-              alerts={alerts}
-              addAlert={addAlert} 
-              removeAlert={removeAlert}
-              updateAlert={updateAlert}
-              allItems={allItems}
-              getItemName={getItemName}
-              getItemIconUrl={getItemIconUrl}
-              addNotification={addNotification}
-              onSelectAlertItemById={handleSelectItemById}
-              isConsentGranted={isConsentGranted}
-              isCollapsed={isAlertsSectionCollapsed}
-              onToggleCollapse={toggleAlertsSection}
-            />
+              return (
+                <div 
+                  key={sectionId}
+                  onDragEnter={() => handleDragEnterItem(sectionId)}
+                  onDragLeave={() => handleDragLeaveItem(sectionId)}
+                  onDragOver={handleDragOverItem} 
+                  onDrop={(e) => { 
+                    if (!isDragAndDropEnabled) return;
+                    e.preventDefault(); 
+                    handleDrop(sectionId);
+                  }}
+                  onDragEnd={handleDragEnd}
+                  aria-dropeffect={isDragAndDropEnabled && draggedItem && draggedItem !== sectionId ? "move" : "none"}
+                  className={`
+                    transition-all duration-150 ease-in-out
+                    ${isDragAndDropEnabled && dragOverItem === sectionId && draggedItem !== sectionId ? 'ring-2 ring-[var(--border-accent)] ring-offset-2 ring-offset-[var(--bg-primary)] scale-[1.01]' : ''}
+                    ${isDragAndDropEnabled && draggedItem === sectionId ? 'opacity-50' : ''} 
+                  `}
+                >
+                  <ComponentToRender {...componentProps as any} />
+                </div>
+              );
+            })}
           </aside>
 
           <main className="md:col-span-2 bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl min-h-[400px] space-y-4">
@@ -1104,6 +1486,7 @@ const App: React.FC = () => {
                 wordingPreference={wordingPreference}
                 onSetAlertForItem={openSetAlertModalForItem}
                 isConsentGranted={isConsentGranted}
+                addNotification={addNotification}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">

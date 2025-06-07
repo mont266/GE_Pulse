@@ -1,3 +1,4 @@
+
 export interface ItemMapInfo {
   examine: string;
   id: number;
@@ -141,7 +142,6 @@ export interface FavoriteItemHourlyChangeData {
   changePercent: number;
 }
 
-// Represents the state for hourly change: could be loading, an error, no sufficient data, successfully loaded, or not yet processed.
 export type FavoriteItemHourlyChangeState = 
   | FavoriteItemHourlyChangeData 
   | 'loading' 
@@ -151,9 +151,53 @@ export type FavoriteItemHourlyChangeState =
 
 export type WordingPreference = 'uk' | 'us';
 
+export type FavoriteItemSparklineState =
+  | ChartDataPoint[]
+  | 'loading'
+  | 'error'
+  | 'no_data'
+  | null; 
+
 export interface ChangelogEntry {
   version: string;
   date: string;
   changes: string[];
   notes?: string;
+}
+
+export interface TimestepItemPriceVolumeData {
+  avgHighPrice: number | null;
+  highPriceVolume: number;
+  avgLowPrice: number | null;
+  lowPriceVolume: number;
+}
+
+export interface AllItemsTimestepResponse {
+  timestamp: number; 
+  data: {
+    [itemId: string]: TimestepItemPriceVolumeData;
+  };
+}
+
+export interface MoverItem {
+  id: number;
+  name: string;
+  icon: string;
+  currentPrice: number;
+  pastPrice: number;
+  percentChange: number;
+}
+
+export type TopMoversTimespan = '1h' | '24h';
+
+export interface TopMoversData {
+  winners: MoverItem[];
+  losers: MoverItem[];
+}
+
+export interface SectionRenderProps {
+  sectionId: string;
+  isDragAndDropEnabled: boolean;
+  handleDragStart: (event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => void;
+  draggedItem: string | null;
 }

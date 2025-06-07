@@ -1,11 +1,10 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, Timespan, FavoriteItemId, WordingPreference } from '../types';
 import { PriceChart } from './PriceChart';
 import { TimespanSelector } from './TimespanSelector';
 import { LoadingSpinner } from './LoadingSpinner';
-import { ITEM_IMAGE_BASE_URL } from '../constants';
-import { EmptyHeartIcon, FilledHeartIcon, BellIcon } from './Icons'; // Import from shared Icons.tsx
+import { ITEM_IMAGE_BASE_URL, TIMESPAN_OPTIONS } from '../constants';
+import { EmptyHeartIcon, FilledHeartIcon, BellIcon, ArrowUpIcon, ArrowDownIcon, ShareIcon } from './Icons';
 
 interface ItemDisplayProps {
   item: ItemMapInfo | null;
@@ -15,7 +14,7 @@ interface ItemDisplayProps {
   onTimespanChange: (timespan: Timespan) => void;
   isLoading: boolean;
   error: string | null;
-  getItemIconUrl: (iconName: string) => string;
+  getItemIconUrl: (iconName: string) => string; // Kept for consistency, even if not used for main image directly
   showChartGrid: boolean;
   showChartLineGlow: boolean;
   showVolumeChart: boolean;
@@ -25,6 +24,7 @@ interface ItemDisplayProps {
   wordingPreference: WordingPreference;
   onSetAlertForItem: (item: ItemMapInfo) => void;
   isConsentGranted: boolean; 
+  addNotification: (message: string, type?: 'success' | 'error' | 'info') => void; // Added for share feedback
 }
 
 export const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -35,7 +35,6 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onTimespanChange,
   isLoading,
   error,
-  // getItemIconUrl, // No longer directly used for item's main image display if handling detail/base internally
   showChartGrid,
   showChartLineGlow,
   showVolumeChart,
@@ -45,6 +44,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   wordingPreference,
   onSetAlertForItem,
   isConsentGranted,
+  addNotification, 
 }) => {
   const [currentImageUrl, setCurrentImageUrl] = useState<string>('https://via.placeholder.com/96?text=No+Icon');
   const [hasAttemptedDetail, setHasAttemptedDetail] = useState<boolean>(false);
@@ -74,6 +74,28 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     }
   };
 
+  const handleShareItem = useCallback(async () => {
+    if (!item) return;
+
+    try {
+      // Use the fixed public domain for the shareable link
+      const baseUrl = 'https://beta.gepulse.net/';
+      const shareUrl = new URL(baseUrl);
+      shareUrl.searchParams.set('itemId', item.id.toString());
+      // Hash part of the URL is not typically relevant for item ID sharing,
+      // and new URL() constructor doesn't directly take a hash for the base.
+      // If a hash was needed, it would be appended: shareUrl.hash = window.location.hash;
+
+      const shareableLink = shareUrl.toString();
+      
+      await navigator.clipboard.writeText(shareableLink);
+      addNotification(`Shareable link for ${item.name} copied!`, 'success');
+    } catch (err) {
+      console.error('Failed to copy share link:', err);
+      addNotification('Failed to copy share link. Please try again.', 'error');
+    }
+  }, [item, addNotification]);
+
   if (!item) {
     return null; 
   }
@@ -89,11 +111,75 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     }
   };
 
+  let fluctuationDisplay = null;
+  if (latestPrice && latestPrice.high !== null && historicalData.length > 0) {
+    const currentPrice = latestPrice.high;
+    const startDataPoint = historicalData[0]; 
+
+    if (startDataPoint && startDataPoint.price !== null) {
+      const startPrice = startDataPoint.price;
+      const absoluteChange = currentPrice - startPrice;
+      const absOnlyValue = Math.abs(absoluteChange);
+      const sign = absoluteChange >= 0 ? '+' : '';
+      
+      let percentageChangeText = '';
+      if (startPrice !== 0) {
+        const percentage = (absoluteChange / startPrice) * 100;
+        percentageChangeText = ` (${percentage >= 0 ? '+' : ''}${percentage.toFixed(1)}%)`;
+      }
+
+      const fullAbsoluteChangeTextForTooltip = `${sign}${absOnlyValue.toLocaleString()} GP`;
+      let shorthandAbsoluteChangeTextForDisplay: string;
+
+      if (absOnlyValue >= 1_000_000_000) {
+        shorthandAbsoluteChangeTextForDisplay = `${sign}${(absOnlyValue / 1_000_000_000).toFixed(1)}B GP`;
+      } else if (absOnlyValue >= 1_000_000) {
+        shorthandAbsoluteChangeTextForDisplay = `${sign}${(absOnlyValue / 1_000_000).toFixed(1)}M GP`;
+      } else if (absOnlyValue >= 1_000) {
+        shorthandAbsoluteChangeTextForDisplay = `${sign}${(absOnlyValue / 1_000).toFixed(0)}K GP`;
+      } else {
+        shorthandAbsoluteChangeTextForDisplay = `${sign}${absOnlyValue.toLocaleString()} GP`;
+      }
+      
+      let colorClass = 'text-[var(--text-secondary)]';
+      let IconComponent: React.FC<{ className?: string }> | (() => JSX.Element) = () => <span className="w-4 h-4 mr-1.5 flex-shrink-0 inline-flex items-center justify-center">—</span>;
+
+      if (absoluteChange > 0) {
+        colorClass = 'text-[var(--price-high)]';
+        IconComponent = ArrowUpIcon;
+      } else if (absoluteChange < 0) {
+        colorClass = 'text-[var(--price-low)]';
+        IconComponent = ArrowDownIcon;
+      }
+      
+      const timespanLabel = TIMESPAN_OPTIONS.find(opt => opt.value === selectedTimespan)?.label || selectedTimespan;
+
+      fluctuationDisplay = (
+        <div className="mt-3 text-sm">
+          <p className="font-semibold text-[var(--text-secondary)] mb-0.5">
+            Fluctuation ({timespanLabel}):
+          </p>
+          <div className={`flex items-center text-base ${colorClass}`}>
+            <IconComponent className="w-4 h-4 mr-1.5 flex-shrink-0" />
+            <span className="font-semibold" title={fullAbsoluteChangeTextForTooltip}>
+              {shorthandAbsoluteChangeTextForDisplay}
+            </span>
+            {percentageChangeText && (
+              <span className="ml-2 text-xs font-normal">
+                {percentageChangeText}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center sm:items-start p-4 bg-[var(--bg-secondary-alpha)] rounded-lg gap-4">
         <img
-          key={item.id} // Ensure re-render on item change for error handling logic
+          key={item.id} 
           src={currentImageUrl}
           alt={item.name}
           className="w-20 h-20 sm:w-24 sm:h-24 object-contain flex-shrink-0"
@@ -102,6 +188,14 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
         <div className="text-center sm:text-left flex-grow">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <h2 className="text-3xl font-bold text-[var(--text-accent)]">{item.name}</h2>
+            <button
+              onClick={handleShareItem}
+              aria-label={`Share link for ${item.name}`}
+              className="p-1 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"
+              title={`Share link for ${item.name}`}
+            >
+              <ShareIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--text-accent)]" />
+            </button>
             {isConsentGranted && (
               <>
                 <button
@@ -146,6 +240,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
               </p>
             </div>
           )}
+          {fluctuationDisplay}
         </div>
       </div>
 

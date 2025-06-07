@@ -1,5 +1,5 @@
 
-import { ItemMapInfo, ItemMappingResponse, LatestPriceData, LatestPriceApiResponse, HistoricalDataPointAPI, TimeseriesApiResponse, ChartDataPoint, TimespanAPI } from '../types';
+import { ItemMapInfo, ItemMappingResponse, LatestPriceData, LatestPriceApiResponse, HistoricalDataPointAPI, TimeseriesApiResponse, ChartDataPoint, TimespanAPI, AllItemsTimestepResponse } from '../src/types'; // Updated import path
 import { API_BASE_URL } from '../constants';
 
 // Helper to make API requests
@@ -56,4 +56,8 @@ export async function fetchHistoricalData(itemId: number, timespan: TimespanAPI)
       lowPriceVolume: dp.lowPriceVolume,
       formattedDate: new Date(dp.timestamp * 1000).toLocaleString(), // Keep for potential use, though custom tooltip will format
     }));
+}
+
+export async function fetchAllItemsData(): Promise<AllItemsTimestepResponse> {
+  return apiRequest<AllItemsTimestepResponse>('/5m'); // Changed from /all to /5m
 }

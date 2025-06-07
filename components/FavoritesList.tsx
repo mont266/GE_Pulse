@@ -1,10 +1,10 @@
 
 import React, { useMemo } from 'react';
-import { ItemMapInfo, FavoriteItemId, LatestPriceData, FavoriteItemHourlyChangeState, FavoriteItemHourlyChangeData, WordingPreference, FavoriteItemSparklineState } from '../types';
+import { ItemMapInfo, FavoriteItemId, LatestPriceData, FavoriteItemHourlyChangeState, FavoriteItemHourlyChangeData, WordingPreference, FavoriteItemSparklineState, SectionRenderProps } from '../src/types'; // Corrected path
 import { BellIcon, ChevronDownIcon } from './Icons'; 
 import { FavoriteItemSparkline } from './FavoriteItemSparkline';
 
-interface FavoritesListProps {
+interface FavoritesListProps extends SectionRenderProps { // Inherit drag props
   favoriteItemIds: FavoriteItemId[];
   allItems: ItemMapInfo[];
   onSelectItemById: (itemId: FavoriteItemId) => void;
@@ -21,6 +21,7 @@ interface FavoritesListProps {
   onQuickSetAlert: (item: ItemMapInfo) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  // sectionId, isDragAndDropEnabled, handleDragStart, draggedItem are now part of SectionRenderProps
 }
 
 const RemoveFavoriteIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -38,7 +39,6 @@ const RefreshFavIcon: React.FC<{ className?: string }> = ({ className }) => (
 const SmallSpinner: React.FC = () => (
   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current"></div>
 );
-
 
 const formatPriceShorthand = (price: number | null | undefined): string => {
   if (price === null || price === undefined) return 'N/A';
@@ -65,6 +65,11 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
   onQuickSetAlert,
   isCollapsed,
   onToggleCollapse,
+  // Drag props from SectionRenderProps
+  sectionId,
+  isDragAndDropEnabled,
+  handleDragStart,
+  draggedItem,
 }) => {
   const favoriteItems = useMemo(() => {
     return favoriteItemIds
@@ -77,21 +82,30 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
   const favTermEmpty = wordingPreference === 'uk' ? 'favourite' : 'favorite';
   const favTermRemove = wordingPreference === 'uk' ? 'favourites' : 'favorites';
 
+  const getButtonCursorClass = () => {
+    if (isDragAndDropEnabled) {
+      return draggedItem === sectionId ? 'cursor-grabbing' : 'cursor-grab';
+    }
+    return '';
+  };
 
   return (
     <div className="bg-[var(--bg-secondary)] rounded-lg shadow-xl">
       <button
         onClick={onToggleCollapse}
-        className={`w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors
-         ${!isCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
+        draggable={isDragAndDropEnabled}
+        onDragStart={(e) => handleDragStart(e, sectionId)}
+        aria-grabbed={isDragAndDropEnabled && draggedItem === sectionId ? 'true' : 'false'}
+        className={`${getButtonCursorClass()} w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors ${!isCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
         aria-expanded={!isCollapsed}
         aria-controls="favorites-section-content"
       >
-        <div className="flex items-center">
-          <h2 className="text-2xl font-semibold text-[var(--text-accent)]">{favTermTitle}</h2>
+        <div className="flex-grow flex items-center min-w-0"> {/* Wrapper for title and refresh button */}
+          <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none">{favTermTitle}</h2>
           {isConsentGranted && favoriteItems.length > 0 && !isCollapsed && (
             <button
-              onClick={(e) => { e.stopPropagation(); onRefreshAllFavorites(); }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRefreshAllFavorites(); }}
+              draggable="false" // Explicitly not draggable
               disabled={isRefreshingFavorites}
               className="ml-3 p-1.5 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Refresh favorite items prices"
@@ -101,7 +115,7 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
             </button>
           )}
         </div>
-        <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+        <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 pointer-events-none ${isCollapsed ? '-rotate-90' : ''}`} />
       </button>
 
       {!isCollapsed && (
@@ -160,7 +174,6 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                   else if (changeData.changeAbsolute < 0) hourlyChangeColorClass = 'text-[var(--price-low)]';
                 }
 
-
                 return (
                   <li
                     key={item.id}
@@ -168,7 +181,7 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                   >
                     <button
                       onClick={() => onSelectItemById(item.id)}
-                      className="flex items-center space-x-2 flex-grow text-left focus:outline-none min-w-0" // space-x-2 to give image and text block some separation
+                      className="flex items-center space-x-2 flex-grow text-left focus:outline-none min-w-0" 
                       aria-label={`View details for ${item.name}`}
                     >
                       <img
@@ -177,12 +190,12 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                         className="w-8 h-8 object-contain flex-shrink-0"
                         onError={(e) => (e.currentTarget.style.display = 'none')}
                       />
-                      <div className="flex-grow min-w-0"> {/* Container for Name and Price/Sparkline Block */}
+                      <div className="flex-grow min-w-0"> 
                         <span className="block text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors text-sm font-medium truncate">
                           {item.name}
                         </span>
-                        <div className="flex items-end space-x-2 mt-0.5"> {/* Container for Price/Change Text AND Sparkline */}
-                          <div className="flex-shrink-0"> {/* Price and Hourly Change Text */}
+                        <div className="flex items-end space-x-2 mt-0.5"> 
+                          <div className="flex-shrink-0"> 
                             <span className={`block text-xs ${priceColorClass} transition-colors`}>
                               {displayPrice}
                             </span>
@@ -193,14 +206,14 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                             )}
                           </div>
                           {showFavoriteSparklines && (
-                            <div className="flex-grow h-8 w-20 min-w-[5rem]"> {/* Sparkline Container (h-8 -> 32px, w-20 -> 80px) */}
+                            <div className="flex-grow h-8 w-20 min-w-[5rem]"> 
                               <FavoriteItemSparkline data={sparklineState} />
                             </div>
                           )}
                         </div>
                       </div>
                     </button>
-                    <div className="flex flex-shrink-0 items-center ml-1"> {/* ml-1 to give some space from sparkline */}
+                    <div className="flex flex-shrink-0 items-center ml-1"> 
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); 

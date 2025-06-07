@@ -158,3 +158,50 @@ export type FavoriteItemSparklineState =
   | 'error'
   | 'no_data'
   | null; // Initial state or not applicable
+
+export interface ChangelogEntry {
+  version: string;
+  date: string;
+  changes: string[];
+  notes?: string; // Made notes optional
+}
+
+// Data from the /all API endpoint
+export interface AllEndpointItemData {
+  id: number;
+  name: string;
+  examine: string;
+  members: boolean;
+  lowalch: number | null; // API can return null
+  limit: number;
+  value: number;
+  highalch: number | null; // API can return null
+  icon: string;
+  avgHighPrice: number | null;
+  highPriceVolume: number;
+  avgLowPrice: number | null;
+  lowPriceVolume: number;
+}
+
+export interface AllEndpointResponse {
+  timestamp: number; // Unix timestamp of when the 5m data was last updated
+  data: {
+    [itemId: string]: AllEndpointItemData;
+  };
+}
+
+export interface MoverItem {
+  id: number;
+  name: string;
+  icon: string;
+  currentPrice: number;
+  pastPrice: number;
+  percentChange: number;
+}
+
+export type TopMoversTimespan = '1h' | '24h';
+
+export interface TopMoversData {
+  winners: MoverItem[];
+  losers: MoverItem[];
+}

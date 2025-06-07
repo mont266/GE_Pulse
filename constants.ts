@@ -1,3 +1,4 @@
+
 import { Timespan, AppTheme, WordingPreference } from './types';
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
@@ -28,11 +29,23 @@ export const VOLUME_CHART_STORAGE_KEY = 'gePulseShowVolumeChart';
 export const FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY = 'gePulseShowFavoriteSparklines';
 export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
+export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
+export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled'; // New key for D&D toggle
 
 export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; // For storing user's consent decision
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
 export const DEFAULT_THEME_ID = 'ge-pulse-dark';
+
+// Sidebar section keys - must match keys used in App.tsx's sectionsConfig
+export const SECTION_KEYS = {
+  SEARCH: 'search',
+  FAVORITES: 'favorites',
+  TOP_MOVERS: 'topMovers',
+  ALERTS: 'alerts',
+};
+export const DEFAULT_SIDEBAR_ORDER: string[] = [SECTION_KEYS.SEARCH, SECTION_KEYS.FAVORITES, SECTION_KEYS.TOP_MOVERS, SECTION_KEYS.ALERTS];
+
 
 // List of all keys for user preferences that should be cleared if consent is revoked
 export const ALL_USER_PREFERENCE_KEYS = [
@@ -45,6 +58,8 @@ export const ALL_USER_PREFERENCE_KEYS = [
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY,
   ACTIVE_THEME_STORAGE_KEY,
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
+  SIDEBAR_ORDER_STORAGE_KEY,
+  DRAG_DROP_ENABLED_STORAGE_KEY, // Added D&D toggle key
   // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,
   // as we need to remember the consent choice itself.
 ];

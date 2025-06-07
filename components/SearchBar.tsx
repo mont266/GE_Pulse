@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface SearchBarProps {
@@ -9,13 +8,13 @@ interface SearchBarProps {
   filteredItemsCount: number;
 }
 
-export const SearchBar: React.FC<SearchBarProps> = ({ 
+export const SearchBar = React.memo(function SearchBarImpl({ 
   searchTerm, 
   setSearchTerm,
   onKeyDownHandler,
   activeDescendantId,
   filteredItemsCount
-}) => {
+}: SearchBarProps) {
   const isListVisible = !!searchTerm && filteredItemsCount > 0;
 
   return (
@@ -34,4 +33,4 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       aria-activedescendant={activeDescendantId}
     />
   );
-};
+});
