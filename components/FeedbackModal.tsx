@@ -11,7 +11,7 @@ type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 
 // Helper hook to get the previous value of a prop or state
 function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T | undefined>();
+  const ref = useRef<T | undefined>(undefined);
   useEffect(() => {
     ref.current = value;
   }); // Runs after every render

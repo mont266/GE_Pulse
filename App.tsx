@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
@@ -352,6 +353,11 @@ const App: React.FC = () => {
 
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
+  const getItemIconUrl = useCallback((iconName: string): string => {
+    if(!iconName) return 'https://via.placeholder.com/36?text=N/A'; 
+    return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
+  }, []);
+
   useEffect(() => {
     if (isConsentGranted) {
       localStorage.setItem(DRAG_DROP_ENABLED_STORAGE_KEY, JSON.stringify(isDragAndDropEnabled));
@@ -381,9 +387,9 @@ const App: React.FC = () => {
     isLoading: isLoadingTopMovers, 
     error: topMoversError, 
     selectedTimespan: selectedMoversTimespan, 
-    setSelectedTimespan: setSelectedMoversTimespan, // This is the setter from the hook
+    setSelectedTimespan: setSelectedMoversTimespan, 
     refreshMovers, 
-    fetchMovers, // This is calculateMovers from the hook
+    fetchMovers, 
     lastFetchedTimestamp: topMoversLastFetched,
   } = useTopMovers(allItems, topMoversCalculationMode, topMoversMetricType);
   
@@ -391,16 +397,12 @@ const App: React.FC = () => {
   const prevMetricType = usePrevious(topMoversMetricType);
   const prevSelectedMoversTimespan = usePrevious(selectedMoversTimespan);
 
-  // Effect to re-fetch movers data if calculation mode, metric type, or timespan changes by user interaction.
   useEffect(() => {
     const hasCalcModeChanged = prevCalcMode !== undefined && prevCalcMode !== topMoversCalculationMode;
     const hasMetricTypeChanged = prevMetricType !== undefined && prevMetricType !== topMoversMetricType;
-    // selectedMoversTimespan comes from the useTopMovers hook.
-    // Its change is handled by the hook's own setSelectedTimespan setter which calls fetch.
-    // However, if we want App.tsx to also react to its change for other logic or if it could change by other means:
     const hasTimespanChanged = prevSelectedMoversTimespan !== undefined && prevSelectedMoversTimespan !== selectedMoversTimespan;
 
-    if ( (hasCalcModeChanged || hasMetricTypeChanged || hasTimespanChanged) && // Check if a relevant param actually changed
+    if ( (hasCalcModeChanged || hasMetricTypeChanged || hasTimespanChanged) && 
          !isTopMoversSectionCollapsed &&
          allItems.length > 0 &&
          !isLoadingTopMovers
@@ -411,18 +413,17 @@ const App: React.FC = () => {
   }, [
     topMoversCalculationMode,
     topMoversMetricType,
-    selectedMoversTimespan, // This is the state value from useTopMovers
+    selectedMoversTimespan, 
     isTopMoversSectionCollapsed,
     allItems.length,
     isLoadingTopMovers,
-    fetchMovers, // The function from useTopMovers
-    prevCalcMode, // Include previous values in deps if their change should trigger re-evaluation
+    fetchMovers, 
+    prevCalcMode, 
     prevMetricType,
     prevSelectedMoversTimespan
   ]);
 
 
-  // Effect to fetch movers data if the section is open, items have loaded, but no data/error exists yet (initial load for section).
   useEffect(() => {
     if (!isTopMoversSectionCollapsed && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
       console.log('[App.tsx Effect] Initial load for Top Movers section.');
@@ -582,21 +583,23 @@ const App: React.FC = () => {
     }
   }, [consentStatus]);
 
-  const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
-    (triggeredAlert) => {
-      const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
-      addNotification(message, 'success');
+  const handleAlertTriggered = useCallback((triggeredAlert: PriceAlert) => {
+    const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
+    addNotification(message, 'success');
 
-      if (enableDesktopNotifications && desktopNotificationPermission === 'granted' && isConsentGranted) {
-        if (Notification.permission === 'granted') {
-          new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
-            body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
-            icon: getItemIconUrl(triggeredAlert.itemIcon),
-            tag: triggeredAlert.id,
-          });
-        }
+    if (enableDesktopNotifications && desktopNotificationPermission === 'granted' && isConsentGranted) {
+      if (Notification.permission === 'granted') {
+        new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
+          body: `${triggeredAlert.itemName} is now ${triggeredAlert.condition === 'above' ? 'above' : 'below'} ${triggeredAlert.targetPrice.toLocaleString()} GP.\nCurrent: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`,
+          icon: getItemIconUrl(triggeredAlert.itemIcon),
+          tag: triggeredAlert.id,
+        });
       }
-    },
+    }
+  }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl]);
+
+  const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
+    handleAlertTriggered,
     fetchLatestPrice,
     isConsentGranted 
   );
@@ -639,11 +642,6 @@ const App: React.FC = () => {
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
   }, [allItems]);
-
-  const getItemIconUrl = useCallback((iconName: string): string => {
-    if(!iconName) return 'https://via.placeholder.com/36?text=N/A'; 
-    return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
-  }, []);
   
   useEffect(() => {
     if (isConsentGranted) {
@@ -801,7 +799,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentially();
     return () => { isMountedRef.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); 
+  }, [favoriteItemIds, allItems, isConsentGranted]); // Removed favoriteItemPrices from dependencies
 
   useEffect(() => {
     const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
@@ -912,13 +910,13 @@ const App: React.FC = () => {
   const toggleChartLineGlow = useCallback(() => setShowChartLineGlow(prev => !prev), []);
   const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
   const toggleShowFavoriteSparklines = useCallback(() => setShowFavoriteSparklines(prev => !prev), []);
-  const toggleFeedbackModal = () => setIsFeedbackModalOpen(prev => !prev); // Function to toggle FeedbackModal
+  const toggleFeedbackModal = () => setIsFeedbackModalOpen(prev => !prev); 
 
   const refreshCurrentItemData = useCallback(async (options: { 
     itemToRefresh?: ItemMapInfo, 
     isUserInitiated?: boolean, 
     timespanToUse?: Timespan,
-    snapshotTimestampMs?: number // Added for aligning historical window
+    snapshotTimestampMs?: number 
   } = {}) => {
     const currentItem = options.itemToRefresh || selectedItem;
     const isUserInitiated = options.isUserInitiated !== undefined ? options.isUserInitiated : true;
@@ -978,9 +976,8 @@ const App: React.FC = () => {
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'loading' }));
           }
           try {
-            // For favorites, always use live 1-hour window for sparkline/hourly change, not snapshot window
             const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
-            const nowForFavMs = Date.now(); // Use current time for favorite's own 1h window
+            const nowForFavMs = Date.now(); 
 
             const oneHourAgoMsThresholdSpark = nowForFavMs - (60 * 60 * 1000);
             const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowForFavMs);
@@ -1076,7 +1073,6 @@ const App: React.FC = () => {
       handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs);
       const itemDisplaySection = document.getElementById('item-display-section');
       if (itemDisplaySection) {
-        // Wait a short moment for the UI to potentially update before scrolling
         setTimeout(() => {
             itemDisplaySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 50); 
@@ -1111,8 +1107,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (selectedItem) {
-      // When timespan changes for an already selected item, do not pass snapshotTimestampMs
-      // as we want the window to be relative to Date.now()
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1128,7 +1122,6 @@ const App: React.FC = () => {
 
   const handleManualRefresh = useCallback(async () => {
     if (!selectedItem || isLoadingPrice) return;
-    // Manual refresh uses Date.now() as anchor, not a snapshot time
     await refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: true }); 
     setManualRefreshTrigger(c => c + 1); 
   }, [selectedItem, isLoadingPrice, refreshCurrentItemData]);
@@ -1142,7 +1135,6 @@ const App: React.FC = () => {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
       autoRefreshIntervalIdRef.current = window.setInterval(() => {
         if (selectedItem) { 
-            // Auto-refresh uses Date.now() as anchor
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
@@ -1260,7 +1252,6 @@ const App: React.FC = () => {
 
   const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
     if (allItems.length > 0) { 
-      // setSelectedMoversTimespan comes from useTopMovers and already triggers a fetch
       setSelectedMoversTimespan(timespan); 
     } else {
       addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
@@ -1355,7 +1346,7 @@ const App: React.FC = () => {
     },
     [SECTION_KEYS.FAVORITES]: { 
         Component: FavoritesList,
-        Icon: EmptyHeartIcon, // Changed from FilledHeartIcon
+        Icon: EmptyHeartIcon, 
         titleDynamic: (wp: WordingPreference) => wp === 'uk' ? 'Favourite Items' : 'Favorite Items'
     },
     [SECTION_KEYS.TOP_MOVERS]: { 
@@ -1421,7 +1412,7 @@ const App: React.FC = () => {
           isLoading: isLoadingTopMovers,
           error: topMoversError,
           selectedTimespan: selectedMoversTimespan,
-          onSetTimespan: handleSetTopMoversTimespan, // This uses the hook's setter which also fetches
+          onSetTimespan: handleSetTopMoversTimespan, 
           onRefresh: handleRefreshTopMovers,
           isCollapsed: isTopMoversSectionCollapsed,
           onToggleCollapse: memoizedToggleTopMoversSection,
