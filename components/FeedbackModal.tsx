@@ -17,42 +17,9 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Removed the faulty useEffect that was here. The one below is the corrected version.
+
   useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEsc);
-      // Reset form state when modal opens, except if it's already submitting
-      // This logic should run when isOpen becomes true.
-      // The `submitStatus` check prevents resetting if a submission is in progress
-      // and this effect somehow re-runs (e.g. parent re-render).
-      if (submitStatus !== 'submitting') {
-        setFeedbackType('feature');
-        setMessage('');
-        setSubmitStatus('idle');
-        setSubmitMessage('');
-      }
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [isOpen, onClose, setFeedbackType, setMessage, setSubmitStatus, setSubmitMessage, submitStatus]);
-   // Added submitStatus back to deps for the conditional check, but the key is that
-   // the setters are stable and the logic inside `if (submitStatus !== 'submitting')`
-   // will use the current value of submitStatus.
-   // If the intention is to reset ONLY when isOpen changes from false to true,
-   // one might use a ref to track previous isOpen state.
-   // However, simply ensuring setSubmitStatus('idle') doesn't trigger itself if it's already 'idle' is the core.
-   // Let's refine: the reset should happen when isOpen becomes true.
-   // The problem arises if `setSubmitStatus('idle')` when it's already `'idle'` still causes the effect to run due to `submitStatus` in deps.
-   // Corrected logic: remove submitStatus from deps and rely on isOpen changing.
-
-useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
         if (event.key === 'Escape') {
             onClose();
