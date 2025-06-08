@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { ItemMapInfo, FavoriteItemId, LatestPriceData, FavoriteItemHourlyChangeState, FavoriteItemHourlyChangeData, WordingPreference, FavoriteItemSparklineState, SectionRenderProps } from '../src/types'; // Corrected path
-import { BellIcon, ChevronDownIcon, FilledHeartIcon } from './Icons'; 
+import { BellIcon, ChevronDownIcon, EmptyHeartIcon } from './Icons'; // Changed FilledHeartIcon to EmptyHeartIcon
 import { FavoriteItemSparkline } from './FavoriteItemSparkline';
 
 interface FavoritesListProps extends SectionRenderProps { // Inherit drag props
@@ -101,7 +101,7 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
         aria-controls="favorites-section-content"
       >
         <div className="flex-grow flex items-center min-w-0">
-          <FilledHeartIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
+          <EmptyHeartIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
           <h2 className="text-2xl font-semibold text-[var(--text-accent)] pointer-events-none">{favTermTitle}</h2>
           {isConsentGranted && favoriteItems.length > 0 && !isCollapsed && (
             <button

@@ -14,11 +14,12 @@ import { FavoritesList } from './components/FavoritesList';
 import { ConsentBanner } from './components/ConsentBanner';
 import { ChangelogModal } from './src/components/ChangelogModal';
 import { SetAlertModal } from './components/SetAlertModal'; 
+import { FeedbackModal } from './components/FeedbackModal'; // Import FeedbackModal
 import { TopMoversSection } from './components/TopMoversSection';
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, BellIcon, TrendingUpIcon } from './components/Icons';
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon } from './components/Icons'; // Added EmptyHeartIcon
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
@@ -29,6 +30,16 @@ import {
 } from './constants'; 
 import { DragEvent } from 'react';
 
+// Helper hook to get the previous value of a prop or state
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T>();
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref.current;
+}
+
+
 const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   const storedConsent = localStorage.getItem(CONSENT_STORAGE_KEY);
   if (storedConsent === 'granted' || storedConsent === 'denied') {
@@ -37,7 +48,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.07";
+const APP_VERSION = "Beta v0.08";
 
 // Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
@@ -197,9 +208,13 @@ const App: React.FC = () => {
   const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
+  
+  const notificationIdCounterRef = useRef(0);
 
   const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Date.now().toString();
+    notificationIdCounterRef.current += 1;
+    const id = `notif-${notificationIdCounterRef.current}`;
+    console.log(`[Notification] ID: ${id}, Type: ${type}, Message: "${message}"`);
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -212,6 +227,7 @@ const App: React.FC = () => {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); // State for FeedbackModal
   
   const [isSetAlertModalOpen, setIsSetAlertModalOpen] = useState<boolean>(false);
   const [itemForSetAlertModal, setItemForSetAlertModal] = useState<ItemMapInfo | null>(null);
@@ -252,7 +268,6 @@ const App: React.FC = () => {
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
 
   const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => !prev);
-  const toggleFavoritesSection = () => setIsFavoritesSectionCollapsed(prev => !prev);
   const toggleAlertsSection = () => setIsAlertsSectionCollapsed(prev => !prev);
  
   const [showChartGrid, setShowChartGrid] = useState<boolean>(() => {
@@ -366,23 +381,200 @@ const App: React.FC = () => {
     isLoading: isLoadingTopMovers, 
     error: topMoversError, 
     selectedTimespan: selectedMoversTimespan, 
-    setSelectedTimespan: setSelectedMoversTimespan,
-    refreshMovers: refreshTopMovers,
-    fetchMovers, 
+    setSelectedTimespan: setSelectedMoversTimespan, // This is the setter from the hook
+    refreshMovers, 
+    fetchMovers, // This is calculateMovers from the hook
     lastFetchedTimestamp: topMoversLastFetched,
   } = useTopMovers(allItems, topMoversCalculationMode, topMoversMetricType);
+  
+  const prevCalcMode = usePrevious(topMoversCalculationMode);
+  const prevMetricType = usePrevious(topMoversMetricType);
+  const prevSelectedMoversTimespan = usePrevious(selectedMoversTimespan);
+
+  // Effect to re-fetch movers data if calculation mode, metric type, or timespan changes by user interaction.
+  useEffect(() => {
+    const hasCalcModeChanged = prevCalcMode !== undefined && prevCalcMode !== topMoversCalculationMode;
+    const hasMetricTypeChanged = prevMetricType !== undefined && prevMetricType !== topMoversMetricType;
+    // selectedMoversTimespan comes from the useTopMovers hook.
+    // Its change is handled by the hook's own setSelectedTimespan setter which calls fetch.
+    // However, if we want App.tsx to also react to its change for other logic or if it could change by other means:
+    const hasTimespanChanged = prevSelectedMoversTimespan !== undefined && prevSelectedMoversTimespan !== selectedMoversTimespan;
+
+    if ( (hasCalcModeChanged || hasMetricTypeChanged || hasTimespanChanged) && // Check if a relevant param actually changed
+         !isTopMoversSectionCollapsed &&
+         allItems.length > 0 &&
+         !isLoadingTopMovers
+       ) {
+      console.log('[App.tsx Effect] Parameter change detected, fetching movers.');
+      fetchMovers(selectedMoversTimespan, topMoversMetricType);
+    }
+  }, [
+    topMoversCalculationMode,
+    topMoversMetricType,
+    selectedMoversTimespan, // This is the state value from useTopMovers
+    isTopMoversSectionCollapsed,
+    allItems.length,
+    isLoadingTopMovers,
+    fetchMovers, // The function from useTopMovers
+    prevCalcMode, // Include previous values in deps if their change should trigger re-evaluation
+    prevMetricType,
+    prevSelectedMoversTimespan
+  ]);
+
+
+  // Effect to fetch movers data if the section is open, items have loaded, but no data/error exists yet (initial load for section).
+  useEffect(() => {
+    if (!isTopMoversSectionCollapsed && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
+      console.log('[App.tsx Effect] Initial load for Top Movers section.');
+      fetchMovers(selectedMoversTimespan, topMoversMetricType);
+    }
+  }, [
+    isTopMoversSectionCollapsed, 
+    allItems.length, 
+    topMoversData, 
+    topMoversError, 
+    isLoadingTopMovers, 
+    fetchMovers, 
+    selectedMoversTimespan, 
+    topMoversMetricType
+  ]);
+
 
   const toggleTopMoversSection = useCallback(() => {
     setIsTopMoversSectionCollapsed(prev => {
         const newCollapsedState = !prev;
-        if (!newCollapsedState && !topMoversData && !isLoadingTopMovers && topMoversError === null && allItems.length > 0) {
+        if (!newCollapsedState && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
+            console.log('[App.tsx toggleTopMoversSection] Expanding, fetching initial movers.');
             fetchMovers(selectedMoversTimespan, topMoversMetricType);
         }
         return newCollapsedState;
     });
-  }, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems, topMoversMetricType]);
+  }, [
+    allItems.length,
+    topMoversData, 
+    topMoversError,
+    isLoadingTopMovers, 
+    fetchMovers, 
+    selectedMoversTimespan, 
+    topMoversMetricType
+  ]);
 
-  const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [topMoversData, isLoadingTopMovers, topMoversError, fetchMovers, selectedMoversTimespan, allItems, topMoversMetricType]);
+  const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [
+    allItems.length,
+    topMoversData, 
+    isLoadingTopMovers, 
+    topMoversError, 
+    fetchMovers, 
+    selectedMoversTimespan, 
+    topMoversMetricType
+  ]);
+
+
+  const handleRefreshAllFavorites = useCallback(async () => {
+    if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
+
+    setIsRefreshingFavorites(true);
+    const isMountedRef = { current: true };
+    let allSucceeded = true;
+
+    for (const itemId of favoriteItemIds) {
+      if (!isMountedRef.current) break;
+      const itemDetail = allItems.find(it => it.id === itemId);
+      if (!itemDetail) continue;
+
+      if (isMountedRef.current) {
+        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
+        setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+        setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
+      }
+
+      try {
+        const priceData = await fetchLatestPrice(itemId);
+        if (!isMountedRef.current) break;
+        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
+
+        if (priceData && priceData.high !== null) {
+          const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
+          if (!isMountedRef.current) break;
+          
+          const nowMsSpark = Date.now();
+          const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
+          const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
+          if (isMountedRef.current) {
+              setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
+          }
+          
+          let priceThen: number | null = null;
+          const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
+          const nowMsCalc = Date.now();
+          const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
+          for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+            if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
+              priceThen = sortedHistorical[i].price;
+              break;
+            }
+          }
+          if (priceThen === null && sortedHistorical.length > 0) {
+             let bestFallbackCandidate: ChartDataPoint | null = null;
+                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+                    if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
+                        bestFallbackCandidate = sortedHistorical[i];
+                        break;
+                    }
+                }
+                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
+                    priceThen = sortedHistorical[0].price;
+                } else if (bestFallbackCandidate) {
+                    priceThen = bestFallbackCandidate.price;
+                }
+          }
+
+          if (priceThen !== null && priceData.high !== null) {
+            const changeAbsolute = priceData.high - priceThen;
+            const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
+            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
+          } else {
+            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
+          }
+        } else { 
+          if (isMountedRef.current) {
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
+            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to refresh data for favourite item ${itemId}`, err);
+        allSucceeded = false;
+        if (isMountedRef.current) {
+          setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
+          setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
+          setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
+        }
+      }
+    }
+
+    if (isMountedRef.current) {
+      setIsRefreshingFavorites(false);
+      if (allSucceeded && favoriteItemIds.length > 0) {
+        addNotification('Favorite items data refreshed!', 'success');
+      } else if (!allSucceeded && favoriteItemIds.length > 0) {
+        addNotification('Some favorite items could not be refreshed.', 'error');
+      }
+    }
+  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
+
+  const toggleFavoritesSection = useCallback(() => {
+    setIsFavoritesSectionCollapsed(prev => {
+      const newCollapsedState = !prev;
+      if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
+        if (!isRefreshingFavorites) {
+           handleRefreshAllFavorites();
+        }
+      }
+      return newCollapsedState;
+    });
+  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites]);
+
 
   useEffect(() => {
     if (consentStatus !== 'pending') {
@@ -720,100 +912,7 @@ const App: React.FC = () => {
   const toggleChartLineGlow = useCallback(() => setShowChartLineGlow(prev => !prev), []);
   const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
   const toggleShowFavoriteSparklines = useCallback(() => setShowFavoriteSparklines(prev => !prev), []);
-
-  const handleRefreshAllFavorites = useCallback(async () => {
-    if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
-
-    setIsRefreshingFavorites(true);
-    const isMountedRef = { current: true };
-    let allSucceeded = true;
-
-    for (const itemId of favoriteItemIds) {
-      if (!isMountedRef.current) break;
-      const itemDetail = allItems.find(it => it.id === itemId);
-      if (!itemDetail) continue;
-
-      if (isMountedRef.current) {
-        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
-        setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-        setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
-      }
-
-      try {
-        const priceData = await fetchLatestPrice(itemId);
-        if (!isMountedRef.current) break;
-        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-
-        if (priceData && priceData.high !== null) {
-          const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
-          if (!isMountedRef.current) break;
-          
-          const nowMsSpark = Date.now();
-          const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
-          const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
-          if (isMountedRef.current) {
-              setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
-          }
-          
-          let priceThen: number | null = null;
-          const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-          const nowMsCalc = Date.now();
-          const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
-          for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-            if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
-              priceThen = sortedHistorical[i].price;
-              break;
-            }
-          }
-          if (priceThen === null && sortedHistorical.length > 0) {
-             let bestFallbackCandidate: ChartDataPoint | null = null;
-                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                    if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
-                        bestFallbackCandidate = sortedHistorical[i];
-                        break;
-                    }
-                }
-                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
-                    priceThen = sortedHistorical[0].price;
-                } else if (bestFallbackCandidate) {
-                    priceThen = bestFallbackCandidate.price;
-                }
-          }
-
-          if (priceThen !== null && priceData.high !== null) {
-            const changeAbsolute = priceData.high - priceThen;
-            const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
-            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
-          } else {
-            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
-          }
-        } else { 
-          if (isMountedRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
-          }
-        }
-      } catch (err) {
-        console.error(`Failed to refresh data for favourite item ${itemId}`, err);
-        allSucceeded = false;
-        if (isMountedRef.current) {
-          setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
-          setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
-          setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
-        }
-      }
-    }
-
-    if (isMountedRef.current) {
-      setIsRefreshingFavorites(false);
-      if (allSucceeded && favoriteItemIds.length > 0) {
-        addNotification('Favorite items data refreshed!', 'success');
-      } else if (!allSucceeded && favoriteItemIds.length > 0) {
-        addNotification('Some favorite items could not be refreshed.', 'error');
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
+  const toggleFeedbackModal = () => setIsFeedbackModalOpen(prev => !prev); // Function to toggle FeedbackModal
 
   const refreshCurrentItemData = useCallback(async (options: { 
     itemToRefresh?: ItemMapInfo, 
@@ -974,8 +1073,14 @@ const App: React.FC = () => {
   const handleSelectItemById = useCallback((itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
     const itemToSelect = allItems.find(item => item.id === itemId);
     if (itemToSelect) {
-      handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs); 
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs);
+      const itemDisplaySection = document.getElementById('item-display-section');
+      if (itemDisplaySection) {
+        // Wait a short moment for the UI to potentially update before scrolling
+        setTimeout(() => {
+            itemDisplaySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50); 
+      }
     } else {
       addNotification(`Could not find item with ID ${itemId}. It might have been removed or changed.`, 'error');
     }
@@ -1029,27 +1134,27 @@ const App: React.FC = () => {
   }, [selectedItem, isLoadingPrice, refreshCurrentItemData]);
 
  useEffect(() => {
-    if (autoRefreshIntervalIdRef.current) clearInterval(autoRefreshIntervalIdRef.current);
-    if (countdownIntervalIdRef.current) clearInterval(countdownIntervalIdRef.current);
+    if (autoRefreshIntervalIdRef.current !== null) window.clearInterval(autoRefreshIntervalIdRef.current);
+    if (countdownIntervalIdRef.current !== null) window.clearInterval(countdownIntervalIdRef.current);
     autoRefreshIntervalIdRef.current = null;
     countdownIntervalIdRef.current = null;
     if (isAutoRefreshEnabled && selectedItem) {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
-      autoRefreshIntervalIdRef.current = setInterval(() => {
+      autoRefreshIntervalIdRef.current = window.setInterval(() => {
         if (selectedItem) { 
             // Auto-refresh uses Date.now() as anchor
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
-      countdownIntervalIdRef.current = setInterval(() => {
+      countdownIntervalIdRef.current = window.setInterval(() => {
         setTimeToNextRefresh(prev => (prev <= 1 ? AUTO_REFRESH_INTERVAL_SECONDS : prev - 1));
       }, 1000);
     } else {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
     }
     return () => {
-      if (autoRefreshIntervalIdRef.current) clearInterval(autoRefreshIntervalIdRef.current);
-      if (countdownIntervalIdRef.current) clearInterval(countdownIntervalIdRef.current);
+      if (autoRefreshIntervalIdRef.current !== null) window.clearInterval(autoRefreshIntervalIdRef.current);
+      if (countdownIntervalIdRef.current !== null) window.clearInterval(countdownIntervalIdRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]);
@@ -1155,20 +1260,20 @@ const App: React.FC = () => {
 
   const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
     if (allItems.length > 0) { 
-      setSelectedMoversTimespan(timespan);
-      fetchMovers(timespan, topMoversMetricType); 
+      // setSelectedMoversTimespan comes from useTopMovers and already triggers a fetch
+      setSelectedMoversTimespan(timespan); 
     } else {
       addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
     }
-  }, [setSelectedMoversTimespan, fetchMovers, allItems, addNotification, topMoversMetricType]);
+  }, [setSelectedMoversTimespan, allItems, addNotification]); 
 
   const handleRefreshTopMovers = useCallback(() => {
     if (allItems.length > 0) { 
-      refreshTopMovers();
+      refreshMovers();
     } else {
        addNotification("Item data still loading, please wait before refreshing Top Movers.", "info");
     }
-  },[refreshTopMovers, allItems, addNotification]);
+  },[refreshMovers, allItems, addNotification]);
 
   const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => {
     if (!isDragAndDropEnabled) return;
@@ -1250,7 +1355,7 @@ const App: React.FC = () => {
     },
     [SECTION_KEYS.FAVORITES]: { 
         Component: FavoritesList,
-        Icon: FilledHeartIcon, 
+        Icon: EmptyHeartIcon, // Changed from FilledHeartIcon
         titleDynamic: (wp: WordingPreference) => wp === 'uk' ? 'Favourite Items' : 'Favorite Items'
     },
     [SECTION_KEYS.TOP_MOVERS]: { 
@@ -1316,7 +1421,7 @@ const App: React.FC = () => {
           isLoading: isLoadingTopMovers,
           error: topMoversError,
           selectedTimespan: selectedMoversTimespan,
-          onSetTimespan: handleSetTopMoversTimespan,
+          onSetTimespan: handleSetTopMoversTimespan, // This uses the hook's setter which also fetches
           onRefresh: handleRefreshTopMovers,
           isCollapsed: isTopMoversSectionCollapsed,
           onToggleCollapse: memoizedToggleTopMoversSection,
@@ -1350,8 +1455,8 @@ const App: React.FC = () => {
     }
   }, [
     isSearchSectionCollapsed, toggleSearchSection, searchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
-    allItems, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection, removeFavoriteItem, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, handleSelectItemById,
-    topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched, topMoversCalculationMode, topMoversMetricType,
+    allItems, handleSelectItemById, removeFavoriteItem, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection,
+    topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched, topMoversCalculationMode, setTopMoversCalculationMode, topMoversMetricType, setTopMoversMetricType,
     alerts, addAlert, removeAlert, updateAlert, getItemName, addNotification, isAlertsSectionCollapsed, toggleAlertsSection
   ]);
 
@@ -1391,9 +1496,9 @@ const App: React.FC = () => {
             >
                 <svg width="80" height="50" viewBox="0 0 135 60" fill="none" xmlns="http://www.w3.org/2000/svg" className={`mr-3 transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>
                     <path d="M10 30 Q25 5 40 30 T70 30 Q85 55 90 30" stroke="var(--logo-pulse-color)" strokeWidth="5" fill="transparent"/>
-                    <circle cx="90" cy="30" r="8" fill="var(--logo-coin-fill)" stroke="var(--logo-coin-stroke)" strokeWidth="2"/>
+                    <circle cx="90" cy="30" r="8" fill="var(--logo-coin-fill)" stroke="var(--logo-coin-stroke)" strokeWidth="2" className="logo-dot-pulse"/>
                 </svg>
-                <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
+                <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] title-neon-glow transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
             </button>
             <div style={{ width: 'calc(2 * (1.75rem + 0.5rem) + 0.25rem)' }}></div> 
         </div>
@@ -1431,6 +1536,14 @@ const App: React.FC = () => {
           isOpen={isChangelogModalOpen} 
           onClose={toggleChangelogModal} 
           entries={changelogEntries}
+        />
+      )}
+      
+      {isFeedbackModalOpen && (
+        <FeedbackModal
+          isOpen={isFeedbackModalOpen}
+          onClose={toggleFeedbackModal}
+          addNotification={addNotification}
         />
       )}
 
@@ -1494,7 +1607,10 @@ const App: React.FC = () => {
             })}
           </aside>
 
-          <main className="md:col-span-2 bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl min-h-[400px] space-y-4">
+          <main 
+            id="item-display-section" 
+            className="md:col-span-2 bg-[var(--bg-secondary)] p-6 rounded-lg shadow-xl min-h-[400px] space-y-4 scroll-mt-4"
+          >
              {selectedItem && (
                 <RefreshControls
                     isAutoRefreshEnabled={isAutoRefreshEnabled}
@@ -1544,6 +1660,10 @@ const App: React.FC = () => {
         <p className="mt-2">
           <button onClick={toggleChangelogModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
             View Changelog
+          </button>
+           <span className="mx-2 text-[var(--text-muted)]">|</span>
+           <button onClick={toggleFeedbackModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
+            Request Feature / Report Bug
           </button>
            <span className="mx-2 text-[var(--text-muted)]">|</span>
            {APP_VERSION}

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -35,11 +34,51 @@
     filter: drop-shadow(0px 0px 8px red) drop-shadow(0px 0px 15px red);
   }
   */
+  .title-neon-glow {
+    /* Base text color is set by text-[var(--text-accent)] in App.tsx */
+    text-shadow: 
+      0 0 0.5px var(--text-accent), /* Innermost, sharpest glow (very subtle) */
+      0 0 1.5px var(--text-accent), /* Inner softer glow (very subtle) */
+      0 0 4px var(--logo-pulse-color),  /* Medium glow (further reduced) */
+      0 0 8px var(--logo-pulse-color);  /* Outer softer glow (further reduced) */
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.1); /* Slightly larger */
+      opacity: 0.85;       /* Slightly more transparent */
+    }
+  }
+
+  .logo-dot-pulse {
+    animation: pulse-dot 4.5s ease-in-out infinite; /* Slower pulse */
+    transform-origin: center; /* Ensures scaling happens from the center of the dot */
+  }
 </style>
 <link rel="stylesheet" href="/index.css">
 </head>
   <body> <!-- Default bg/text removed, will be set by theme variables -->
     <div id="root"></div>
+    <!-- Hidden Netlify Form for detection -->
+    <form name="feedback" netlify netlify-honeypot="bot-field" hidden>
+      <input type="hidden" name="form-name" value="feedback" />
+      <p class="hidden">
+        <label>
+          Don’t fill this out if you're human: <input name="bot-field" />
+        </label>
+      </p>
+      <select name="feedback-type">
+        <option value="feature">Feature Request</option>
+        <option value="bug">Bug Report</option>
+        <option value="general">General Feedback</option>
+      </select>
+      <textarea name="message"></textarea>
+      <!-- <input type="email" name="email" /> Removed email input -->
+    </form>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

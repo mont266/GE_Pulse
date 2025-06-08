@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { ChartDataPoint } from '../types';
+import { ChartDataPoint } from '../src/types';
 
 interface PriceChartProps {
   data: ChartDataPoint[];

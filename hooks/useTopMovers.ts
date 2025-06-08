@@ -14,7 +14,7 @@ export const useTopMovers = (allItemsMap: ItemMapInfo[], calculationMode: TopMov
   const [topMoversData, setTopMoversData] = useState<TopMoversData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTimespan, setSelectedTimespan] = useState<TopMoversTimespan>('1h');
+  const [selectedTimespan, setSelectedTimespanInternal] = useState<TopMoversTimespan>('1h'); // Renamed internal state setter
   const [lastFetchedTimestamp, setLastFetchedTimestamp] = useState<number>(0); // This will store snapshot timestamp in MS
 
   const calculateMovers = useCallback(async (timespan: TopMoversTimespan, currentMetricType: TopMoversMetricType) => {
@@ -26,7 +26,7 @@ export const useTopMovers = (allItemsMap: ItemMapInfo[], calculationMode: TopMov
 
     setIsLoading(true);
     setError(null);
-    setTopMoversData(null); 
+    // setTopMoversData(null); // Removed: Let previous data persist during load for smoother UX
 
     if (calculationMode === 'accuracy') {
       console.warn("Top Movers: Accuracy mode selected. This may fetch data for a large number of items and could be slow.");
@@ -197,23 +197,18 @@ export const useTopMovers = (allItemsMap: ItemMapInfo[], calculationMode: TopMov
     } catch (err) {
       console.error('Error fetching top movers data:', err);
       setError('Failed to load market movers. API may be unavailable or an unexpected error occurred.');
-      setTopMoversData(null);
+      setTopMoversData(null); // Explicitly set to null on error if it wasn't set at the start
       setLastFetchedTimestamp(Date.now()); // Fallback if API fails early
     } finally {
       setIsLoading(false);
     }
-  }, [allItemsMap, calculationMode, setIsLoading, setError, setTopMoversData, setLastFetchedTimestamp]);
+  }, [allItemsMap, calculationMode, setIsLoading, setError, setTopMoversData, setLastFetchedTimestamp]); // Removed metricType from here as it's passed directly
 
   const refreshMovers = useCallback(() => {
     calculateMovers(selectedTimespan, metricType);
   }, [calculateMovers, selectedTimespan, metricType]);
   
-  useEffect(() => {
-    if (allItemsMap.length > 0) { 
-        calculateMovers(selectedTimespan, metricType);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calculationMode, metricType, allItemsMap.length > 0 ? true : false]);
+  // Removed useEffect that automatically called calculateMovers
 
   return {
     topMoversData,
@@ -221,11 +216,18 @@ export const useTopMovers = (allItemsMap: ItemMapInfo[], calculationMode: TopMov
     error,
     selectedTimespan,
     setSelectedTimespan: (ts: TopMoversTimespan) => {
-      setSelectedTimespan(ts);
-      if (allItemsMap.length > 0) calculateMovers(ts, metricType);
+      setSelectedTimespanInternal(ts);
+      // Fetch is now primarily handled by the App.tsx useEffect reacting to selectedTimespan change,
+      // or by explicit calls to fetchMovers/refreshMovers.
+      // To avoid double fetch, we can let App.tsx's effect handle it,
+      // or make sure that effect is smart enough if we also fetch here.
+      // For now, let App.tsx's effect be the primary reactive fetcher on param change.
+      // If immediate fetch is desired here, ensure App.tsx effect won't also fire.
+      // One option: if (allItemsMap.length > 0) calculateMovers(ts, metricType);
+      // For now, rely on App.tsx's effect for changes to selectedTimespan.
     },
     refreshMovers,
-    fetchMovers: (ts: TopMoversTimespan, mt: TopMoversMetricType) => calculateMovers(ts, mt),
+    fetchMovers: (ts: TopMoversTimespan, mt: TopMoversMetricType) => calculateMovers(ts, mt), // Use passed mt
     lastFetchedTimestamp,
   };
 };

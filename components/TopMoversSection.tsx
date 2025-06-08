@@ -58,29 +58,29 @@ const MoverListItem: React.FC<{
     <li className="p-2 bg-[var(--bg-tertiary)] rounded-md hover:bg-[var(--bg-input-secondary)] transition-colors group">
       <button
         onClick={() => onSelectItemById(item.id, currentMoversTimespan as Timespan, snapshotTimestamp)}
-        className="w-full flex items-center space-x-2 text-left focus:outline-none"
+        className="w-full flex items-start sm:items-center space-x-2 text-left focus:outline-none"
         aria-label={`View details for ${item.name}, ${metricType} change ${displayChange}`}
       >
         <img
           src={getItemIconUrl(item.icon)}
           alt=""
-          className="w-7 h-7 object-contain flex-shrink-0"
+          className="w-7 h-7 object-contain flex-shrink-0 sm:mt-0.5" 
           onError={(e) => {
             const target = e.target as HTMLImageElement;
             target.src = 'https://via.placeholder.com/28?text=Err'; 
             target.onerror = null; 
           }}
         />
-        <div className="flex-grow min-w-0">
-          <span className="block text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors truncate" title={item.name}>
+        <div className="flex-grow min-w-0 flex sm:block items-center sm:items-start justify-between sm:justify-start">
+          <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors truncate" title={item.name}>
             {item.name}
           </span>
-        </div>
-        <div className="flex items-center flex-shrink-0 text-xs font-medium">
-          <SvgIcon />
-          <span className={`${isWinner ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`}>
-            {displayChange}
-          </span>
+          <div className="flex items-center text-xs font-medium sm:mt-0.5 flex-shrink-0">
+            <SvgIcon />
+            <span className={`${isWinner ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`}>
+              {displayChange}
+            </span>
+          </div>
         </div>
       </button>
     </li>

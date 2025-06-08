@@ -3,7 +3,7 @@ import { ItemMapInfo, ItemMappingResponse, LatestPriceData, LatestPriceApiRespon
 import { API_BASE_URL } from '../constants';
 
 // Helper to make API requests
-async function apiRequest<T,>(endpoint: string): Promise<T> {
+async function apiRequest<T>(endpoint: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       // The API documentation suggests a User-Agent. For client-side, this is less controllable

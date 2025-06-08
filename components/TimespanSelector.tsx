@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Timespan } from '../types';
+import { Timespan } from '../src/types';
 import { TIMESPAN_OPTIONS } from '../constants';
 
 interface TimespanSelectorProps {

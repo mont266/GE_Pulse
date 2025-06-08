@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { ItemMapInfo, FavoriteItemId, WordingPreference } from '../types';
+import { ItemMapInfo, FavoriteItemId, WordingPreference } from '../src/types';
 import { EmptyHeartIcon, FilledHeartIcon } from './Icons';
 
 interface ItemListProps {

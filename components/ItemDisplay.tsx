@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, Timespan, FavoriteItemId, WordingPreference } from '../types';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, Timespan, FavoriteItemId, WordingPreference } from '../src/types';
 import { PriceChart } from './PriceChart';
 import { TimespanSelector } from './TimespanSelector';
 import { LoadingSpinner } from './LoadingSpinner';
