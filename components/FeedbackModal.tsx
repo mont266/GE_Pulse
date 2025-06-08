@@ -9,44 +9,52 @@ interface FeedbackModalProps {
 type FeedbackType = 'feature' | 'bug' | 'general';
 type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 
+// Helper hook to get the previous value of a prop or state
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T | undefined>();
+  useEffect(() => {
+    ref.current = value;
+  }); // Runs after every render
+  return ref.current;
+}
+
 export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, addNotification }) => {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('feature');
   const [message, setMessage] = useState<string>('');
-  // const [email, setEmail] = useState<string>(''); // Removed email state
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const formRef = useRef<HTMLFormElement>(null);
-
-  // Removed the faulty useEffect that was here. The one below is the corrected version.
+  const prevIsOpen = usePrevious(isOpen);
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-            onClose();
-        }
+      if (event.key === 'Escape') {
+        onClose();
+      }
     };
 
     if (isOpen) {
-        document.addEventListener('keydown', handleEsc);
-        // Reset form state only when modal opens (isOpen becomes true)
-        // and not currently submitting.
-        // This effect will run when isOpen changes.
-        if (submitStatus !== 'submitting') {
-            setFeedbackType('feature');
-            setMessage('');
-            setSubmitStatus('idle');
-            setSubmitMessage('');
-        }
+      document.addEventListener('keydown', handleEsc);
+
+      // Only reset form state when the modal transitions from closed to open
+      // (prevIsOpen will be false or undefined if it was previously closed and is now open)
+      if (!prevIsOpen) {
+        console.log('[FeedbackModal] Modal transitioned to open, resetting form state.');
+        setFeedbackType('feature');
+        setMessage('');
+        setSubmitStatus('idle');
+        setSubmitMessage('');
+      }
+    } else {
+      // If the modal is not open, ensure the event listener is removed.
+      document.removeEventListener('keydown', handleEsc);
     }
 
+    // Cleanup function for when the component unmounts or before the effect runs again
     return () => {
-        document.removeEventListener('keydown', handleEsc);
+      document.removeEventListener('keydown', handleEsc);
     };
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [isOpen, onClose, setFeedbackType, setMessage, setSubmitStatus, setSubmitMessage]); // submitStatus (the value) is intentionally omitted from deps for THIS reset logic
-// to prevent loops. The `submitStatus !== 'submitting'` check uses the current value.
-// Setters are stable.
-
+  }, [isOpen, prevIsOpen, onClose, setFeedbackType, setMessage, setSubmitStatus, setSubmitMessage]); // Dependencies include setters for completeness, though they are stable.
 
   const encode = (data: Record<string, string>) => {
     return Object.keys(data)
@@ -69,8 +77,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
       'form-name': 'feedback',
       'feedback-type': feedbackType,
       'message': message,
-      // 'email': email, // Removed email from formData
-      // Add honeypot field if you defined one in index.html, e.g., 'bot-field': ''
     };
 
     try {
@@ -84,13 +90,11 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
         setSubmitStatus('success');
         setSubmitMessage('Thank you! Your feedback has been submitted.');
         addNotification('Feedback submitted successfully!', 'success');
-        // Reset form fields after a short delay to show the message
         setTimeout(() => {
             setFeedbackType('feature');
             setMessage('');
-            // setEmail(''); // Removed email reset
-            setSubmitStatus('idle'); // Ready for another submission
-            onClose(); // Optionally close modal on success
+            setSubmitStatus('idle'); 
+            onClose(); 
         }, 2000);
       } else {
         const errorText = await response.text();
@@ -154,13 +158,12 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
             name="feedback"
             method="POST"
             data-netlify="true"
-            data-netlify-honeypot="bot-field" // Matches index.html
+            data-netlify-honeypot="bot-field" 
             onSubmit={handleSubmit}
             className="space-y-5 overflow-y-auto pr-2 flex-grow"
           >
-            {/* Netlify hidden inputs */}
             <input type="hidden" name="form-name" value="feedback" />
-            <p className="hidden"> {/* Honeypot field */}
+            <p className="hidden">
               <label>
                 Don’t fill this out if you're human: <input name="bot-field" />
               </label>
@@ -201,24 +204,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
                 required
               />
             </div>
-
-            {/* Removed Email Field
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-                Your Email (Optional)
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-2.5 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-                placeholder="So we can contact you if needed"
-                disabled={submitStatus === 'submitting'}
-              />
-            </div>
-            */}
              <div className="pt-3 flex flex-col sm:flex-row sm:justify-end sm:space-x-3 space-y-2 sm:space-y-0">
                 <button
                     type="button"
