@@ -571,9 +571,10 @@ const App: React.FC = () => {
             if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
           }
         } else { 
+          const currentPriceDataInElse = priceData; // Explicitly alias for clarity in this block
           if (isMountedRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: priceData === null ? 'no_data' : 'error' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
+            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
           }
         }
       } catch (err) {
@@ -757,112 +758,112 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!allItems.length || !isConsentGranted) return;
-    const isMountedRef = { current: true };
+    const isMountedRefHook = { current: true }; // Renamed to avoid conflict with other isMountedRef
 
-    const fetchAllFavoriteDataSequentially = async () => {
+    const fetchAllFavoriteDataSequentiallyHook = async () => { // Renamed
       for (const itemId of favoriteItemIds) {
-        if (!isMountedRef.current) break;
+        if (!isMountedRefHook.current) break;
 
         const itemDetail = allItems.find(it => it.id === itemId);
         if (itemDetail) {
-          let currentPriceData = favoriteItemPrices[itemId];
+          if (favoriteItemPrices[itemId] !== undefined && 
+              favoriteItemPrices[itemId] !== 'loading') {
+             if (favoriteItemPrices[itemId] !== undefined) continue;
+          }
           
-          if (currentPriceData === undefined || currentPriceData === 'loading' || currentPriceData === 'error' || currentPriceData === null) {
-            if (isMountedRef.current) setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
-            try {
-              const priceData = await fetchLatestPrice(itemId);
-              if (isMountedRef.current) {
-                setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-                currentPriceData = priceData; 
+          if (isMountedRefHook.current) {
+            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
+          }
+
+          try {
+            const priceData = await fetchLatestPrice(itemId);
+            if (!isMountedRefHook.current) break; 
+            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
+            
+            if (priceData && priceData.high !== null) {
+              try { // Added try-catch for historical data fetch
+                const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
+                if (!isMountedRefHook.current) break;
+
+                const nowMsSpark = Date.now();
+                const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
+                const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
+                if (isMountedRefHook.current) {
+                  setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
+                }
+
+                let priceThen: number | null = null;
+                const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
+                const nowMsCalc = Date.now();
+                const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
+
+                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+                  if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
+                    priceThen = sortedHistorical[i].price;
+                    break;
+                  }
+                }
+                
+                if (priceThen === null && sortedHistorical.length > 0) {
+                  let bestFallbackCandidate: ChartDataPoint | null = null;
+                  for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+                      if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
+                          bestFallbackCandidate = sortedHistorical[i];
+                          break;
+                      }
+                  }
+                  if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
+                      priceThen = sortedHistorical[0].price; 
+                  } else if (bestFallbackCandidate) {
+                      priceThen = bestFallbackCandidate.price;
+                  }
+                }
+
+                if (priceThen !== null && priceData.high !== null) { 
+                  const changeAbsolute = priceData.high - priceThen;
+                  const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
+                  if (isMountedRefHook.current) {
+                    setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
+                  }
+                } else {
+                  if (isMountedRefHook.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
+                }
+              } catch (histErr) {
+                console.error(`Failed to fetch 5m historical for sparkline/hourly change (item ${itemId})`, histErr);
+                if (isMountedRefHook.current) {
+                  setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
+                  setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
+                }
               }
-            } catch (err) {
+            } else { 
+               const currentPriceDataInElse = priceData; // Explicitly alias
+               if (isMountedRefHook.current ) {
+                 setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
+                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
+               }
+            }
+          } catch (err) {
               console.error(`Failed to fetch price for favourite item ${itemId}`, err);
-              if (isMountedRef.current) {
+              if (isMountedRefHook.current) {
                 setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
                 setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
               }
-              currentPriceData = 'error';
             }
-          }
-          
-          if (typeof currentPriceData === 'object' && currentPriceData !== null && currentPriceData.high !== null) {
-            if (isMountedRef.current) {
-              setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
-              setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-            }
-            try {
-              const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
-              
-              const nowMsSpark = Date.now();
-              const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
-              const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
-              if (isMountedRef.current) {
-                setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
-              }
-
-              let priceThen: number | null = null;
-              const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-              const nowMsCalc = Date.now();
-              const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
-
-              for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
-                  priceThen = sortedHistorical[i].price;
-                  break;
-                }
-              }
-              
-              if (priceThen === null && sortedHistorical.length > 0) {
-                let bestFallbackCandidate: ChartDataPoint | null = null;
-                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                    if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
-                        bestFallbackCandidate = sortedHistorical[i];
-                        break;
-                    }
-                }
-                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
-                    priceThen = sortedHistorical[0].price; 
-                } else if (bestFallbackCandidate) {
-                    priceThen = bestFallbackCandidate.price;
-                }
-              }
-
-              if (priceThen !== null && currentPriceData.high !== null) { 
-                const changeAbsolute = currentPriceData.high - priceThen;
-                const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (currentPriceData.high > 0 ? Infinity : 0);
-                if (isMountedRef.current) {
-                  setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
-                }
-              } else {
-                if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
-              }
-
-            } catch (histErr) {
-              console.error(`Failed to fetch 5m historical for sparkline/hourly change (item ${itemId})`, histErr);
-              if (isMountedRef.current) {
-                setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
-                setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
-              }
-            }
-          } else if (currentPriceData !== 'loading' && currentPriceData !== 'error') { 
-             if (isMountedRef.current ) {
-               setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: (currentPriceData === null ? 'no_data' : 'error') }));
-               setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: (currentPriceData === null ? 'no_data' : 'error') }));
-             }
           }
         }
-      }
     };
 
-    fetchAllFavoriteDataSequentially();
-    return () => { isMountedRef.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); 
+    fetchAllFavoriteDataSequentiallyHook();
+    return () => { isMountedRefHook.current = false; };
+  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); // Added favoriteItemPrices to deps to re-evaluate if it changes externally
 
   useEffect(() => {
-    const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
+    const currentActiveTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
     const root = document.documentElement;
-    for (const [key, value] of Object.entries(activeTheme.colors)) {
+    for (const [key, value] of Object.entries(currentActiveTheme.colors)) {
       root.style.setProperty(key, value);
     }
     if (isConsentGranted) {
@@ -1089,9 +1090,10 @@ const App: React.FC = () => {
              }
           }
         } else { 
+          const currentLatestInElse = latest; // Explicitly alias
           if (isMountedRefreshRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
+            setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
           }
         }
       }
@@ -1174,8 +1176,8 @@ const App: React.FC = () => {
     if (selectedItem) {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTimespan]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData removed from deps to prevent potential loops if it's not stable enough
 
 
   useEffect(() => {
@@ -1526,7 +1528,7 @@ const App: React.FC = () => {
         throw new Error(`[App.tsx] getSectionProps: Unhandled sectionId "${sectionId}". This should have been caught earlier.`);
     }
   }, [
-    isSearchSectionCollapsed, toggleSearchSection, searchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
+    isSearchSectionCollapsed, toggleSearchSection, searchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems, searchBarWrapperRef, itemListWrapperRef, setSearchTerm,
     allItems, handleSelectItemById, removeFavoriteItem, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection,
     topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched, topMoversCalculationMode, setTopMoversCalculationMode, topMoversMetricType, setTopMoversMetricType,
     alerts, addAlert, removeAlert, updateAlert, getItemName, addNotification, isAlertsSectionCollapsed, toggleAlertsSection
