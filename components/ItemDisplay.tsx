@@ -5,7 +5,7 @@ import { PriceChart } from './PriceChart';
 import { TimespanSelector } from './TimespanSelector';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ITEM_IMAGE_BASE_URL, TIMESPAN_OPTIONS } from '../constants';
-import { EmptyHeartIcon, FilledHeartIcon, BellIcon, ArrowUpIcon, ArrowDownIcon, ShareIcon } from './Icons';
+import { EmptyHeartIcon, FilledHeartIcon, BellIcon, ArrowUpIcon, ArrowDownIcon, ShareIcon, AddToPortfolioIcon } from './Icons'; // Added AddToPortfolioIcon
 
 interface ItemDisplayProps {
   item: ItemMapInfo | null;
@@ -15,7 +15,7 @@ interface ItemDisplayProps {
   onTimespanChange: (timespan: Timespan) => void;
   isLoading: boolean;
   error: string | null;
-  getItemIconUrl: (iconName: string) => string; // Kept for consistency, even if not used for main image directly
+  getItemIconUrl: (iconName: string) => string; 
   showChartGrid: boolean;
   showChartLineGlow: boolean;
   showVolumeChart: boolean;
@@ -24,8 +24,9 @@ interface ItemDisplayProps {
   onRemoveFavorite: (itemId: FavoriteItemId) => void;
   wordingPreference: WordingPreference;
   onSetAlertForItem: (item: ItemMapInfo) => void;
+  onAddToPortfolio: (item: ItemMapInfo) => void; // New prop for portfolio modal
   isConsentGranted: boolean; 
-  addNotification: (message: string, type?: 'success' | 'error' | 'info') => void; // Added for share feedback
+  addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -36,6 +37,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onTimespanChange,
   isLoading,
   error,
+  getItemIconUrl,
   showChartGrid,
   showChartLineGlow,
   showVolumeChart,
@@ -44,6 +46,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onRemoveFavorite,
   wordingPreference,
   onSetAlertForItem,
+  onAddToPortfolio, // Destructure new prop
   isConsentGranted,
   addNotification, 
 }) => {
@@ -79,14 +82,9 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     if (!item) return;
 
     try {
-      // Use the fixed public domain for the shareable link
       const baseUrl = 'https://beta.gepulse.net/';
       const shareUrl = new URL(baseUrl);
       shareUrl.searchParams.set('itemId', item.id.toString());
-      // Hash part of the URL is not typically relevant for item ID sharing,
-      // and new URL() constructor doesn't directly take a hash for the base.
-      // If a hash was needed, it would be appended: shareUrl.hash = window.location.hash;
-
       const shareableLink = shareUrl.toString();
       
       await navigator.clipboard.writeText(shareableLink);
@@ -219,6 +217,14 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
                   title={`Set price alert for ${item.name}`}
                 >
                   <BellIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--text-accent)]" />
+                </button>
+                <button
+                  onClick={() => onAddToPortfolio(item)}
+                  aria-label={`Add ${item.name} to portfolio`}
+                  className="p-1 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"
+                  title={`Add to Portfolio`}
+                >
+                  <AddToPortfolioIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--text-accent)]" />
                 </button>
               </>
             )}

@@ -4,8 +4,18 @@ import { ChangelogEntry } from './types';
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.09",
+    date: "2025-06-10", 
+    changes: [
+      "Introduced Portfolio Tracker: Allows logging investments (including shorthand quantity input & helper buttons for buy limit/current price), recording sales with integrated GE tax calculation, managing lots, and viewing open/closed positions. Features a portfolio summary for P/L analysis and an option to add items directly from the Item View. Data is stored locally (requires user consent).",
+      "Addressed an issue causing duplicate notifications for actions like toggling drag & drop, managing favourites, and auto/manual refreshes, ensuring notifications appear only once per event.",
+      "Updated application version to Beta v0.09 in footer and relevant internal constants.",
+    ],
+    notes: "This major update introduces the comprehensive Portfolio Tracker and includes fixes for duplicate notifications."
+  },
+  {
     version: "Beta v0.08",
-    date: "2025-06-08", // Placeholder: Adjust to actual date
+    date: "2025-06-08", 
     changes: [
       "Added a subtle neon glow effect to the main application title 'GE Pulse' and a pulsing animation to the dot in the SVG logo for enhanced visual appeal.",
       "Integrated a feedback/bug report system: Users can now submit feedback, feature requests, or bug reports directly through a modal accessible from the application footer. This uses a Netlify form for submission.",
@@ -21,13 +31,12 @@ export const changelogEntries: ChangelogEntry[] = [
   },
   {
     version: "Beta v0.07",
-    date: "2025-06-07", // Placeholder: Adjust to actual date
+    date: "2025-06-07", 
     changes: [
       "Added 'Top Market Movers' section: View top 5 item price/volume winners & losers (1h/24h). Section is collapsible and in the sidebar.",
       "Enhanced 'Top Market Movers' with a 'Fast Scan' (top 50 actively traded items >100GP) vs. 'Full Scan' (all items >100GP) toggle, directly in the section. This setting is session-only and defaults to Fast Scan.",
       "Added a 'Price %' vs. 'Volume %' toggle to 'Top Market Movers', allowing ranking by either price fluctuation or trade volume change. This setting is session-only and defaults to Price %.",
       "Top Movers data can be manually refreshed. Item names are clickable, loading the item in the main display with synced timespan.",
-      "Loading, error, and empty states are handled for the Movers section. Descriptive note dynamically reflects current scan mode and metric.",
       "Sidebar sections (Search, Favourites, Alerts, Top Movers) can now be re-ordered via drag and drop. This preference is saved if consent is granted.",
       "Drag and drop reordering for sidebar sections is disabled by default and can be toggled via a header icon.",
       "Implemented shareable links: Users can copy a direct link to an item's view from the item display header. Opening this link loads the specific item.",

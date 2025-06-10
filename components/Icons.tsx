@@ -74,3 +74,24 @@ export const TrendingUpIcon: React.FC<{ className?: string }> = ({ className }) 
     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.517l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
   </svg>
 );
+
+export const PortfolioIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+    {/* Simplified briefcase icon path. This is the base from AddToPortfolioIcon. */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6H2.25m0 0a3.001 3.001 0 003.75 0M2.25 6h19.5M2.25 6c0-1.657 1.343-3 3-3h13.5c1.657 0 3 1.343 3 3v12c0 1.657-1.343 3-3 3H5.25c-1.657 0-3-1.343-3-3V6z" />
+  </svg>
+);
+
+export const AddToPortfolioIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6H2.25m0 0a3.001 3.001 0 003.75 0M2.25 6h19.5M2.25 6c0-1.657 1.343-3 3-3h13.5c1.657 0 3 1.343 3 3v12c0 1.657-1.343 3-3 3H5.25c-1.657 0-3-1.343-3-3V6z" /> {/* Briefcase base */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9" /> {/* Plus sign */}
+  </svg>
+);
+
+export const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+    {/* Cleaned up trash can icon path */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L6 9M18 18L18 9M4 6H20M10 10.5V15M14 10.5V15M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6" />
+  </svg>
+);

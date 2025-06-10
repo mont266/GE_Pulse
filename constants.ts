@@ -31,6 +31,7 @@ export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
+export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; // New key for portfolio data
 // TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY is removed as this setting is no longer stored
 // TOP_MOVERS_METRIC_TYPE_STORAGE_KEY is not added as this setting is session-only
 
@@ -55,6 +56,43 @@ export const DEFAULT_SIDEBAR_ORDER: string[] = [SECTION_KEYS.SEARCH, SECTION_KEY
 export const MAX_CANDIDATE_ITEMS_PERFORMANCE = 50;
 export const MIN_PRICE_FOR_MOVER_CONSIDERATION = 100;
 
+// Grand Exchange Tax Constants
+export const GE_TAX_RATE = 0.02; // 2%
+export const GE_TAX_CAP = 5_000_000; // 5 million GP
+export const TAX_EXEMPT_ITEM_IDS: number[] = [
+  // Tools (from user provided list)
+  233,   // Pestle and mortar
+  952,   // Spade
+  1733,  // Needle
+  1735,  // Shears
+  1755,  // Chisel
+  1785,  // Glassblowing pipe
+  2347,  // Hammer
+  2989,  // Chompy bird hat (ogre)
+  2990,  // Chompy bird hat (bowana)
+  2991,  // Chompy bird hat (karamjan)
+  2992,  // Chompy bird hat (bandos)
+  2993,  // Chompy bird hat (armadyl)
+  2994,  // Chompy bird hat (ancient)
+  2995,  // Chompy bird hat (guthix)
+  5325,  // Gardening trowel
+  5329,  // Secateurs
+  5331,  // Watering can (0)
+  5341,  // Rake
+  5343,  // Seed dibber
+  8794,  // Saw
+  // Bonds, Ornaments, Special Items
+  13190, // Bond (tradeable)
+  24058, // Twisted ancestral colour kit
+  26362, // Shattered relics void ornament kit
+  26364, // Shattered relics dragon ornament kit
+  26366, // Shattered relics rune ornament kit
+  27951, // 30th anniversary cake
+  28607, // Trailblazer reloaded void ornament kit
+  28610, // Trailblazer reloaded dragon ornament kit
+  28613, // Trailblazer reloaded rune ornament kit
+].sort((a, b) => a - b); // Sort numerically for easier management
+
 
 // List of all keys for user preferences that should be cleared if consent is revoked
 export const ALL_USER_PREFERENCE_KEYS = [
@@ -69,6 +107,7 @@ export const ALL_USER_PREFERENCE_KEYS = [
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   SIDEBAR_ORDER_STORAGE_KEY,
   DRAG_DROP_ENABLED_STORAGE_KEY,
+  PORTFOLIO_STORAGE_KEY, // Added portfolio key
   // TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY removed
   // TOP_MOVERS_METRIC_TYPE_STORAGE_KEY not added
   // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,

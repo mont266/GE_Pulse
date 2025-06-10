@@ -1,7 +1,6 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated path for types
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
@@ -15,19 +14,23 @@ import { FavoritesList } from './components/FavoritesList';
 import { ConsentBanner } from './components/ConsentBanner';
 import { ChangelogModal } from './src/components/ChangelogModal';
 import { SetAlertModal } from './components/SetAlertModal'; 
-import { FeedbackModal } from './components/FeedbackModal'; // Import FeedbackModal
+import { FeedbackModal } from './components/FeedbackModal'; 
 import { TopMoversSection } from './components/TopMoversSection';
+import { PortfolioModal } from './components/PortfolioModal';
+import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal'; // New modal
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon } from './components/Icons'; // Added EmptyHeartIcon
+import { usePortfolio } from './hooks/usePortfolio';
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons'; // Added AddToPortfolioIcon
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
   ALL_USER_PREFERENCE_KEYS, DEFAULT_THEME_ID, CHART_GRID_STORAGE_KEY, CHART_LINE_GLOW_STORAGE_KEY,
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
-  DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE
+  DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
+  PORTFOLIO_STORAGE_KEY
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -49,7 +52,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.08";
+const APP_VERSION = "Beta v0.09";
 
 // Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
@@ -211,11 +214,12 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationMessage[]>([]);
   
   const notificationIdCounterRef = useRef(0);
+  const favoritesRefreshLockRef = useRef(false);
+
 
   const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     notificationIdCounterRef.current += 1;
     const id = `notif-${notificationIdCounterRef.current}`;
-    console.log(`[Notification] ID: ${id}, Type: ${type}, Message: "${message}"`);
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -223,15 +227,22 @@ const App: React.FC = () => {
   }, []);
 
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
+  const prevIsAutoRefreshEnabled = usePrevious(isAutoRefreshEnabled);
+
   const [timeToNextRefresh, setTimeToNextRefresh] = useState<number>(AUTO_REFRESH_INTERVAL_SECONDS);
   const [manualRefreshTrigger, setManualRefreshTrigger] = useState<number>(0);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
-  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); // State for FeedbackModal
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); 
+  const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
   
   const [isSetAlertModalOpen, setIsSetAlertModalOpen] = useState<boolean>(false);
   const [itemForSetAlertModal, setItemForSetAlertModal] = useState<ItemMapInfo | null>(null);
+  
+  const [isAddInvestmentFromViewModalOpen, setIsAddInvestmentFromViewModalOpen] = useState<boolean>(false);
+  const [itemForAddInvestmentFromViewModal, setItemForAddInvestmentFromViewModal] = useState<ItemMapInfo | null>(null);
+
 
   const [isSearchSectionCollapsed, setIsSearchSectionCollapsed] = useState<boolean>(true);
   const [isFavoritesSectionCollapsed, setIsFavoritesSectionCollapsed] = useState<boolean>(true);
@@ -245,6 +256,8 @@ const App: React.FC = () => {
     }
     return false; 
   });
+  const prevIsDragAndDropEnabled = usePrevious(isDragAndDropEnabled);
+
 
   const [sidebarSectionOrder, setSidebarSectionOrder] = useState<string[]>(() => {
     if (initialConsent === 'granted') {
@@ -338,6 +351,7 @@ const App: React.FC = () => {
     }
     return [];
   });
+  const prevFavoriteItemIds = usePrevious(favoriteItemIds);
 
   const [favoriteItemPrices, setFavoriteItemPrices] = useState<Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>>({});
   const [favoriteItemHourlyChanges, setFavoriteItemHourlyChanges] = useState<Record<FavoriteItemId, FavoriteItemHourlyChangeState>>({});
@@ -353,24 +367,33 @@ const App: React.FC = () => {
 
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
+  const {
+    portfolioEntries,
+    addPortfolioEntry,
+    recordSaleAndUpdatePortfolio,
+    deletePortfolioEntry,
+    clearAllPortfolioData,
+  } = usePortfolio(isConsentGranted, addNotification);
+
+
   const getItemIconUrl = useCallback((iconName: string): string => {
     if(!iconName) return 'https://via.placeholder.com/36?text=N/A'; 
     return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
   }, []);
 
+  // Effect for Drag & Drop toggle notification
   useEffect(() => {
     if (isConsentGranted) {
       localStorage.setItem(DRAG_DROP_ENABLED_STORAGE_KEY, JSON.stringify(isDragAndDropEnabled));
     }
-  }, [isDragAndDropEnabled, isConsentGranted]);
+    if (prevIsDragAndDropEnabled !== undefined && prevIsDragAndDropEnabled !== isDragAndDropEnabled) {
+      addNotification(`Section reordering ${isDragAndDropEnabled ? 'enabled' : 'disabled'}.`, 'info');
+    }
+  }, [isDragAndDropEnabled, prevIsDragAndDropEnabled, addNotification, isConsentGranted]);
 
   const toggleDragAndDrop = useCallback(() => {
-    setIsDragAndDropEnabled(prev => {
-      const newState = !prev;
-      addNotification(`Section reordering ${newState ? 'enabled' : 'disabled'}.`, 'info');
-      return newState;
-    });
-  }, [addNotification]);
+    setIsDragAndDropEnabled(prev => !prev);
+  }, []);
 
   useEffect(() => {
     if (isConsentGranted) {
@@ -407,7 +430,6 @@ const App: React.FC = () => {
          allItems.length > 0 &&
          !isLoadingTopMovers
        ) {
-      console.log('[App.tsx Effect] Parameter change detected, fetching movers.');
       fetchMovers(selectedMoversTimespan, topMoversMetricType);
     }
   }, [
@@ -426,7 +448,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isTopMoversSectionCollapsed && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
-      console.log('[App.tsx Effect] Initial load for Top Movers section.');
       fetchMovers(selectedMoversTimespan, topMoversMetricType);
     }
   }, [
@@ -445,7 +466,6 @@ const App: React.FC = () => {
     setIsTopMoversSectionCollapsed(prev => {
         const newCollapsedState = !prev;
         if (!newCollapsedState && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
-            console.log('[App.tsx toggleTopMoversSection] Expanding, fetching initial movers.');
             fetchMovers(selectedMoversTimespan, topMoversMetricType);
         }
         return newCollapsedState;
@@ -472,28 +492,41 @@ const App: React.FC = () => {
 
 
   const handleRefreshAllFavorites = useCallback(async () => {
+    if (favoritesRefreshLockRef.current) return;
     if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
-
+  
+    favoritesRefreshLockRef.current = true;
     setIsRefreshingFavorites(true);
     const isMountedRef = { current: true };
     let allSucceeded = true;
-
+  
+    const newFavoriteItemPrices: typeof favoriteItemPrices = {};
+    const newFavoriteItemHourlyChanges: typeof favoriteItemHourlyChanges = {};
+    const newFavoriteItemSparklineData: typeof favoriteItemSparklineData = {};
+  
     for (const itemId of favoriteItemIds) {
       if (!isMountedRef.current) break;
       const itemDetail = allItems.find(it => it.id === itemId);
       if (!itemDetail) continue;
-
-      if (isMountedRef.current) {
-        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
-        setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-        setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
-      }
-
+  
+      newFavoriteItemPrices[itemId] = 'loading';
+      newFavoriteItemHourlyChanges[itemId] = 'loading';
+      newFavoriteItemSparklineData[itemId] = 'loading';
+    }
+    if (isMountedRef.current) {
+      setFavoriteItemPrices(prev => ({ ...prev, ...newFavoriteItemPrices }));
+      setFavoriteItemHourlyChanges(prev => ({ ...prev, ...newFavoriteItemHourlyChanges }));
+      setFavoriteItemSparklineData(prev => ({ ...prev, ...newFavoriteItemSparklineData }));
+    }
+  
+    for (const itemId of favoriteItemIds) {
+      if (!isMountedRef.current) break;
+  
       try {
         const priceData = await fetchLatestPrice(itemId);
         if (!isMountedRef.current) break;
         setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-
+  
         if (priceData && priceData.high !== null) {
           const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
           if (!isMountedRef.current) break;
@@ -529,7 +562,7 @@ const App: React.FC = () => {
                     priceThen = bestFallbackCandidate.price;
                 }
           }
-
+  
           if (priceThen !== null && priceData.high !== null) {
             const changeAbsolute = priceData.high - priceThen;
             const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
@@ -553,7 +586,7 @@ const App: React.FC = () => {
         }
       }
     }
-
+  
     if (isMountedRef.current) {
       setIsRefreshingFavorites(false);
       if (allSucceeded && favoriteItemIds.length > 0) {
@@ -562,13 +595,14 @@ const App: React.FC = () => {
         addNotification('Some favorite items could not be refreshed.', 'error');
       }
     }
+    favoritesRefreshLockRef.current = false;
   }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
 
   const toggleFavoritesSection = useCallback(() => {
     setIsFavoritesSectionCollapsed(prev => {
       const newCollapsedState = !prev;
       if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
-        if (!isRefreshingFavorites) {
+        if (!isRefreshingFavorites && !favoritesRefreshLockRef.current) { 
            handleRefreshAllFavorites();
         }
       }
@@ -619,8 +653,9 @@ const App: React.FC = () => {
     setSidebarSectionOrder([...DEFAULT_SIDEBAR_ORDER]); 
     setIsDragAndDropEnabled(false); 
     if(clearAllAlertsAndStorage) clearAllAlertsAndStorage(); 
+    if(clearAllPortfolioData) clearAllPortfolioData();
     addNotification('Preferences have been reset and will no longer be saved.', 'info');
-  }, [clearAllAlertsAndStorage, addNotification]);
+  }, [clearAllAlertsAndStorage, clearAllPortfolioData, addNotification]);
 
   const handleConsentGranted = useCallback(() => {
     setConsentStatus('granted');
@@ -649,23 +684,45 @@ const App: React.FC = () => {
     }
   }, [wordingPreference, isConsentGranted]);
 
+  useEffect(() => {
+    if (prevFavoriteItemIds && isConsentGranted && allItems.length > 0) {
+      const favTerm = wordingPreference === 'uk' ? 'favourites' : 'favorites';
+      const currentIdsSet = new Set(favoriteItemIds);
+      const prevIdsSet = new Set(prevFavoriteItemIds);
+  
+      let itemChangedId: FavoriteItemId | undefined = undefined;
+      let action: 'added' | 'removed' | null = null;
+  
+      if (favoriteItemIds.length > prevFavoriteItemIds.length) {
+        itemChangedId = favoriteItemIds.find(id => !prevIdsSet.has(id));
+        action = 'added';
+      } else if (favoriteItemIds.length < prevFavoriteItemIds.length) {
+        itemChangedId = prevFavoriteItemIds.find(id => !currentIdsSet.has(id));
+        action = 'removed';
+      }
+  
+      if (itemChangedId && action) {
+        const itemName = getItemName(itemChangedId);
+        if (itemName !== 'Unknown Item') {
+          addNotification(`${itemName} ${action === 'added' ? 'added to' : 'removed from'} ${favTerm}.`, action === 'added' ? 'success' : 'info');
+        }
+      }
+    }
+  }, [favoriteItemIds, prevFavoriteItemIds, getItemName, addNotification, wordingPreference, isConsentGranted, allItems.length]);
+
+
   const addFavoriteItem = useCallback((itemId: FavoriteItemId) => {
     setFavoriteItemIds(prevIds => {
       if (!prevIds.includes(itemId)) {
-        const newIds = [...prevIds, itemId];
-        const favTerm = wordingPreference === 'uk' ? 'favourites' : 'favorites';
-        addNotification(`${getItemName(itemId)} added to ${favTerm}.`, 'success');
-        return newIds;
+        return [...prevIds, itemId];
       }
       return prevIds;
     });
-  }, [addNotification, getItemName, wordingPreference]);
+  }, []);
 
   const removeFavoriteItem = useCallback((itemId: FavoriteItemId) => {
     setFavoriteItemIds(prevIds => {
       if (prevIds.includes(itemId)) {
-        const favTerm = wordingPreference === 'uk' ? 'favourites' : 'favorites';
-        addNotification(`${getItemName(itemId)} removed from ${favTerm}.`, 'info');
         setFavoriteItemPrices(currentPrices => {
             const newPrices = {...currentPrices};
             delete newPrices[itemId];
@@ -685,7 +742,8 @@ const App: React.FC = () => {
       }
       return prevIds;
     });
-  }, [addNotification, getItemName, wordingPreference]);
+  }, []);
+
 
   useEffect(() => {
     if (isConsentGranted) {
@@ -799,7 +857,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentially();
     return () => { isMountedRef.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted]); // Removed favoriteItemPrices from dependencies
+  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); 
 
   useEffect(() => {
     const activeTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
@@ -911,6 +969,13 @@ const App: React.FC = () => {
   const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
   const toggleShowFavoriteSparklines = useCallback(() => setShowFavoriteSparklines(prev => !prev), []);
   const toggleFeedbackModal = () => setIsFeedbackModalOpen(prev => !prev); 
+  const togglePortfolioModal = () => {
+    if (!isConsentGranted) {
+      addNotification('Please enable preference storage in settings to use the Portfolio feature.', 'info');
+      return;
+    }
+    setIsPortfolioModalOpen(prev => !prev);
+  }
 
   const refreshCurrentItemData = useCallback(async (options: { 
     itemToRefresh?: ItemMapInfo, 
@@ -1031,7 +1096,7 @@ const App: React.FC = () => {
         }
       }
 
-      if (favoriteItemIds.length > 0 && isConsentGranted) {
+      if (favoriteItemIds.length > 0 && isConsentGranted && !favoritesRefreshLockRef.current) {
         handleRefreshAllFavorites();
       }
 
@@ -1052,8 +1117,8 @@ const App: React.FC = () => {
     } finally {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, handleRefreshAllFavorites]);
+
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
     setSelectedItem(item);
@@ -1110,15 +1175,18 @@ const App: React.FC = () => {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTimespan]);
+  }, [selectedTimespan]); 
+
+
+  useEffect(() => {
+    if (prevIsAutoRefreshEnabled !== undefined && prevIsAutoRefreshEnabled !== isAutoRefreshEnabled) {
+      addNotification(`Auto-refresh ${isAutoRefreshEnabled ? 'enabled' : 'disabled'}.`, 'info');
+    }
+  }, [isAutoRefreshEnabled, prevIsAutoRefreshEnabled, addNotification]);
 
   const handleToggleAutoRefresh = useCallback(() => {
-    setIsAutoRefreshEnabled(prev => {
-      const newState = !prev;
-      addNotification(`Auto-refresh ${newState ? 'enabled' : 'disabled'}.`, 'info');
-      return newState;
-    });
-  }, [addNotification]);
+    setIsAutoRefreshEnabled(prev => !prev);
+  }, []);
 
   const handleManualRefresh = useCallback(async () => {
     if (!selectedItem || isLoadingPrice) return;
@@ -1148,8 +1216,7 @@ const App: React.FC = () => {
       if (autoRefreshIntervalIdRef.current !== null) window.clearInterval(autoRefreshIntervalIdRef.current);
       if (countdownIntervalIdRef.current !== null) window.clearInterval(countdownIntervalIdRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger]);
+  }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger, refreshCurrentItemData]);
 
   const filteredItems = useMemo(() => {
     if (!searchTerm) {
@@ -1224,6 +1291,20 @@ const App: React.FC = () => {
   const closeSetAlertModal = useCallback(() => {
     setItemForSetAlertModal(null);
     setIsSetAlertModalOpen(false);
+  }, []);
+
+  const openAddInvestmentFromViewModal = useCallback((item: ItemMapInfo) => {
+    if (!isConsentGranted) {
+      addNotification('Enable preferences in settings to add to portfolio.', 'info');
+      return;
+    }
+    setItemForAddInvestmentFromViewModal(item);
+    setIsAddInvestmentFromViewModalOpen(true);
+  }, [isConsentGranted, addNotification]);
+
+  const closeAddInvestmentFromViewModal = useCallback(() => {
+    setItemForAddInvestmentFromViewModal(null);
+    setIsAddInvestmentFromViewModalOpen(false);
   }, []);
 
   const handleAddAlertFromModal = useCallback((item: ItemMapInfo, targetPrice: number, condition: 'above' | 'below') => {
@@ -1478,6 +1559,15 @@ const App: React.FC = () => {
                         <ReorderDisabledIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
                     )}
                 </button>
+                 <button
+                    onClick={togglePortfolioModal}
+                    className={`p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors ${!isConsentGranted ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label="Open Portfolio"
+                    title={isConsentGranted ? "Open Portfolio" : "Enable preferences in settings to use Portfolio"}
+                    disabled={!isConsentGranted}
+                >
+                    <PortfolioIcon className={`h-7 w-7 ${isConsentGranted ? 'text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]' : 'text-[var(--text-muted)]'}`} />
+                </button>
             </div>
             <button 
               onClick={handleResetView}
@@ -1491,7 +1581,8 @@ const App: React.FC = () => {
                 </svg>
                 <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] title-neon-glow transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
             </button>
-            <div style={{ width: 'calc(2 * (1.75rem + 0.5rem) + 0.25rem)' }}></div> 
+            {/* Adjusted placeholder width to account for the new PortfolioIcon */}
+            <div style={{ width: 'calc(3 * (1.75rem + 0.5rem) + 0.25rem)' }}></div> 
         </div>
         <p className="text-[var(--text-secondary)] mt-1">Live prices & insights for Old School RuneScape.</p>
       </header>
@@ -1538,6 +1629,24 @@ const App: React.FC = () => {
         />
       )}
 
+      {isPortfolioModalOpen && isConsentGranted && (
+        <PortfolioModal
+          isOpen={isPortfolioModalOpen}
+          onClose={togglePortfolioModal}
+          portfolioEntries={portfolioEntries}
+          addPortfolioEntry={addPortfolioEntry}
+          recordSaleAndUpdatePortfolio={recordSaleAndUpdatePortfolio}
+          deletePortfolioEntry={deletePortfolioEntry} 
+          clearAllPortfolioData={clearAllPortfolioData} // Pass prop
+          allItems={allItems}
+          getItemIconUrl={getItemIconUrl}
+          getItemName={getItemName}
+          fetchLatestPrice={fetchLatestPrice}
+          addNotification={addNotification}
+          isConsentGranted={isConsentGranted}
+        />
+      )}
+
       {isSetAlertModalOpen && itemForSetAlertModal && (
         <SetAlertModal
           isOpen={isSetAlertModalOpen}
@@ -1548,6 +1657,20 @@ const App: React.FC = () => {
           isConsentGranted={isConsentGranted}
         />
       )}
+      
+      {isAddInvestmentFromViewModalOpen && itemForAddInvestmentFromViewModal && isConsentGranted && (
+        <AddInvestmentFromViewModal
+          isOpen={isAddInvestmentFromViewModalOpen}
+          onClose={closeAddInvestmentFromViewModal}
+          itemToAdd={itemForAddInvestmentFromViewModal}
+          addPortfolioEntryCallback={addPortfolioEntry}
+          addNotification={addNotification}
+          isConsentGranted={isConsentGranted}
+          getItemIconUrl={getItemIconUrl}
+          fetchLatestPrice={fetchLatestPrice} 
+        />
+      )}
+
 
       {isLoadingItems ? (
         <div className="flex flex-col items-center justify-center h-64">
@@ -1630,6 +1753,7 @@ const App: React.FC = () => {
                 onRemoveFavorite={removeFavoriteItem}
                 wordingPreference={wordingPreference}
                 onSetAlertForItem={openSetAlertModalForItem}
+                onAddToPortfolio={openAddInvestmentFromViewModal}
                 isConsentGranted={isConsentGranted}
                 addNotification={addNotification}
               />

@@ -205,3 +205,19 @@ export interface SectionRenderProps {
   handleDragStart: (event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => void;
   draggedItem: string | null;
 }
+
+// Portfolio / Investment Tracking Types
+export interface PortfolioEntry {
+  id: string; // Unique ID for this purchase lot
+  itemId: number;
+  // ItemName & ItemIcon will be derived from allItems using itemId for display purposes
+  quantityPurchased: number;
+  purchasePricePerItem: number;
+  purchaseDate: number; // Timestamp (e.g., Date.now())
+
+  // Tracking sales from THIS specific purchase lot
+  quantitySoldFromThisLot: number; // Default 0. Total units sold from this lot.
+  totalProceedsFromThisLot: number; // Default 0. Sum of (salePrice * quantitySold) for all sales from this lot.
+  totalTaxPaidFromThisLot: number; // Default 0. Sum of tax paid for all sales from this lot.
+  lastSaleDate?: number; // Timestamp of the most recent sale from this lot
+}
