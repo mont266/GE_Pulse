@@ -758,17 +758,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!allItems.length || !isConsentGranted) return;
-    const isMountedRefHook = { current: true }; // Renamed to avoid conflict with other isMountedRef
+    const isMountedRefHook = { current: true };
 
-    const fetchAllFavoriteDataSequentiallyHook = async () => { // Renamed
+    const fetchAllFavoriteDataSequentiallyHook = async () => {
       for (const itemId of favoriteItemIds) {
         if (!isMountedRefHook.current) break;
 
         const itemDetail = allItems.find(it => it.id === itemId);
         if (itemDetail) {
           if (favoriteItemPrices[itemId] !== undefined && 
-              favoriteItemPrices[itemId] !== 'loading') {
-             if (favoriteItemPrices[itemId] !== undefined) continue;
+              favoriteItemPrices[itemId] !== 'loading' &&
+              favoriteItemPrices[itemId] !== 'error') { // Also check for 'error' to allow re-fetch on error
+             continue; 
           }
           
           if (isMountedRefHook.current) {
@@ -783,7 +784,7 @@ const App: React.FC = () => {
             setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
             
             if (priceData && priceData.high !== null) {
-              try { // Added try-catch for historical data fetch
+              try {
                 const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
                 if (!isMountedRefHook.current) break;
 
@@ -838,7 +839,7 @@ const App: React.FC = () => {
                 }
               }
             } else { 
-               const currentPriceDataInElse = priceData; // Explicitly alias
+               const currentPriceDataInElse = priceData;
                if (isMountedRefHook.current ) {
                  setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
                  setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
@@ -858,7 +859,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices]); // Added favoriteItemPrices to deps to re-evaluate if it changes externally
+  }, [favoriteItemIds, allItems, isConsentGranted]); // favoriteItemPrices REMOVED from dependencies
 
   useEffect(() => {
     const currentActiveTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
