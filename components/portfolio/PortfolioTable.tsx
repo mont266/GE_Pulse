@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { PortfolioEntry, ItemMapInfo, LatestPriceData } from '../../src/types';
-import { TrashIcon } from '../Icons'; // Import TrashIcon
+import { TrashIcon, EditIcon } from '../Icons'; // Import EditIcon
 
 interface PortfolioTableProps {
   entries: PortfolioEntry[];
@@ -11,7 +11,8 @@ interface PortfolioTableProps {
   livePrices: Record<number, LatestPriceData | null>; 
   tableType: 'open' | 'closed';
   onSellAction?: (entry: PortfolioEntry) => void; 
-  onDeleteAction?: (entry: PortfolioEntry) => void; // New prop for delete action
+  onDeleteAction?: (entry: PortfolioEntry) => void; 
+  onEditAction?: (entry: PortfolioEntry) => void; // New prop for edit action
 }
 
 const formatGP = (value?: number | null, shorthand: boolean = false): string => {
@@ -37,7 +38,8 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
   livePrices,
   tableType,
   onSellAction,
-  onDeleteAction, // Destructure new prop
+  onDeleteAction, 
+  onEditAction, // Destructure new prop
 }) => {
   if (entries.length === 0) {
     return <p className="text-[var(--text-secondary)] text-center py-6">No {tableType} positions found.</p>;
@@ -65,6 +67,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
     { header: 'Tax Paid', accessor: 'taxPaid', numeric: true, shorthand: true },
     { header: 'Real. P/L', accessor: 'realPL', numeric: true, shorthand: true },
     { header: 'Sale Date', accessor: 'saleDate' },
+    { header: 'Actions', accessor: 'actions' }, // Added Actions column for closed
   ];
 
   const columns = tableType === 'open' ? columnsOpen : columnsClosed;
@@ -78,7 +81,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
               <th
                 key={col.accessor}
                 scope="col"
-                className={`px-3 py-3 text-left text-xs font-medium text-[var(--text-accent)] uppercase tracking-wider ${col.numeric ? 'text-right' : ''}`}
+                className={`px-3 py-3 text-left text-xs font-medium text-[var(--text-accent)] uppercase tracking-wider ${col.numeric ? 'text-right' : ''} ${col.accessor === 'actions' ? 'text-center' : ''}`}
               >
                 {col.header}
               </th>
@@ -126,20 +129,30 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
                     <td className={`px-3 py-3 whitespace-nowrap text-sm font-medium text-right ${unrealizedPL === null ? 'text-[var(--text-muted)]' : unrealizedPL >= 0 ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`} title={formatGP(unrealizedPL)}>{formatGP(unrealizedPL, true)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-muted)]">{formatDate(entry.purchaseDate)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-center">
-                      <div className="flex items-center justify-center space-x-1.5">
+                      <div className="flex items-center justify-center space-x-1 sm:space-x-1.5">
                         {onSellAction && (
                           <button
                             onClick={() => onSellAction(entry)}
-                            className="text-[var(--bg-interactive)] hover:text-[var(--bg-interactive-hover)] font-medium py-1 px-2 rounded-md text-xs bg-[var(--bg-interactive)]/10 hover:bg-[var(--bg-interactive)]/20 transition-colors"
+                            className="text-[var(--bg-interactive)] hover:text-[var(--bg-interactive-hover)] font-medium py-1 px-1.5 sm:px-2 rounded-md text-xs bg-[var(--bg-interactive)]/10 hover:bg-[var(--bg-interactive)]/20 transition-colors"
                             aria-label={`Sell ${itemInfo.name}`}
                           >
                             Sell
                           </button>
                         )}
+                        {onEditAction && (
+                           <button
+                            onClick={() => onEditAction(entry)}
+                            className="text-[var(--text-accent)] hover:text-[var(--text-accent)]/80 p-0.5 sm:p-1 rounded-full hover:bg-[var(--text-accent)]/10 transition-colors"
+                            aria-label={`Edit investment lot for ${itemInfo.name}`}
+                            title="Edit this lot"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                        )}
                         {onDeleteAction && (
                            <button
                             onClick={() => onDeleteAction(entry)}
-                            className="text-[var(--price-low)] hover:text-[var(--price-low)]/80 p-1 rounded-full hover:bg-[var(--price-low)]/10 transition-colors"
+                            className="text-[var(--price-low)] hover:text-[var(--price-low)]/80 p-0.5 sm:p-1 rounded-full hover:bg-[var(--price-low)]/10 transition-colors"
                             aria-label={`Delete investment lot for ${itemInfo.name}`}
                             title="Delete this lot"
                           >
@@ -159,6 +172,30 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-muted)] text-right" title={formatGP(taxPaidThisLot)}>{formatGP(taxPaidThisLot, true)}</td>
                     <td className={`px-3 py-3 whitespace-nowrap text-sm font-medium text-right ${realizedPLThisLot >= 0 ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`} title={formatGP(realizedPLThisLot)}>{formatGP(realizedPLThisLot, true)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-muted)]">{formatDate(entry.lastSaleDate)}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-center">
+                       <div className="flex items-center justify-center space-x-1 sm:space-x-1.5">
+                          {onEditAction && (
+                             <button
+                              onClick={() => onEditAction(entry)}
+                              className="text-[var(--text-accent)] hover:text-[var(--text-accent)]/80 p-0.5 sm:p-1 rounded-full hover:bg-[var(--text-accent)]/10 transition-colors"
+                              aria-label={`Edit original purchase details for ${itemInfo.name}`}
+                              title="Edit purchase details"
+                            >
+                              <EditIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                           {onDeleteAction && ( // Retain delete for closed positions as well
+                             <button
+                              onClick={() => onDeleteAction(entry)}
+                              className="text-[var(--price-low)] hover:text-[var(--price-low)]/80 p-0.5 sm:p-1 rounded-full hover:bg-[var(--price-low)]/10 transition-colors"
+                              aria-label={`Delete investment lot for ${itemInfo.name}`}
+                              title="Delete this lot"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                    </td>
                   </>
                 )}
               </tr>

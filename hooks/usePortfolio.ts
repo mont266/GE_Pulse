@@ -9,6 +9,9 @@ const generateUniqueId = (): string => {
   return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
+export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;
+
+
 export const usePortfolio = (
   isConsentGranted: boolean,
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void
@@ -18,8 +21,8 @@ export const usePortfolio = (
       try {
         const storedPortfolio = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
         return storedPortfolio ? JSON.parse(storedPortfolio) : [];
-      } catch (error) {
-        console.error("Error loading portfolio from localStorage:", error);
+      } catch (e) {
+        console.error("Error loading portfolio from localStorage:", e);
       }
     }
     return [];
@@ -29,8 +32,8 @@ export const usePortfolio = (
     if (isConsentGranted) {
       try {
         localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(portfolioEntries));
-      } catch (error) {
-        console.error("Error saving portfolio to localStorage:", error);
+      } catch (e) {
+        console.error("Error saving portfolio to localStorage:", e);
       }
     }
   }, [portfolioEntries, isConsentGranted]);
@@ -38,14 +41,14 @@ export const usePortfolio = (
   // Effect to clear in-memory portfolio if consent is revoked
   useEffect(() => {
     if (!isConsentGranted) {
-      setPortfolioEntries([]); 
+      setPortfolioEntries([]);
     }
   }, [isConsentGranted]);
 
   const addPortfolioEntryUI = useCallback((
-    item: ItemMapInfo, 
-    quantity: number, 
-    purchasePrice: number, 
+    item: ItemMapInfo,
+    quantity: number,
+    purchasePrice: number,
     purchaseDateTimestamp: number
   ) => {
     if (!isConsentGranted) {
@@ -64,13 +67,13 @@ export const usePortfolio = (
     };
     setPortfolioEntries(prevEntries => [...prevEntries, newEntry]);
     addNotification(`${item.name} (${quantity}) added to portfolio.`, 'success');
-  }, [isConsentGranted, addNotification]);
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
 
 
   const recordSaleAndUpdatePortfolio = useCallback((
-    entryId: string, 
-    quantityToSell: number, 
-    salePricePerItem: number, 
+    entryId: string,
+    quantityToSell: number,
+    salePricePerItem: number,
     saleDateTimestamp: number
   ) => {
     if (!isConsentGranted) {
@@ -91,13 +94,13 @@ export const usePortfolio = (
       const remainingInLot = entryToUpdate.quantityPurchased - entryToUpdate.quantitySoldFromThisLot;
       if (quantityToSell > remainingInLot) {
         addNotification('Error: Cannot sell more than available in this lot.', 'error');
-        return prevEntries; 
+        return prevEntries;
       }
       if (quantityToSell <= 0) {
         addNotification('Error: Quantity to sell must be positive.', 'error');
         return prevEntries;
       }
-       if (salePricePerItem < 0) { 
+       if (salePricePerItem < 0) {
         addNotification('Error: Sale price must be zero or positive.', 'error');
         return prevEntries;
       }
@@ -108,16 +111,16 @@ export const usePortfolio = (
       entryToUpdate.quantitySoldFromThisLot += quantityToSell;
       entryToUpdate.totalProceedsFromThisLot += (quantityToSell * salePricePerItem);
       entryToUpdate.totalTaxPaidFromThisLot += taxForThisSale; // Accumulate tax
-      entryToUpdate.lastSaleDate = saleDateTimestamp; 
+      entryToUpdate.lastSaleDate = saleDateTimestamp;
 
       updatedEntries[entryIndex] = entryToUpdate;
-      
+
       // Note: Item name for notification is handled in SellInvestmentModal now
       // addNotification(`${quantityToSell} of Item sold. Tax: ${taxForThisSale.toLocaleString()} GP.`, 'success');
       return updatedEntries;
     });
-  }, [isConsentGranted, addNotification]);
-  
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
+
   const deletePortfolioEntry = useCallback((entryId: string) => {
     if (!isConsentGranted) {
       addNotification('Enable preferences in settings to manage portfolio.', 'info');
@@ -125,7 +128,7 @@ export const usePortfolio = (
     }
     setPortfolioEntries(prevEntries => prevEntries.filter(entry => entry.id !== entryId));
     addNotification('Investment lot removed from portfolio.', 'info');
-  }, [isConsentGranted, addNotification]);
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
 
   const clearAllPortfolioData = useCallback(() => {
     if (!isConsentGranted) {
@@ -134,13 +137,74 @@ export const usePortfolio = (
     }
     setPortfolioEntries([]);
     addNotification('All portfolio data has been cleared.', 'success');
-  }, [isConsentGranted, addNotification]);
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
 
-  return { 
-    portfolioEntries, 
-    addPortfolioEntry: addPortfolioEntryUI, 
+  const updatePortfolioEntryDetails = useCallback((entryId: string, updates: PortfolioEntryUpdate) => {
+    if (!isConsentGranted) {
+      addNotification('Enable preferences in settings to edit investments.', 'info');
+      return;
+    }
+
+    setPortfolioEntries(prevEntries => {
+      const entryIndex = prevEntries.findIndex(e => e.id === entryId);
+      if (entryIndex === -1) {
+        addNotification('Error: Could not find investment lot to update.', 'error');
+        return prevEntries;
+      }
+
+      const updatedEntries = [...prevEntries];
+      const entryToUpdate = { ...updatedEntries[entryIndex] };
+
+      // Validate updates
+      if (updates.quantityPurchased !== undefined) {
+        if (updates.quantityPurchased <= 0) {
+          addNotification('Error: Purchase quantity must be positive.', 'error');
+          return prevEntries;
+        }
+        if (updates.quantityPurchased < entryToUpdate.quantitySoldFromThisLot) {
+          addNotification(`Error: New purchase quantity (${updates.quantityPurchased.toLocaleString()}) cannot be less than already sold quantity (${entryToUpdate.quantitySoldFromThisLot.toLocaleString()}).`, 'error');
+          return prevEntries;
+        }
+        entryToUpdate.quantityPurchased = updates.quantityPurchased;
+      }
+
+      if (updates.purchasePricePerItem !== undefined) {
+        if (updates.purchasePricePerItem <= 0) { // Assuming purchase price must be positive
+          addNotification('Error: Purchase price must be positive.', 'error');
+          return prevEntries;
+        }
+        entryToUpdate.purchasePricePerItem = updates.purchasePricePerItem;
+      }
+
+      if (updates.purchaseDate !== undefined) {
+        entryToUpdate.purchaseDate = updates.purchaseDate;
+      }
+
+      updatedEntries[entryIndex] = entryToUpdate;
+      addNotification('Investment details updated successfully!', 'success');
+      return updatedEntries;
+    });
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
+
+  const replacePortfolio = useCallback((newEntries: PortfolioEntry[]) => {
+    if (!isConsentGranted) {
+      addNotification('Enable preferences in settings to import portfolio data.', 'info');
+      return;
+    }
+    // Basic validation could be done here as well, or assumed to be done by the importer.
+    // For now, directly set.
+    setPortfolioEntries(newEntries);
+    // Notification for successful import will be handled by the caller (PortfolioModal)
+  }, [isConsentGranted, addNotification, setPortfolioEntries]);
+
+
+  return {
+    portfolioEntries,
+    addPortfolioEntry: addPortfolioEntryUI,
     recordSaleAndUpdatePortfolio,
-    deletePortfolioEntry, 
-    clearAllPortfolioData 
+    deletePortfolioEntry,
+    clearAllPortfolioData,
+    updatePortfolioEntryDetails,
+    replacePortfolio, // Expose the new function
   };
 };

@@ -189,9 +189,9 @@ export const AddInvestmentForm: React.FC<AddInvestmentFormProps> = ({
   const handleSetQuantityToBuyLimit = useCallback(() => {
     if (selectedItem && !isFormDisabled) {
       setQuantityInput(selectedItem.limit.toString());
-      addNotification(`Quantity set to buy limit for ${selectedItem.name} (${selectedItem.limit.toLocaleString()}).`, 'info');
+      // addNotification(`Quantity set to buy limit for ${selectedItem.name} (${selectedItem.limit.toLocaleString()}).`, 'info');
     }
-  }, [selectedItem, isFormDisabled, addNotification]);
+  }, [selectedItem, isFormDisabled]);
 
   const handleSetPriceToCurrent = useCallback(async () => {
     if (selectedItem && !isFormDisabled && fetchLatestPrice) {
@@ -200,7 +200,7 @@ export const AddInvestmentForm: React.FC<AddInvestmentFormProps> = ({
         const priceData = await fetchLatestPrice(selectedItem.id);
         if (priceData && priceData.high !== null) {
           setPurchasePriceInput(priceData.high.toString());
-          addNotification(`Purchase price set to current market buy for ${selectedItem.name} (${priceData.high.toLocaleString()} GP).`, 'info');
+          // addNotification(`Purchase price set to current market buy for ${selectedItem.name} (${priceData.high.toLocaleString()} GP).`, 'info');
         } else {
           addNotification(`Could not fetch current market price for ${selectedItem.name}. If item is new, try again later.`, 'error');
         }

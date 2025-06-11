@@ -1,14 +1,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData } from '../src/types';
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate } from '../src/types';
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
 import { SellInvestmentModal } from './portfolio/SellInvestmentModal';
 import { ConfirmDeletePortfolioEntryModal } from './portfolio/ConfirmDeletePortfolioEntryModal';
-import { ConfirmClearAllPortfolioModal } from './portfolio/ConfirmClearAllPortfolioModal'; // New import
+import { ConfirmClearAllPortfolioModal } from './portfolio/ConfirmClearAllPortfolioModal';
+import { EditInvestmentModal } from './portfolio/EditInvestmentModal';
+import { ExportOptionsModal } from './portfolio/ExportOptionsModal';
+import { DisplayCodeModal } from './portfolio/DisplayCodeModal';
+import { ImportPortfolioModal } from './portfolio/ImportPortfolioModal';
+import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal'; // New Modal
 import { LoadingSpinner } from './LoadingSpinner';
-import { TrashIcon } from './Icons'; // For clear all button
+import { TrashIcon, UploadIcon, DownloadIcon } from './Icons'; 
 
 interface PortfolioModalProps {
   isOpen: boolean;
@@ -17,7 +22,9 @@ interface PortfolioModalProps {
   addPortfolioEntry: (item: ItemMapInfo, quantity: number, purchasePrice: number, purchaseDate: number) => void;
   recordSaleAndUpdatePortfolio: (entryId: string, quantitySold: number, salePrice: number, saleDate: number) => void;
   deletePortfolioEntry: (entryId: string) => void; 
-  clearAllPortfolioData: () => void; // New prop
+  clearAllPortfolioData: () => void; 
+  updatePortfolioEntryDetails: (entryId: string, updates: PortfolioEntryUpdate) => void;
+  replacePortfolio: (newEntries: PortfolioEntry[]) => void;
   allItems: ItemMapInfo[];
   getItemIconUrl: (iconName: string) => string;
   getItemName: (itemId: number) => string; 
@@ -26,6 +33,13 @@ interface PortfolioModalProps {
   isConsentGranted: boolean; 
 }
 
+const PORTFOLIO_TABS = [
+  { key: 'open', label: 'Open Positions' },
+  { key: 'closed', label: 'Closed Positions' },
+  { key: 'add', label: 'Add New' },
+] as const;
+
+
 export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   isOpen,
   onClose,
@@ -33,7 +47,9 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   addPortfolioEntry,
   recordSaleAndUpdatePortfolio,
   deletePortfolioEntry, 
-  clearAllPortfolioData, // Destructure new prop
+  clearAllPortfolioData, 
+  updatePortfolioEntryDetails,
+  replacePortfolio,
   allItems,
   getItemIconUrl,
   getItemName,
@@ -49,23 +65,30 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
 
   const [entryToDelete, setEntryToDelete] = useState<PortfolioEntry | null>(null);
   const [isConfirmDeleteModalOpen, setIsConfirmDeleteModalOpen] = useState<boolean>(false);
-  const [isConfirmClearAllModalOpen, setIsConfirmClearAllModalOpen] = useState<boolean>(false); // New state
+  const [isConfirmClearAllModalOpen, setIsConfirmClearAllModalOpen] = useState<boolean>(false); 
+  
+  const [entryToEdit, setEntryToEdit] = useState<PortfolioEntry | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
+  const [isExportOptionsModalOpen, setIsExportOptionsModalOpen] = useState<boolean>(false);
+  const [isDisplayCodeModalOpen, setIsDisplayCodeModalOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  
+  const [isConfirmImportOverwriteModalOpen, setIsConfirmImportOverwriteModalOpen] = useState<boolean>(false); // New state
+  const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioEntry[] | null>(null); // New state
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (isConfirmClearAllModalOpen) {
-            setIsConfirmClearAllModalOpen(false);
-        } else if (isConfirmDeleteModalOpen) {
-          setIsConfirmDeleteModalOpen(false);
-          setEntryToDelete(null);
-        } else if (isSellModalOpen) {
-          setIsSellModalOpen(false);
-          setItemToSell(null);
-        } else {
-          onClose();
-        }
+        if (isConfirmImportOverwriteModalOpen) setIsConfirmImportOverwriteModalOpen(false);
+        else if (isDisplayCodeModalOpen) setIsDisplayCodeModalOpen(false);
+        else if (isExportOptionsModalOpen) setIsExportOptionsModalOpen(false);
+        else if (isImportModalOpen) setIsImportModalOpen(false);
+        else if (isEditModalOpen) setIsEditModalOpen(false);
+        else if (isConfirmClearAllModalOpen) setIsConfirmClearAllModalOpen(false);
+        else if (isConfirmDeleteModalOpen) setIsConfirmDeleteModalOpen(false);
+        else if (isSellModalOpen) setIsSellModalOpen(false);
+        else onClose();
       }
     };
     if (isOpen) {
@@ -74,10 +97,17 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen, onClose, isSellModalOpen, isConfirmDeleteModalOpen, isConfirmClearAllModalOpen]);
+  }, [
+    isOpen, onClose, isSellModalOpen, isConfirmDeleteModalOpen, 
+    isConfirmClearAllModalOpen, isEditModalOpen, isExportOptionsModalOpen,
+    isDisplayCodeModalOpen, isImportModalOpen, isConfirmImportOverwriteModalOpen
+  ]);
   
   const fetchAllLivePrices = useCallback(async () => {
-    if (!isConsentGranted || portfolioEntries.length === 0) return;
+    if (!isConsentGranted || portfolioEntries.length === 0) {
+      setLivePrices({}); 
+      return;
+    }
     
     const openEntries = portfolioEntries.filter(e => e.quantityPurchased - e.quantitySoldFromThisLot > 0);
     if (openEntries.length === 0) {
@@ -111,9 +141,11 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   useEffect(() => {
     if (isOpen && isConsentGranted) {
       fetchAllLivePrices();
-      if (!isSellModalOpen && !isConfirmDeleteModalOpen && !isConfirmClearAllModalOpen) setActiveTab('open'); 
+      if (!isSellModalOpen && !isConfirmDeleteModalOpen && !isConfirmClearAllModalOpen && !isEditModalOpen && !isImportModalOpen && !isExportOptionsModalOpen && !isDisplayCodeModalOpen && !isConfirmImportOverwriteModalOpen) {
+        setActiveTab('open'); 
+      }
     }
-  }, [isOpen, isConsentGranted, fetchAllLivePrices, isSellModalOpen, isConfirmDeleteModalOpen, isConfirmClearAllModalOpen]);
+  }, [isOpen, isConsentGranted, fetchAllLivePrices, isSellModalOpen, isConfirmDeleteModalOpen, isConfirmClearAllModalOpen, isEditModalOpen, isImportModalOpen, isExportOptionsModalOpen, isDisplayCodeModalOpen, isConfirmImportOverwriteModalOpen]);
 
 
   const handleOpenSellModal = (entry: PortfolioEntry) => {
@@ -154,6 +186,63 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
     deletePortfolioEntry(entryId);
     fetchAllLivePrices(); 
     handleCloseConfirmDeleteModal();
+  };
+
+  const handleOpenEditModal = (entry: PortfolioEntry) => {
+    setEntryToEdit(entry);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setEntryToEdit(null);
+    setIsEditModalOpen(false);
+  };
+
+  const handleConfirmEdit = (entryId: string, updates: PortfolioEntryUpdate) => {
+    updatePortfolioEntryDetails(entryId, updates);
+    fetchAllLivePrices(); 
+    handleCloseEditModal();
+  };
+
+  const handleShowCodeModalRequest = () => {
+    setIsDisplayCodeModalOpen(true);
+  };
+
+  const handleConfirmImport = (importedData: PortfolioEntry[]) => {
+    console.log('[PortfolioModal] handleConfirmImport called. Storing data and opening custom confirm modal.');
+    addNotification('Please review the import confirmation.', 'info'); // Inform user about next step
+    setImportedDataToConfirm(importedData);
+    setIsImportModalOpen(false); // Close the import selection modal
+    setIsConfirmImportOverwriteModalOpen(true); // Open our custom confirmation modal
+  };
+
+  const executeConfirmedImport = () => {
+    if (!importedDataToConfirm) {
+        console.error('[PortfolioModal] executeConfirmedImport called but no data was staged.');
+        addNotification('Import error: No data to import.', 'error');
+        return;
+    }
+    console.log('[PortfolioModal] User confirmed overwrite via custom modal. Processing...');
+    addNotification('Import confirmed. Processing portfolio replacement...', 'info');
+    replacePortfolio(importedDataToConfirm);
+    console.log('[PortfolioModal] replacePortfolio called.');
+    
+    fetchAllLivePrices().then(() => {
+        console.log('[PortfolioModal] fetchAllLivePrices completed after import.');
+        addNotification("Portfolio restored successfully!", "success");
+    }).catch(err => {
+        console.error('[PortfolioModal] Error during fetchAllLivePrices after import:', err);
+        addNotification("Portfolio restored, but failed to refresh live prices.", "error");
+    });
+    setImportedDataToConfirm(null); // Clear staged data
+    setIsConfirmImportOverwriteModalOpen(false); // Close confirmation modal
+  };
+
+  const cancelImportOverwrite = () => {
+    console.log('[PortfolioModal] User cancelled overwrite via custom modal.');
+    addNotification("Portfolio import cancelled.", "info");
+    setImportedDataToConfirm(null);
+    setIsConfirmImportOverwriteModalOpen(false);
   };
 
 
@@ -229,11 +318,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
 
         <div className="my-4 sm:my-6 border-b border-[var(--border-primary)]">
           <nav className="flex space-x-1 sm:space-x-2" aria-label="Tabs">
-            {([
-                {key: 'open', label: 'Open Positions'}, 
-                {key: 'closed', label: 'Closed Positions'},
-                {key: 'add', label: 'Add Investment'}
-            ] as const ).map((tab) => (
+            {PORTFOLIO_TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -268,7 +353,8 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                     getItemName={getItemName}
                     livePrices={livePrices}
                     onSellAction={handleOpenSellModal}
-                    onDeleteAction={handleOpenConfirmDeleteModal} 
+                    onDeleteAction={handleOpenConfirmDeleteModal}
+                    onEditAction={handleOpenEditModal}
                     tableType="open"
                 />
             )}
@@ -279,24 +365,41 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                     getItemIconUrl={getItemIconUrl}
                     getItemName={getItemName}
                     livePrices={{}} 
+                    onEditAction={handleOpenEditModal}
+                    onDeleteAction={handleOpenConfirmDeleteModal}
                     tableType="closed"
                 />
             )}
         </div>
         
-        {/* Footer for Clear All button */}
-        <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex justify-end">
+        <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-wrap justify-end gap-2 sm:gap-3">
+            <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
+                aria-label="Import portfolio data"
+            >
+                <UploadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Import
+            </button>
+            <button
+                onClick={() => setIsExportOptionsModalOpen(true)}
+                disabled={portfolioEntries.length === 0}
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Export portfolio data"
+            >
+                <DownloadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Export
+            </button>
             <button
                 onClick={() => setIsConfirmClearAllModalOpen(true)}
                 disabled={portfolioEntries.length === 0}
-                className="flex items-center text-sm px-4 py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Clear all portfolio data"
             >
-                <TrashIcon className="w-4 h-4 mr-2" />
-                Clear All Portfolio Data
+                <TrashIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Clear All
             </button>
         </div>
-
 
         {isSellModalOpen && itemToSell && (
           <SellInvestmentModal
@@ -328,6 +431,53 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                 onClose={() => setIsConfirmClearAllModalOpen(false)}
                 onConfirmClearAll={clearAllPortfolioData}
             />
+        )}
+
+        {isEditModalOpen && entryToEdit && (
+          <EditInvestmentModal
+            isOpen={isEditModalOpen}
+            onClose={handleCloseEditModal}
+            entryToEdit={entryToEdit}
+            itemInfo={allItems.find(item => item.id === entryToEdit.itemId) || null}
+            onConfirmEdit={handleConfirmEdit}
+            addNotification={addNotification}
+          />
+        )}
+
+        {isExportOptionsModalOpen && (
+          <ExportOptionsModal
+            isOpen={isExportOptionsModalOpen}
+            onClose={() => setIsExportOptionsModalOpen(false)}
+            portfolioEntries={portfolioEntries}
+            onShowCodeModalRequest={handleShowCodeModalRequest}
+            addNotification={addNotification}
+          />
+        )}
+
+        {isDisplayCodeModalOpen && (
+          <DisplayCodeModal
+            isOpen={isDisplayCodeModalOpen}
+            onClose={() => setIsDisplayCodeModalOpen(false)}
+            portfolioEntries={portfolioEntries}
+            addNotification={addNotification}
+          />
+        )}
+
+        {isImportModalOpen && (
+          <ImportPortfolioModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            onConfirmImport={handleConfirmImport} 
+            addNotification={addNotification}
+          />
+        )}
+
+        {isConfirmImportOverwriteModalOpen && (
+          <ConfirmImportOverwriteModal
+            isOpen={isConfirmImportOverwriteModalOpen}
+            onConfirm={executeConfirmedImport}
+            onCancel={cancelImportOverwrite}
+          />
         )}
       </div>
     </div>

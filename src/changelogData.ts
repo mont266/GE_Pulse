@@ -4,6 +4,20 @@ import { ChangelogEntry } from './types';
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.10",
+    date: "2025-06-12", // Assuming today's date for new entry
+    changes: [
+      "Fixed text overflow for long item names in 'Top Market Movers' section by allowing up to two lines with an ellipsis, improving desktop display.",
+      "Removed info notifications when using 'Limit' (quantity) and 'Current' (price) helper buttons in portfolio investment forms to reduce UI clutter. Input fields updating provide sufficient feedback.",
+      "Added portfolio editing: Users can now modify the original purchase quantity, price, and date for investment lots.",
+      "Implemented portfolio import/export: Users can back up their portfolio as a downloadable JSON file or a copyable Base64 encoded code, and restore it using either method. Includes custom confirmation modals for overwrite actions.",
+      "Improved copy-to-clipboard confirmation for portfolio export code: An inline message with an icon now appears next to the 'Copy Code' button for clear feedback.",
+      "Added 'Quick Access' section to Settings for easier mobile navigation (e.g., section reordering toggle).",
+      "Initial setup for version 0.10.",
+    ],
+    notes: "This version significantly enhances portfolio management with editing, robust import/export capabilities, and improved UI feedback. It also refines the user experience by reducing notification clutter in portfolio forms and fixing text display issues."
+  },
+  {
     version: "Beta v0.09",
     date: "2025-06-10", 
     changes: [

@@ -221,3 +221,5 @@ export interface PortfolioEntry {
   totalTaxPaidFromThisLot: number; // Default 0. Sum of tax paid for all sales from this lot.
   lastSaleDate?: number; // Timestamp of the most recent sale from this lot
 }
+
+export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;

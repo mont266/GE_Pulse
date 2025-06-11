@@ -72,7 +72,7 @@ const MoverListItem: React.FC<{
           }}
         />
         <div className="flex-grow min-w-0 flex sm:block items-center sm:items-start justify-between sm:justify-start">
-          <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors truncate" title={item.name}>
+          <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors line-clamp-2" title={item.name}>
             {item.name}
           </span>
           <div className="flex items-center text-xs font-medium sm:mt-0.5 flex-shrink-0">

@@ -122,9 +122,9 @@ export const AddInvestmentFromViewModal: React.FC<AddInvestmentFromViewModalProp
   const handleSetQuantityToBuyLimit = useCallback(() => {
     if (itemToAdd && !isFormDisabled) {
       setQuantityInput(itemToAdd.limit.toString());
-      addNotification(`Quantity set to buy limit for ${itemToAdd.name} (${itemToAdd.limit.toLocaleString()}).`, 'info');
+      // addNotification(`Quantity set to buy limit for ${itemToAdd.name} (${itemToAdd.limit.toLocaleString()}).`, 'info');
     }
-  }, [itemToAdd, isFormDisabled, addNotification]);
+  }, [itemToAdd, isFormDisabled]);
 
   const handleSetPriceToCurrent = useCallback(async () => {
     if (itemToAdd && !isFormDisabled && fetchLatestPrice) {
@@ -133,7 +133,7 @@ export const AddInvestmentFromViewModal: React.FC<AddInvestmentFromViewModalProp
         const priceData = await fetchLatestPrice(itemToAdd.id);
         if (priceData && priceData.high !== null) {
           setPurchasePriceInput(priceData.high.toString());
-          addNotification(`Purchase price set to current market buy for ${itemToAdd.name} (${priceData.high.toLocaleString()} GP).`, 'info');
+          // addNotification(`Purchase price set to current market buy for ${itemToAdd.name} (${priceData.high.toLocaleString()} GP).`, 'info');
         } else {
           addNotification(`Could not fetch current market price for ${itemToAdd.name}. If item is new, try again later.`, 'error');
         }

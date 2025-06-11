@@ -1,4 +1,5 @@
 
+
 import React, { useEffect } from 'react';
 import { AppTheme, WordingPreference } from '../types'; // TopMoversCalculationMode import removed
 
@@ -24,8 +25,8 @@ interface SettingsModalProps {
   consentStatus: 'pending' | 'granted' | 'denied';
   onGrantConsent: () => void;
   onRevokeConsent: () => void;
-  // topMoversCalculationMode prop removed
-  // onSetTopMoversCalculationMode prop removed
+  isDragAndDropEnabled: boolean; 
+  onToggleDragAndDrop: () => void; 
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -50,8 +51,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   consentStatus,
   onGrantConsent,
   onRevokeConsent,
-  // topMoversCalculationMode, // destructured prop removed
-  // onSetTopMoversCalculationMode, // destructured prop removed
+  isDragAndDropEnabled, 
+  onToggleDragAndDrop, 
 }) => {
 
   useEffect(() => {
@@ -210,8 +211,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Top Market Movers Settings section removed */}
-
                 <div>
                   <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">Notification Settings</h3>
                   <div className="space-y-3">
@@ -261,6 +260,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span>{pref === 'uk' ? 'UK English' : 'US English'}</span>
                       </label>
                     ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-3">Quick Access</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
+                      <span className="text-[var(--text-primary)]">Enable Section Reordering</span>
+                      <label htmlFor="dragDropToggleModal" className="flex items-center cursor-pointer">
+                        <div className="relative">
+                          <input 
+                            type="checkbox" 
+                            id="dragDropToggleModal" 
+                            className="sr-only" 
+                            checked={isDragAndDropEnabled} 
+                            onChange={onToggleDragAndDrop}
+                          />
+                          <div className={`block w-12 h-6 rounded-full transition-colors bg-[${isDragAndDropEnabled ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${isDragAndDropEnabled ? 'translate-x-6' : ''}`}></div>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 

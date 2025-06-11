@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
@@ -52,7 +53,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.09";
+const APP_VERSION = "Beta v0.10";
 
 // Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
@@ -373,6 +374,8 @@ const App: React.FC = () => {
     recordSaleAndUpdatePortfolio,
     deletePortfolioEntry,
     clearAllPortfolioData,
+    updatePortfolioEntryDetails,
+    replacePortfolio, // Get the new function
   } = usePortfolio(isConsentGranted, addNotification);
 
 
@@ -490,8 +493,7 @@ const App: React.FC = () => {
     topMoversMetricType
   ]);
 
-
-  const handleRefreshAllFavorites = useCallback(async () => {
+  const handleRefreshAllFavorites = useCallback(async (isAutoRefresh: boolean = false) => {
     if (favoritesRefreshLockRef.current) return;
     if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
   
@@ -571,7 +573,7 @@ const App: React.FC = () => {
             if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
           }
         } else { 
-          const currentPriceDataInElse = priceData; // Explicitly alias for clarity in this block
+          const currentPriceDataInElse = priceData; 
           if (isMountedRef.current) {
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
             setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
@@ -590,26 +592,50 @@ const App: React.FC = () => {
   
     if (isMountedRef.current) {
       setIsRefreshingFavorites(false);
-      if (allSucceeded && favoriteItemIds.length > 0) {
+      if (allSucceeded && favoriteItemIds.length > 0 && !isAutoRefresh) { // Only show success if not auto-refresh
         addNotification('Favorite items data refreshed!', 'success');
-      } else if (!allSucceeded && favoriteItemIds.length > 0) {
+      } else if (!allSucceeded && favoriteItemIds.length > 0) { // Always show error
         addNotification('Some favorite items could not be refreshed.', 'error');
       }
     }
     favoritesRefreshLockRef.current = false;
   }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
 
+  // 1-minute auto-refresh for favorites
+  useEffect(() => {
+    let intervalId: number | null = null;
+
+    if (isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
+      intervalId = window.setInterval(() => {
+        if (!favoritesRefreshLockRef.current && !isRefreshingFavorites) {
+          handleRefreshAllFavorites(true); // Pass true for auto-refresh to suppress success notification
+        }
+      }, 60 * 1000); // 1 minute
+    }
+
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites, isRefreshingFavorites]);
+
+
   const toggleFavoritesSection = useCallback(() => {
     setIsFavoritesSectionCollapsed(prev => {
       const newCollapsedState = !prev;
       if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
-        if (!isRefreshingFavorites && !favoritesRefreshLockRef.current) { 
-           handleRefreshAllFavorites();
+        // Only refresh if no data exists for any favorite item, or if it's explicitly requested.
+        // For now, let's keep the existing behavior: refresh when expanded if not already refreshing.
+        const shouldInitialRefresh = Object.values(favoriteItemPrices).some(price => price === null || price === undefined) || Object.values(favoriteItemPrices).length < favoriteItemIds.length;
+
+        if (!isRefreshingFavorites && !favoritesRefreshLockRef.current && shouldInitialRefresh) { 
+           handleRefreshAllFavorites(); // Defaults to isAutoRefresh: false
         }
       }
       return newCollapsedState;
     });
-  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites]);
+  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites, favoriteItemPrices]);
 
 
   useEffect(() => {
@@ -768,7 +794,7 @@ const App: React.FC = () => {
         if (itemDetail) {
           if (favoriteItemPrices[itemId] !== undefined && 
               favoriteItemPrices[itemId] !== 'loading' &&
-              favoriteItemPrices[itemId] !== 'error') { // Also check for 'error' to allow re-fetch on error
+              favoriteItemPrices[itemId] !== 'error') { 
              continue; 
           }
           
@@ -859,7 +885,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted]); // favoriteItemPrices REMOVED from dependencies
+  }, [favoriteItemIds, allItems, isConsentGranted]); 
 
   useEffect(() => {
     const currentActiveTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
@@ -1034,6 +1060,7 @@ const App: React.FC = () => {
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       }
       
+      // Update the specific favorite item's data if it's the currentItem
       if (favoriteItemIds.includes(currentItem.id) && isConsentGranted) {
         if (isMountedRefreshRef.current) setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
         
@@ -1043,6 +1070,7 @@ const App: React.FC = () => {
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'loading' }));
           }
           try {
+            // Fetch 5m data specifically for hourly change and sparkline, regardless of main chart timespan
             const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
             const nowForFavMs = Date.now(); 
 
@@ -1053,24 +1081,24 @@ const App: React.FC = () => {
             }
             
             let priceThen: number | null = null;
-            const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
+            const sortedHistoricalFav = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
             const oneHourAgoMsThresholdCalc = nowForFavMs - (60 * 60 * 1000);
-            for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
-                    priceThen = sortedHistorical[i].price;
+            for (let i = sortedHistoricalFav.length - 1; i >= 0; i--) {
+                if (sortedHistoricalFav[i].timestamp <= oneHourAgoMsThresholdCalc) {
+                    priceThen = sortedHistoricalFav[i].price;
                     break;
                 }
             }
-            if (priceThen === null && sortedHistorical.length > 0) {
+            if (priceThen === null && sortedHistoricalFav.length > 0) {
                 let bestFallbackCandidate: ChartDataPoint | null = null;
-                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                    if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
-                        bestFallbackCandidate = sortedHistorical[i];
+                for (let i = sortedHistoricalFav.length - 1; i >= 0; i--) {
+                    if (sortedHistoricalFav[i].timestamp < oneHourAgoMsThresholdCalc) {
+                        bestFallbackCandidate = sortedHistoricalFav[i];
                         break;
                     }
                 }
-                 if (!bestFallbackCandidate && sortedHistorical.length > 0) {
-                    priceThen = sortedHistorical[0].price;
+                 if (!bestFallbackCandidate && sortedHistoricalFav.length > 0) {
+                    priceThen = sortedHistoricalFav[0].price;
                 } else if (bestFallbackCandidate) {
                     priceThen = bestFallbackCandidate.price;
                 }
@@ -1091,7 +1119,7 @@ const App: React.FC = () => {
              }
           }
         } else { 
-          const currentLatestInElse = latest; // Explicitly alias
+          const currentLatestInElse = latest; 
           if (isMountedRefreshRef.current) {
             setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
@@ -1099,9 +1127,8 @@ const App: React.FC = () => {
         }
       }
 
-      if (favoriteItemIds.length > 0 && isConsentGranted && !favoritesRefreshLockRef.current) {
-        handleRefreshAllFavorites();
-      }
+      // The general handleRefreshAllFavorites() call was removed from here. 
+      // It's now on a 1-min interval or triggered by expanding the favorites section / manual refresh button.
 
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
@@ -1120,7 +1147,7 @@ const App: React.FC = () => {
     } finally {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, handleRefreshAllFavorites]);
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems]);
 
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
@@ -1171,14 +1198,16 @@ const App: React.FC = () => {
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
     setSelectedTimespan(timespan); 
+    // Data refresh will be triggered by the useEffect watching selectedTimespan and selectedItem
   }, []); 
 
   useEffect(() => {
     if (selectedItem) {
+      // isUserInitiated: false because this is a reactive refresh, not a direct user "refresh" button click
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData removed from deps to prevent potential loops if it's not stable enough
+  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData is memoized, but changes to its internal logic via its own deps list are fine.
 
 
   useEffect(() => {
@@ -1206,6 +1235,7 @@ const App: React.FC = () => {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
       autoRefreshIntervalIdRef.current = window.setInterval(() => {
         if (selectedItem) { 
+            // isUserInitiated: false because this is an automatic background refresh
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
@@ -1483,7 +1513,7 @@ const App: React.FC = () => {
           showFavoriteSparklines,
           wordingPreference,
           isRefreshingFavorites,
-          onRefreshAllFavorites: handleRefreshAllFavorites,
+          onRefreshAllFavorites: () => handleRefreshAllFavorites(false), // Explicitly false for manual/expand refresh
           isConsentGranted,
           onQuickSetAlert: handleQuickSetAlertFromFavorites,
           isCollapsed: isFavoritesSectionCollapsed,
@@ -1539,9 +1569,11 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] p-4 md:p-8 flex flex-col items-center">
       <NotificationBar notifications={notifications} />
-      <header className="w-full max-w-6xl mb-8 text-center flex flex-col items-center">
+      <header className="w-full max-w-6xl mb-8 text-center">
          <div className="flex items-center justify-between w-full">
+            {/* Left Icons Group */}
             <div className="flex items-center gap-1">
+                {/* Settings Icon (Always visible) */}
                 <button 
                     onClick={toggleSettingsModal} 
                     className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
@@ -1550,9 +1582,11 @@ const App: React.FC = () => {
                 >
                   <SettingsIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
                 </button>
+
+                {/* Toggle D&D Icon (Desktop-only, now second in this group) */}
                 <button
                     onClick={toggleDragAndDrop}
-                    className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
+                    className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors hidden md:block"
                     aria-label={isDragAndDropEnabled ? "Disable section reordering" : "Enable section reordering"}
                     title={isDragAndDropEnabled ? "Disable section reordering" : "Enable section reordering"}
                 >
@@ -1562,7 +1596,9 @@ const App: React.FC = () => {
                         <ReorderDisabledIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
                     )}
                 </button>
-                 <button
+                
+                {/* Portfolio Icon (Always visible, now potentially third on desktop) */}
+                <button
                     onClick={togglePortfolioModal}
                     className={`p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors ${!isConsentGranted ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Open Portfolio"
@@ -1572,9 +1608,11 @@ const App: React.FC = () => {
                     <PortfolioIcon className={`h-7 w-7 ${isConsentGranted ? 'text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]' : 'text-[var(--text-muted)]'}`} />
                 </button>
             </div>
+            
+            {/* Logo */}
             <button 
               onClick={handleResetView}
-              className="flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] rounded-md p-1"
+              className="flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] rounded-md p-1 mx-auto"
               aria-label="GE Pulse - Click to reset item view"
               disabled={!selectedItem} 
             >
@@ -1584,8 +1622,15 @@ const App: React.FC = () => {
                 </svg>
                 <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] title-neon-glow transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
             </button>
-            {/* Adjusted placeholder width to account for the new PortfolioIcon */}
-            <div style={{ width: 'calc(3 * (1.75rem + 0.5rem) + 0.25rem)' }}></div> 
+
+            {/* Right Icons Group */}
+            <div className="flex items-center justify-end gap-1">
+                {/* Spacer for Mobile (to balance Settings, Portfolio) */}
+                <div className="block md:hidden w-[5.75rem] h-11"></div> 
+
+                {/* Spacer for Desktop (to balance Settings, D&D, Portfolio) */}
+                <div className="hidden md:block w-[8.75rem] h-11"></div> 
+            </div>
         </div>
         <p className="text-[var(--text-secondary)] mt-1">Live prices & insights for Old School RuneScape.</p>
       </header>
@@ -1613,6 +1658,8 @@ const App: React.FC = () => {
           consentStatus={consentStatus}
           onGrantConsent={handleConsentGranted}
           onRevokeConsent={handleRevokeConsent}
+          isDragAndDropEnabled={isDragAndDropEnabled}
+          onToggleDragAndDrop={toggleDragAndDrop}
         />
       )}
 
@@ -1640,7 +1687,9 @@ const App: React.FC = () => {
           addPortfolioEntry={addPortfolioEntry}
           recordSaleAndUpdatePortfolio={recordSaleAndUpdatePortfolio}
           deletePortfolioEntry={deletePortfolioEntry} 
-          clearAllPortfolioData={clearAllPortfolioData} // Pass prop
+          clearAllPortfolioData={clearAllPortfolioData} 
+          updatePortfolioEntryDetails={updatePortfolioEntryDetails}
+          replacePortfolio={replacePortfolio} // Pass the new function
           allItems={allItems}
           getItemIconUrl={getItemIconUrl}
           getItemName={getItemName}
