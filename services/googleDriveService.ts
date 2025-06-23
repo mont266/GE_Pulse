@@ -152,6 +152,8 @@ class GoogleDriveService {
             console.log('[GDS] Access token acquired and stored.');
             try {
               console.log('[GDS] Fetching user profile...');
+              // Ensure gapi.client has the token set for this call too
+              window.gapi.client.setToken({ access_token: this.accessToken });
               const profileResponse = await window.gapi.client.drive.about.get({ fields: "user" });
               this.signedInUser = {
                   email: profileResponse.result.user.emailAddress,
@@ -204,7 +206,7 @@ class GoogleDriveService {
   public async signOut(): Promise<void> {
     console.log('[GDS] signOut called.');
     if (this.accessToken) {
-      console.log('[GDS] Revoking access token:', this.accessToken);
+      console.log('[GDS] Revoking access token:', this.accessToken.substring(0, 10) + "..."); // Log only a portion
       window.google.accounts.oauth2.revoke(this.accessToken, () => {
         console.log('[GDS] Access token revoked successfully callback.');
         this.accessToken = null;
@@ -292,7 +294,7 @@ class GoogleDriveService {
       console.log('[GDS] All components ready for save picker.');
 
       const view = new window.google.picker.DocsView();
-      view.setParent('root'); // Default to My Drive
+      view.setParent('root'); 
       console.log('[GDS] Save Picker view.setParent("root") called.');
       view.setIncludeFolders(true);
       console.log('[GDS] Save Picker view.setIncludeFolders(true) called.');
@@ -318,11 +320,14 @@ class GoogleDriveService {
 
   private async uploadFile(fileContent: string, fileName: string, folderId: string): Promise<void> {
     console.log(`[GDS] uploadFile called. fileName: ${fileName}, folderId: ${folderId}`);
-    if (!this.pickerApiLoaded) { 
-      const errMsg = '[GDS] Drive API client not loaded for uploadFile.';
+    if (!this.pickerApiLoaded || !this.accessToken) { 
+      const errMsg = '[GDS] Drive API client not loaded or access token missing for uploadFile.';
       console.error(errMsg);
       throw new Error(errMsg);
     }
+    window.gapi.client.setToken({ access_token: this.accessToken });
+    console.log('[GDS] UploadFile: gapi.client token explicitly set.');
+
 
     const metadata = {
       name: fileName,
@@ -385,7 +390,7 @@ class GoogleDriveService {
       console.log('[GDS] All components ready for open picker.');
 
       const view = new window.google.picker.DocsView()
-        .setParent('root') // Default to My Drive
+        .setParent('root') 
         .setMimeTypes('application/json') 
         .setIncludeFolders(true) 
         .setSelectFolderEnabled(false); 
@@ -406,6 +411,15 @@ class GoogleDriveService {
             }
             const fileId = data.docs[0].id;
             console.log(`[GDS] File picked. ID: ${fileId}. Name: ${data.docs[0].name}`);
+            
+            if (!this.accessToken) {
+              console.error('[GDS] Open Picker: Access token is null before fetching file content. This should not happen.');
+              reject(new Error('Authentication error: Access token missing for file fetch.'));
+              return;
+            }
+            window.gapi.client.setToken({ access_token: this.accessToken });
+            console.log('[GDS] Open Picker: gapi.client token explicitly set before fetching file content.');
+
             try {
               console.log(`[GDS] Fetching content for file ID: ${fileId}`);
               const response = await window.gapi.client.drive.files.get({
@@ -416,7 +430,8 @@ class GoogleDriveService {
               resolve(response.body); 
             } catch (error: any) {
               console.error('[GDS] Error fetching file content:', error);
-              reject(new Error(`Failed to open file: ${error.result?.error?.message || error.message || 'Unknown error'}`));
+              const errorMessage = error.result?.error?.message || error.message || 'Unknown error';
+              reject(new Error(`Failed to open file: ${errorMessage}`));
             }
           } else if (data.action === window.google.picker.Action.CANCEL) {
             console.log('[GDS] OpenPicker cancelled by user.');
