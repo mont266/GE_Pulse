@@ -193,14 +193,6 @@ class GoogleDriveService {
   public getSignedInUserProfile(): GoogleUserProfile | null {
     const token = this.getToken(); 
     if (token && window.gapi?.client?.getToken()?.access_token === token) {
-      // This is a placeholder. A real implementation would fetch user info
-      // using the access token, e.g., by calling the Google People API or
-      // decoding an ID token if 'openid', 'email', 'profile' scopes were used.
-      // For simplicity in this demo, we return a generic user object.
-      // If you need the actual email, ensure your scopes are correct and implement
-      // the necessary API call or token decoding logic.
-      // For this app, we are not fetching user's email but can get it if required with correct scopes.
-      // Returning a generic email for now, should ideally be from id_token or people API.
       const idToken = window.gapi.client.getToken().id_token;
       if (idToken) {
           try {
@@ -223,19 +215,27 @@ class GoogleDriveService {
         return;
       }
 
-      const folderView = new window.google.picker.View(window.google.picker.ViewId.FOLDERS);
-      folderView.setParent('root'); 
-      
+      const docsView = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+      docsView.setIncludeFolders(true); // Display folders
+      docsView.setSelectFolderEnabled(true); // Allow selecting a folder
+      docsView.setParent('root'); // Start at root
+
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
-        // .setAppId(GDRIVE_APP_ID) // GDRIVE_APP_ID is deprecated and often not needed if OAuth is correctly configured.
         .setOAuthToken(this.getToken()!)
-        .addView(folderView) 
+        .addView(docsView)
         .setTitle('Select Folder to Save Portfolio')
         .setCallback((data: any) => {
           if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
-            const selectedFolder = data[window.google.picker.Response.DOCUMENTS][0];
-            const folderId = selectedFolder.id;
+            const selectedItem = data[window.google.picker.Response.DOCUMENTS][0];
+            
+            // Ensure a folder was selected
+            if (selectedItem.mimeType !== "application/vnd.google-apps.folder") {
+                console.error('Google Picker: Selected item is not a folder.', selectedItem);
+                reject(new Error('Please select a folder as the destination.'));
+                return;
+            }
+            const folderId = selectedItem.id;
             
             const boundary = '-------314159265358979323846';
             const delimiter = "\r\n--" + boundary + "\r\n";
@@ -292,7 +292,6 @@ class GoogleDriveService {
       
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
-        // .setAppId(GDRIVE_APP_ID) // GDRIVE_APP_ID is deprecated.
         .setOAuthToken(this.getToken()!)
         .addView(view)
         .setTitle('Load Portfolio from Google Drive')
