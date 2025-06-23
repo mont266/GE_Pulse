@@ -1,4 +1,3 @@
-
 import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated import path
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
@@ -31,11 +30,16 @@ export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
-export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; // New key for portfolio data
-// TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY is removed as this setting is no longer stored
-// TOP_MOVERS_METRIC_TYPE_STORAGE_KEY is not added as this setting is session-only
+export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; 
+export const GDRIVE_ACCESS_TOKEN_KEY = 'gePulseGDriveToken'; // For storing GDrive access token in session
 
 export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; // For storing user's consent decision
+
+// Google API Credentials (to be sourced from process.env by the app)
+export const GOOGLE_API_KEY_ENV_VAR = 'GOOGLE_API_KEY';
+export const GOOGLE_CLIENT_ID_ENV_VAR = 'GOOGLE_CLIENT_ID';
+export const GDRIVE_PORTFOLIO_FILENAME = 'gepulse_portfolio_backup.json';
+
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
 export const DEFAULT_THEME_ID = 'ge-pulse-dark';
@@ -107,11 +111,8 @@ export const ALL_USER_PREFERENCE_KEYS = [
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   SIDEBAR_ORDER_STORAGE_KEY,
   DRAG_DROP_ENABLED_STORAGE_KEY,
-  PORTFOLIO_STORAGE_KEY, // Added portfolio key
-  // TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY removed
-  // TOP_MOVERS_METRIC_TYPE_STORAGE_KEY not added
-  // Note: CONSENT_STORAGE_KEY is intentionally NOT in this list,
-  // as we need to remember the consent choice itself.
+  PORTFOLIO_STORAGE_KEY, 
+  // GDRIVE_ACCESS_TOKEN_KEY is session storage, not cleared with these
 ];
 
 

@@ -1,11 +1,22 @@
-
 import { ChangelogEntry } from './types';
 
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.11",
+    date: "2025-06-23", // Placeholder for current development
+    changes: [
+      "Added Google Drive integration for portfolio backup and restore. Users can connect their Google account to save and load their portfolio JSON file directly to/from their Google Drive using the Google Picker API. This requires Google API Key and Client ID setup.",
+      "Portfolio items are now clickable. Clicking an item in the Portfolio modal will close the modal and display the item's chart and details in the main view.",
+      "Added a human verification field (simple math question) to the feedback form to help reduce spam submissions.",
+      "Initial setup for version 0.11.",
+      "Prepared application for new feature development and enhancements under v0.11."
+    ],
+    notes: "Version 0.11 branch initiated. Ready for upcoming features and improvements."
+  },
+  {
     version: "Beta v0.10",
-    date: "2025-06-12", // Assuming today's date for new entry
+    date: "2025-06-12", 
     changes: [
       "Fixed text overflow for long item names in 'Top Market Movers' section by allowing up to two lines with an ellipsis, improving desktop display.",
       "Removed info notifications when using 'Limit' (quantity) and 'Current' (price) helper buttons in portfolio investment forms to reduce UI clutter. Input fields updating provide sufficient feedback.",

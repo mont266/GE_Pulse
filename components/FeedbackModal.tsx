@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 
 interface FeedbackModalProps {
@@ -18,9 +19,13 @@ function usePrevious<T>(value: T): T | undefined {
   return ref.current;
 }
 
+const HUMAN_CHECK_EXPECTED_ANSWER = "5"; // For "2 + 3"
+
 export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, addNotification }) => {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('feature');
   const [message, setMessage] = useState<string>('');
+  const [humanCheck, setHumanCheck] = useState<string>('');
+  const [humanCheckError, setHumanCheckError] = useState<string>('');
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const formRef = useRef<HTMLFormElement>(null);
@@ -35,26 +40,21 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
 
     if (isOpen) {
       document.addEventListener('keydown', handleEsc);
-
-      // Only reset form state when the modal transitions from closed to open
-      // (prevIsOpen will be false or undefined if it was previously closed and is now open)
       if (!prevIsOpen) {
-        console.log('[FeedbackModal] Modal transitioned to open, resetting form state.');
         setFeedbackType('feature');
         setMessage('');
+        setHumanCheck('');
+        setHumanCheckError('');
         setSubmitStatus('idle');
         setSubmitMessage('');
       }
     } else {
-      // If the modal is not open, ensure the event listener is removed.
       document.removeEventListener('keydown', handleEsc);
     }
-
-    // Cleanup function for when the component unmounts or before the effect runs again
     return () => {
       document.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen, prevIsOpen, onClose, setFeedbackType, setMessage, setSubmitStatus, setSubmitMessage]); // Dependencies include setters for completeness, though they are stable.
+  }, [isOpen, prevIsOpen, onClose]);
 
   const encode = (data: Record<string, string>) => {
     return Object.keys(data)
@@ -70,6 +70,14 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
       return;
     }
 
+    if (humanCheck.trim() !== HUMAN_CHECK_EXPECTED_ANSWER) {
+      setHumanCheckError(`Incorrect answer. The expected answer is ${HUMAN_CHECK_EXPECTED_ANSWER}.`);
+      setSubmitStatus('idle'); // Keep form active for retry
+      setSubmitMessage(''); // Clear any general submit message
+      return;
+    }
+    setHumanCheckError(''); // Clear error if correct
+
     setSubmitStatus('submitting');
     setSubmitMessage('');
 
@@ -77,6 +85,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
       'form-name': 'feedback',
       'feedback-type': feedbackType,
       'message': message,
+      'human-check': humanCheck, // Add human check to submission
     };
 
     try {
@@ -93,6 +102,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
         setTimeout(() => {
             setFeedbackType('feature');
             setMessage('');
+            setHumanCheck('');
+            setHumanCheckError('');
             setSubmitStatus('idle'); 
             onClose(); 
         }, 2000);
@@ -146,7 +157,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
             {submitMessage}
           </div>
         )}
-        {submitStatus === 'error' && submitMessage && (
+        {submitStatus === 'error' && submitMessage && !humanCheckError && (
             <div className="mb-4 p-3 bg-[var(--notification-error-bg)] text-[var(--notification-text)] rounded-md text-center">
                 {submitMessage}
             </div>
@@ -204,6 +215,36 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
                 required
               />
             </div>
+
+            <div>
+              <label htmlFor="human-check" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                Human Verification: What is 2 + 3? (Enter the number)
+              </label>
+              <input
+                type="text"
+                id="human-check"
+                name="human-check"
+                value={humanCheck}
+                onChange={(e) => {
+                  setHumanCheck(e.target.value);
+                  if (humanCheckError) setHumanCheckError(''); // Clear error on type
+                }}
+                className={`w-full p-2.5 bg-[var(--bg-input)] border rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]
+                  ${humanCheckError ? 'border-[var(--error-text)] ring-1 ring-[var(--error-text)]' : 'border-[var(--border-secondary)]'}
+                `}
+                placeholder="Your answer"
+                disabled={submitStatus === 'submitting'}
+                required
+                aria-describedby={humanCheckError ? "human-check-error" : undefined}
+              />
+              {humanCheckError && (
+                <p id="human-check-error" className="mt-1 text-xs text-[var(--error-text)]">
+                  {humanCheckError}
+                </p>
+              )}
+            </div>
+
+
              <div className="pt-3 flex flex-col sm:flex-row sm:justify-end sm:space-x-3 space-y-2 sm:space-y-0">
                 <button
                     type="button"
@@ -215,7 +256,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
                 </button>
                 <button
                     type="submit"
-                    disabled={submitStatus === 'submitting' || !message.trim()}
+                    disabled={submitStatus === 'submitting' || !message.trim() || !humanCheck.trim()}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-50"
                 >
                     {submitStatus === 'submitting' ? 'Submitting...' : 'Send Feedback'}

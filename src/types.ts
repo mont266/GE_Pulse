@@ -1,4 +1,3 @@
-
 export interface ItemMapInfo {
   examine: string;
   id: number;
@@ -183,16 +182,16 @@ export interface MoverItem {
   id: number;
   name: string;
   icon: string;
-  currentPrice: number; // Relevant for price metric or for context
-  currentVolume?: number; // Relevant for volume metric or for context
-  pastPrice: number; // Relevant for price metric
-  pastVolume?: number; // Relevant for volume metric
-  percentChange: number; // Can be price % or volume %
+  currentPrice: number; 
+  currentVolume?: number; 
+  pastPrice: number; 
+  pastVolume?: number; 
+  percentChange: number; 
 }
 
 export type TopMoversTimespan = '1h' | '24h';
 export type TopMoversCalculationMode = 'performance' | 'accuracy';
-export type TopMoversMetricType = 'price' | 'volume'; // New type
+export type TopMoversMetricType = 'price' | 'volume'; 
 
 export interface TopMoversData {
   winners: MoverItem[];
@@ -208,18 +207,103 @@ export interface SectionRenderProps {
 
 // Portfolio / Investment Tracking Types
 export interface PortfolioEntry {
-  id: string; // Unique ID for this purchase lot
+  id: string; 
   itemId: number;
-  // ItemName & ItemIcon will be derived from allItems using itemId for display purposes
   quantityPurchased: number;
   purchasePricePerItem: number;
-  purchaseDate: number; // Timestamp (e.g., Date.now())
-
-  // Tracking sales from THIS specific purchase lot
-  quantitySoldFromThisLot: number; // Default 0. Total units sold from this lot.
-  totalProceedsFromThisLot: number; // Default 0. Sum of (salePrice * quantitySold) for all sales from this lot.
-  totalTaxPaidFromThisLot: number; // Default 0. Sum of tax paid for all sales from this lot.
-  lastSaleDate?: number; // Timestamp of the most recent sale from this lot
+  purchaseDate: number; 
+  quantitySoldFromThisLot: number; 
+  totalProceedsFromThisLot: number; 
+  totalTaxPaidFromThisLot: number; 
+  lastSaleDate?: number; 
 }
 
 export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;
+
+// Google Drive Integration Types
+export interface GoogleUserProfile {
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export interface GoogleDriveServiceConfig {
+  apiKey: string;
+  clientId: string;
+  onAuthChange: (isSignedIn: boolean, userProfile: GoogleUserProfile | null) => void;
+  onApiReady: () => void;
+  onApiError: (errorMsg: string) => void;
+}
+
+// Augment the global 'google' object from Google Identity Services
+declare global {
+  interface Window {
+    // gapi is already often available via @types/gapi
+    google?: {
+      accounts: {
+        oauth2: {
+          initTokenClient: (config: TokenClientConfig) => TokenClient;
+          revoke: (token: string, callback: () => void) => void;
+        };
+        id: {
+          initialize: (config: any) => void;
+          prompt: (callback?: (notification: any) => void) => void;
+          renderButton: (parentElement: HTMLElement, options: any) => void;
+        };
+      };
+      picker?: { // For Google Picker
+        PickerBuilder: new () => PickerBuilder;
+        ViewId: { [key: string]: string }; // e.g., DOCS, DOCS_IMAGES_AND_VIDEOS, etc.
+        Feature: { [key: string]: string }; // e.g., MULTISELECT_ENABLED
+        Action: { [key: string]: string }; // e.g., PICKED, CANCEL
+        ResponseObject: any; // Type for picker callback data
+        DocsUploadView: new () => any; // If using upload view
+      };
+    };
+  }
+}
+
+// Types for Google Identity Services Token Client
+export interface TokenClientConfig {
+  client_id: string;
+  scope: string;
+  prompt?: string; // e.g. 'consent', 'select_account'
+  callback?: (tokenResponse: TokenResponse) => void;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  expires_in: number; // typically 3600 (1 hour)
+  scope: string;
+  token_type: string; // "Bearer"
+  // Potentially other fields like id_token, authuser, hd, prompt, etc.
+  error?: string;
+  error_description?: string;
+  error_uri?: string;
+}
+
+export interface TokenClient {
+  requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+}
+
+// Types for Google Picker
+interface PickerBuilder {
+  addView: (viewOrViewId: any) => PickerBuilder;
+  setOAuthToken: (token: string) => PickerBuilder;
+  setDeveloperKey: (key: string) => PickerBuilder;
+  setAppId: (appId: string) => PickerBuilder;
+  setCallback: (callback: (data: any) => void) => PickerBuilder;
+  build: () => Picker;
+  // Add more methods as needed, e.g., setOrigin, setTitle, etc.
+  enableFeature: (feature: string) => PickerBuilder;
+  disableFeature: (feature: string) => PickerBuilder;
+  setSelectableMimeTypes: (mimeTypes: string) => PickerBuilder;
+  setMaxItems: (max: number) => PickerBuilder;
+  setTitle: (title: string) => PickerBuilder;
+  setOrigin: (origin: string) => PickerBuilder;
+}
+
+interface Picker {
+  setVisible: (visible: boolean) => void;
+  dispose: () => void;
+}

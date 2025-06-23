@@ -27,6 +27,11 @@
   }
 }
 </script>
+<!-- Google API Client Loader -->
+<script async defer src="https://apis.google.com/js/api.js"></script>
+<!-- Google Identity Services Client Library -->
+<script async defer src="https://accounts.google.com/gsi/client"></script>
+
 <style>
   /* Glow effect for the main price chart line - DEBUGGING with strong RED glow */
   /*
@@ -84,7 +89,7 @@
         <option value="general">General Feedback</option>
       </select>
       <textarea name="message"></textarea>
-      <!-- <input type="email" name="email" /> Removed email input -->
+      <input type="text" name="human-check" /> {/* Added human check field for Netlify */}
     </form>
     <script type="module" src="/index.tsx"></script>
   </body>

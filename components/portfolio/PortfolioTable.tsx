@@ -12,7 +12,8 @@ interface PortfolioTableProps {
   tableType: 'open' | 'closed';
   onSellAction?: (entry: PortfolioEntry) => void; 
   onDeleteAction?: (entry: PortfolioEntry) => void; 
-  onEditAction?: (entry: PortfolioEntry) => void; // New prop for edit action
+  onEditAction?: (entry: PortfolioEntry) => void;
+  onSelectItemAction?: (itemId: number) => void; // New prop for item click
 }
 
 const formatGP = (value?: number | null, shorthand: boolean = false): string => {
@@ -39,7 +40,8 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
   tableType,
   onSellAction,
   onDeleteAction, 
-  onEditAction, // Destructure new prop
+  onEditAction,
+  onSelectItemAction, // Destructure new prop
 }) => {
   if (entries.length === 0) {
     return <p className="text-[var(--text-secondary)] text-center py-6">No {tableType} positions found.</p>;
@@ -113,10 +115,23 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
             return (
               <tr key={entry.id} className="hover:bg-[var(--bg-tertiary)] transition-colors">
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <img src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
-                    <span className="text-sm text-[var(--text-primary)] truncate" title={itemInfo.name}>{itemInfo.name}</span>
-                  </div>
+                  {onSelectItemAction ? (
+                    <button
+                        onClick={() => onSelectItemAction(entry.itemId)}
+                        className="flex items-center group focus:outline-none focus:ring-1 focus:ring-[var(--border-accent)] focus:ring-offset-1 focus:ring-offset-[var(--bg-secondary)] rounded-sm p-0.5 -m-0.5 w-full text-left"
+                        aria-label={`View details for ${itemInfo.name}`}
+                    >
+                        <img src={getItemIconUrl(itemInfo.icon)} alt="" className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
+                        <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors truncate" title={itemInfo.name}>
+                        {itemInfo.name}
+                        </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center">
+                        <img src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
+                        <span className="text-sm text-[var(--text-primary)] truncate" title={itemInfo.name}>{itemInfo.name}</span>
+                    </div>
+                  )}
                 </td>
 
                 {tableType === 'open' ? (

@@ -1,8 +1,7 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types'; // Updated path for types
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile, GoogleDriveServiceConfig } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
+import * as googleDriveService from './services/googleDriveService'; // Import Google Drive service
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
 import { ItemDisplay } from './components/ItemDisplay';
@@ -18,12 +17,12 @@ import { SetAlertModal } from './components/SetAlertModal';
 import { FeedbackModal } from './components/FeedbackModal'; 
 import { TopMoversSection } from './components/TopMoversSection';
 import { PortfolioModal } from './components/PortfolioModal';
-import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal'; // New modal
+import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal';
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
 import { usePortfolio } from './hooks/usePortfolio';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons'; // Added AddToPortfolioIcon
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons';
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
@@ -31,7 +30,7 @@ import {
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
   DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
-  PORTFOLIO_STORAGE_KEY
+  PORTFOLIO_STORAGE_KEY, GOOGLE_API_KEY_ENV_VAR, GOOGLE_CLIENT_ID_ENV_VAR, GDRIVE_PORTFOLIO_FILENAME
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -53,7 +52,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.10";
+const APP_VERSION = "Beta v0.11";
 
 // Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
@@ -244,6 +243,13 @@ const App: React.FC = () => {
   const [isAddInvestmentFromViewModalOpen, setIsAddInvestmentFromViewModalOpen] = useState<boolean>(false);
   const [itemForAddInvestmentFromViewModal, setItemForAddInvestmentFromViewModal] = useState<ItemMapInfo | null>(null);
 
+  // Google Drive State
+  const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
+  const [isGoogleUserSignedIn, setIsGoogleUserSignedIn] = useState(false);
+  const [googleUserProfile, setGoogleUserProfile] = useState<GoogleUserProfile | null>(null);
+  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
+  const [isDriveActionLoading, setIsDriveActionLoading] = useState<boolean>(false);
+
 
   const [isSearchSectionCollapsed, setIsSearchSectionCollapsed] = useState<boolean>(true);
   const [isFavoritesSectionCollapsed, setIsFavoritesSectionCollapsed] = useState<boolean>(true);
@@ -375,8 +381,133 @@ const App: React.FC = () => {
     deletePortfolioEntry,
     clearAllPortfolioData,
     updatePortfolioEntryDetails,
-    replacePortfolio, // Get the new function
+    replacePortfolio, 
   } = usePortfolio(isConsentGranted, addNotification);
+
+   // Google Drive API Initialization Effect
+  useEffect(() => {
+    const googleApiKey = process.env[GOOGLE_API_KEY_ENV_VAR];
+    const googleClientId = process.env[GOOGLE_CLIENT_ID_ENV_VAR];
+
+    if (!googleApiKey || !googleClientId) {
+      console.warn("Google API Key or Client ID is missing. Google Drive features will be unavailable.");
+      setGoogleAuthError("Google API credentials missing. Drive features disabled.");
+      setIsGoogleApiReady(false); // Explicitly set to false if keys are missing
+      return;
+    }
+
+    const handleAuthChange = (isSignedIn: boolean, userProfile: GoogleUserProfile | null) => {
+      setIsGoogleUserSignedIn(isSignedIn);
+      setGoogleUserProfile(userProfile);
+      setGoogleAuthError(null);
+      if (isSignedIn) {
+        addNotification(`Signed in to Google Drive as ${userProfile?.name || 'user'}.`, 'success');
+      }
+    };
+    
+    const config: GoogleDriveServiceConfig = {
+        apiKey: googleApiKey,
+        clientId: googleClientId,
+        onAuthChange: handleAuthChange,
+        onApiReady: () => {
+            setIsGoogleApiReady(true);
+            setGoogleAuthError(null);
+            // Check initial sign-in state
+             const initialProfile = googleDriveService.getSignedInUserProfile();
+             if (initialProfile) {
+                handleAuthChange(true, initialProfile);
+             } else {
+                handleAuthChange(false, null);
+             }
+        },
+        onApiError: (errorMsg: string) => {
+            setGoogleAuthError(errorMsg);
+            setIsGoogleApiReady(false);
+            addNotification(`Google Drive API Error: ${errorMsg}`, 'error');
+        }
+    };
+
+    googleDriveService.init(config);
+
+  }, [addNotification]);
+
+
+  const handleGoogleSignIn = useCallback(async () => {
+    if (!isGoogleApiReady) {
+      addNotification("Google Drive service is not ready. Please wait.", "info");
+      return;
+    }
+    try {
+      setGoogleAuthError(null);
+      await googleDriveService.signIn();
+      // Auth change is handled by the callback in init
+    } catch (error: any) {
+      console.error("Google Sign-In Error:", error);
+      setGoogleAuthError(error.message || "Failed to sign in with Google.");
+      addNotification(error.message || "Google Sign-In failed.", "error");
+    }
+  }, [isGoogleApiReady, addNotification]);
+
+  const handleGoogleSignOut = useCallback(async () => {
+    if (!isGoogleApiReady) return;
+    try {
+      await googleDriveService.signOut();
+      setIsGoogleUserSignedIn(false);
+      setGoogleUserProfile(null);
+      addNotification("Signed out from Google Drive.", "info");
+    } catch (error: any) {
+      console.error("Google Sign-Out Error:", error);
+      addNotification("Google Sign-Out failed.", "error");
+    }
+  }, [isGoogleApiReady, addNotification]);
+
+  const handleSaveToDrive = useCallback(async () => {
+    if (!isGoogleUserSignedIn || !isConsentGranted) {
+      addNotification("Please sign in to Google Drive and grant consent to save.", "info");
+      return;
+    }
+    if (portfolioEntries.length === 0) {
+        addNotification("No portfolio data to save.", "info");
+        return;
+    }
+    setIsDriveActionLoading(true);
+    try {
+      const portfolioJson = JSON.stringify(portfolioEntries);
+      await googleDriveService.showSavePicker(portfolioJson, GDRIVE_PORTFOLIO_FILENAME);
+      addNotification("Portfolio saved to Google Drive successfully!", "success");
+    } catch (error: any) {
+      console.error("Error saving to Google Drive:", error);
+      addNotification(`Failed to save to Google Drive: ${error.message}`, "error");
+    } finally {
+        setIsDriveActionLoading(false);
+    }
+  }, [isGoogleUserSignedIn, portfolioEntries, addNotification, isConsentGranted]);
+
+  const handleLoadFromDrive = useCallback(async () => {
+    if (!isGoogleUserSignedIn || !isConsentGranted) {
+      addNotification("Please sign in to Google Drive and grant consent to load.", "info");
+      return;
+    }
+     setIsDriveActionLoading(true);
+    try {
+      const { content } = await googleDriveService.showOpenPicker();
+      const parsedEntries = JSON.parse(content) as PortfolioEntry[];
+      // Basic validation (can be more thorough)
+      if (Array.isArray(parsedEntries) && parsedEntries.every(e => typeof e.itemId === 'number')) {
+        replacePortfolio(parsedEntries);
+        addNotification("Portfolio loaded from Google Drive!", "success");
+      } else {
+        throw new Error("Invalid portfolio file structure.");
+      }
+    } catch (error: any) {
+      console.error("Error loading from Google Drive:", error);
+      if (error.message !== "Open cancelled by user.") { // Don't show error for user cancel
+        addNotification(`Failed to load from Google Drive: ${error.message}`, "error");
+      }
+    } finally {
+      setIsDriveActionLoading(false);
+    }
+  }, [isGoogleUserSignedIn, replacePortfolio, addNotification, isConsentGranted]);
 
 
   const getItemIconUrl = useCallback((iconName: string): string => {
@@ -625,12 +756,10 @@ const App: React.FC = () => {
     setIsFavoritesSectionCollapsed(prev => {
       const newCollapsedState = !prev;
       if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
-        // Only refresh if no data exists for any favorite item, or if it's explicitly requested.
-        // For now, let's keep the existing behavior: refresh when expanded if not already refreshing.
         const shouldInitialRefresh = Object.values(favoriteItemPrices).some(price => price === null || price === undefined) || Object.values(favoriteItemPrices).length < favoriteItemIds.length;
 
         if (!isRefreshingFavorites && !favoritesRefreshLockRef.current && shouldInitialRefresh) { 
-           handleRefreshAllFavorites(); // Defaults to isAutoRefresh: false
+           handleRefreshAllFavorites();
         }
       }
       return newCollapsedState;
@@ -699,7 +828,8 @@ const App: React.FC = () => {
     ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
     resetPreferencesToDefault();
     setConsentStatus('denied'); 
-  }, [resetPreferencesToDefault]);
+    if(isGoogleUserSignedIn) handleGoogleSignOut(); // Sign out from Google if consent revoked
+  }, [resetPreferencesToDefault, isGoogleUserSignedIn, handleGoogleSignOut]);
 
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
@@ -1060,7 +1190,6 @@ const App: React.FC = () => {
         addNotification(`${currentItem.name} data refreshed!`, 'success');
       }
       
-      // Update the specific favorite item's data if it's the currentItem
       if (favoriteItemIds.includes(currentItem.id) && isConsentGranted) {
         if (isMountedRefreshRef.current) setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
         
@@ -1070,7 +1199,6 @@ const App: React.FC = () => {
             setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'loading' }));
           }
           try {
-            // Fetch 5m data specifically for hourly change and sparkline, regardless of main chart timespan
             const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
             const nowForFavMs = Date.now(); 
 
@@ -1126,9 +1254,6 @@ const App: React.FC = () => {
           }
         }
       }
-
-      // The general handleRefreshAllFavorites() call was removed from here. 
-      // It's now on a 1-min interval or triggered by expanding the favorites section / manual refresh button.
 
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
@@ -1198,16 +1323,13 @@ const App: React.FC = () => {
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
     setSelectedTimespan(timespan); 
-    // Data refresh will be triggered by the useEffect watching selectedTimespan and selectedItem
   }, []); 
 
   useEffect(() => {
     if (selectedItem) {
-      // isUserInitiated: false because this is a reactive refresh, not a direct user "refresh" button click
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData is memoized, but changes to its internal logic via its own deps list are fine.
+  }, [selectedItem, selectedTimespan]); 
 
 
   useEffect(() => {
@@ -1235,7 +1357,6 @@ const App: React.FC = () => {
       setTimeToNextRefresh(AUTO_REFRESH_INTERVAL_SECONDS); 
       autoRefreshIntervalIdRef.current = window.setInterval(() => {
         if (selectedItem) { 
-            // isUserInitiated: false because this is an automatic background refresh
             refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false }); 
         }
       }, AUTO_REFRESH_INTERVAL_MS);
@@ -1475,6 +1596,15 @@ const App: React.FC = () => {
     },
   }), []);
 
+  const handleSelectPortfolioItemAndCloseModal = useCallback((itemId: number) => {
+    if (isPortfolioModalOpen) {
+      togglePortfolioModal(); 
+    }
+    setTimeout(() => {
+      handleSelectItemById(itemId); 
+    }, 50); 
+  }, [isPortfolioModalOpen, handleSelectItemById, togglePortfolioModal]);
+
 
   const getSectionProps = useCallback((sectionId: string, dndProps: SectionRenderProps): SpecificAppSectionProps => {
     switch (sectionId) {
@@ -1513,7 +1643,7 @@ const App: React.FC = () => {
           showFavoriteSparklines,
           wordingPreference,
           isRefreshingFavorites,
-          onRefreshAllFavorites: () => handleRefreshAllFavorites(false), // Explicitly false for manual/expand refresh
+          onRefreshAllFavorites: () => handleRefreshAllFavorites(false), 
           isConsentGranted,
           onQuickSetAlert: handleQuickSetAlertFromFavorites,
           isCollapsed: isFavoritesSectionCollapsed,
@@ -1571,9 +1701,7 @@ const App: React.FC = () => {
       <NotificationBar notifications={notifications} />
       <header className="w-full max-w-6xl mb-8 text-center">
          <div className="flex items-center justify-between w-full">
-            {/* Left Icons Group */}
             <div className="flex items-center gap-1">
-                {/* Settings Icon (Always visible) */}
                 <button 
                     onClick={toggleSettingsModal} 
                     className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
@@ -1582,8 +1710,6 @@ const App: React.FC = () => {
                 >
                   <SettingsIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
                 </button>
-
-                {/* Toggle D&D Icon (Desktop-only, now second in this group) */}
                 <button
                     onClick={toggleDragAndDrop}
                     className="p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors hidden md:block"
@@ -1596,8 +1722,6 @@ const App: React.FC = () => {
                         <ReorderDisabledIcon className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" />
                     )}
                 </button>
-                
-                {/* Portfolio Icon (Always visible, now potentially third on desktop) */}
                 <button
                     onClick={togglePortfolioModal}
                     className={`p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors ${!isConsentGranted ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1609,7 +1733,6 @@ const App: React.FC = () => {
                 </button>
             </div>
             
-            {/* Logo */}
             <button 
               onClick={handleResetView}
               className="flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] rounded-md p-1 mx-auto"
@@ -1623,12 +1746,8 @@ const App: React.FC = () => {
                 <h1 className={`text-4xl md:text-5xl font-bold text-[var(--text-accent)] title-neon-glow transition-opacity ${selectedItem ? 'group-hover:opacity-80' : 'opacity-100'}`}>GE Pulse</h1>
             </button>
 
-            {/* Right Icons Group */}
             <div className="flex items-center justify-end gap-1">
-                {/* Spacer for Mobile (to balance Settings, Portfolio) */}
                 <div className="block md:hidden w-[5.75rem] h-11"></div> 
-
-                {/* Spacer for Desktop (to balance Settings, D&D, Portfolio) */}
                 <div className="hidden md:block w-[8.75rem] h-11"></div> 
             </div>
         </div>
@@ -1689,13 +1808,24 @@ const App: React.FC = () => {
           deletePortfolioEntry={deletePortfolioEntry} 
           clearAllPortfolioData={clearAllPortfolioData} 
           updatePortfolioEntryDetails={updatePortfolioEntryDetails}
-          replacePortfolio={replacePortfolio} // Pass the new function
+          replacePortfolio={replacePortfolio} 
           allItems={allItems}
           getItemIconUrl={getItemIconUrl}
           getItemName={getItemName}
           fetchLatestPrice={fetchLatestPrice}
           addNotification={addNotification}
           isConsentGranted={isConsentGranted}
+          onSelectItemAndClose={handleSelectPortfolioItemAndCloseModal}
+          // Google Drive Props
+          isGoogleApiReady={isGoogleApiReady}
+          isGoogleUserSignedIn={isGoogleUserSignedIn}
+          googleUserProfile={googleUserProfile}
+          googleAuthError={googleAuthError}
+          onGoogleSignIn={handleGoogleSignIn}
+          onGoogleSignOut={handleGoogleSignOut}
+          onSaveToDrive={handleSaveToDrive}
+          onLoadFromDrive={handleLoadFromDrive}
+          isDriveActionLoading={isDriveActionLoading}
         />
       )}
 

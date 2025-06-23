@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate } from '../src/types';
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, GoogleUserProfile } from '../src/types';
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
@@ -11,7 +10,7 @@ import { EditInvestmentModal } from './portfolio/EditInvestmentModal';
 import { ExportOptionsModal } from './portfolio/ExportOptionsModal';
 import { DisplayCodeModal } from './portfolio/DisplayCodeModal';
 import { ImportPortfolioModal } from './portfolio/ImportPortfolioModal';
-import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal'; // New Modal
+import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal';
 import { LoadingSpinner } from './LoadingSpinner';
 import { TrashIcon, UploadIcon, DownloadIcon } from './Icons'; 
 
@@ -31,6 +30,17 @@ interface PortfolioModalProps {
   fetchLatestPrice: (itemId: number) => Promise<LatestPriceData | null>;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   isConsentGranted: boolean; 
+  onSelectItemAndClose: (itemId: number) => void;
+  // Google Drive Props
+  isGoogleApiReady: boolean;
+  isGoogleUserSignedIn: boolean;
+  googleUserProfile: GoogleUserProfile | null;
+  googleAuthError: string | null;
+  onGoogleSignIn: () => void;
+  onGoogleSignOut: () => void;
+  onSaveToDrive: () => void;
+  onLoadFromDrive: () => void;
+  isDriveActionLoading: boolean;
 }
 
 const PORTFOLIO_TABS = [
@@ -38,6 +48,15 @@ const PORTFOLIO_TABS = [
   { key: 'closed', label: 'Closed Positions' },
   { key: 'add', label: 'Add New' },
 ] as const;
+
+const GoogleDriveIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className || "w-5 h-5"} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M7.988 21.25H16.012L24 8.75H0L7.988 21.25Z" fill="#00832D"/>
+    <path d="M0 8.75L3.063 2.75H20.937L24 8.75H0Z" fill="#00A94F"/>
+    <path d="M11.232 2.75L3.063 2.75L0 8.75L7.988 21.25L15.438 8.625L11.232 2.75Z" fill="#FFCF63"/>
+    <path d="M20.937 2.75H3.063L7.988 15.25H16.012L20.937 2.75Z" fill="#FFD700" opacity="0.3"/>
+  </svg>
+);
 
 
 export const PortfolioModal: React.FC<PortfolioModalProps> = ({
@@ -56,6 +75,17 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   fetchLatestPrice,
   addNotification,
   isConsentGranted,
+  onSelectItemAndClose,
+  // Google Drive Props
+  isGoogleApiReady,
+  isGoogleUserSignedIn,
+  googleUserProfile,
+  googleAuthError,
+  onGoogleSignIn,
+  onGoogleSignOut,
+  onSaveToDrive,
+  onLoadFromDrive,
+  isDriveActionLoading,
 }) => {
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'add'>('open');
   const [itemToSell, setItemToSell] = useState<PortfolioEntry | null>(null);
@@ -74,8 +104,8 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   const [isDisplayCodeModalOpen, setIsDisplayCodeModalOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   
-  const [isConfirmImportOverwriteModalOpen, setIsConfirmImportOverwriteModalOpen] = useState<boolean>(false); // New state
-  const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioEntry[] | null>(null); // New state
+  const [isConfirmImportOverwriteModalOpen, setIsConfirmImportOverwriteModalOpen] = useState<boolean>(false);
+  const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioEntry[] | null>(null);
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -209,37 +239,30 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   };
 
   const handleConfirmImport = (importedData: PortfolioEntry[]) => {
-    console.log('[PortfolioModal] handleConfirmImport called. Storing data and opening custom confirm modal.');
-    addNotification('Please review the import confirmation.', 'info'); // Inform user about next step
+    addNotification('Please review the import confirmation.', 'info');
     setImportedDataToConfirm(importedData);
-    setIsImportModalOpen(false); // Close the import selection modal
-    setIsConfirmImportOverwriteModalOpen(true); // Open our custom confirmation modal
+    setIsImportModalOpen(false);
+    setIsConfirmImportOverwriteModalOpen(true);
   };
 
   const executeConfirmedImport = () => {
     if (!importedDataToConfirm) {
-        console.error('[PortfolioModal] executeConfirmedImport called but no data was staged.');
         addNotification('Import error: No data to import.', 'error');
         return;
     }
-    console.log('[PortfolioModal] User confirmed overwrite via custom modal. Processing...');
     addNotification('Import confirmed. Processing portfolio replacement...', 'info');
     replacePortfolio(importedDataToConfirm);
-    console.log('[PortfolioModal] replacePortfolio called.');
     
     fetchAllLivePrices().then(() => {
-        console.log('[PortfolioModal] fetchAllLivePrices completed after import.');
         addNotification("Portfolio restored successfully!", "success");
     }).catch(err => {
-        console.error('[PortfolioModal] Error during fetchAllLivePrices after import:', err);
         addNotification("Portfolio restored, but failed to refresh live prices.", "error");
     });
-    setImportedDataToConfirm(null); // Clear staged data
-    setIsConfirmImportOverwriteModalOpen(false); // Close confirmation modal
+    setImportedDataToConfirm(null);
+    setIsConfirmImportOverwriteModalOpen(false);
   };
 
   const cancelImportOverwrite = () => {
-    console.log('[PortfolioModal] User cancelled overwrite via custom modal.');
     addNotification("Portfolio import cancelled.", "info");
     setImportedDataToConfirm(null);
     setIsConfirmImportOverwriteModalOpen(false);
@@ -275,6 +298,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   const closedPositions = portfolioEntries.filter(e => e.quantityPurchased - e.quantitySoldFromThisLot <= 0)
     .sort((a,b) => (b.lastSaleDate || b.purchaseDate) - (a.lastSaleDate || a.purchaseDate));
 
+  const driveButtonBaseClasses = "flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md font-semibold transition-colors focus:outline-none focus:ring-2";
+  const driveButtonEnabledClasses = "bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] focus:ring-[var(--border-accent)]/70";
+  const driveButtonDisabledClasses = "bg-gray-400 text-gray-700 cursor-not-allowed opacity-60";
+
 
   return (
     <div
@@ -301,10 +328,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
           </button>
         </div>
 
-        {isLoadingPrices && (
+        {(isLoadingPrices || isDriveActionLoading) && (
           <div className="absolute inset-0 bg-[var(--bg-secondary)]/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
             <LoadingSpinner />
-            <p className="ml-3 text-[var(--text-accent)]">Refreshing market data...</p>
+            <p className="ml-3 text-[var(--text-accent)]">{isDriveActionLoading ? 'Accessing Google Drive...' : 'Refreshing market data...'}</p>
           </div>
         )}
         
@@ -355,6 +382,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                     onSellAction={handleOpenSellModal}
                     onDeleteAction={handleOpenConfirmDeleteModal}
                     onEditAction={handleOpenEditModal}
+                    onSelectItemAction={onSelectItemAndClose}
                     tableType="open"
                 />
             )}
@@ -367,39 +395,83 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                     livePrices={{}} 
                     onEditAction={handleOpenEditModal}
                     onDeleteAction={handleOpenConfirmDeleteModal}
+                    onSelectItemAction={onSelectItemAndClose}
                     tableType="closed"
                 />
             )}
         </div>
         
-        <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-wrap justify-end gap-2 sm:gap-3">
-            <button
+        <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row justify-between items-center gap-3">
+          <div className="flex flex-col items-start text-xs">
+            {googleAuthError && <p className="text-[var(--price-low)]">{googleAuthError}</p>}
+            {isGoogleApiReady && isGoogleUserSignedIn && googleUserProfile && (
+              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                {googleUserProfile.picture && <img src={googleUserProfile.picture} alt="User" className="w-5 h-5 rounded-full" />}
+                <span>Drive: {googleUserProfile.email}</span>
+                <button onClick={onGoogleSignOut} className="text-[var(--link-text)] hover:underline text-xs">(Sign Out)</button>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
+            {!isGoogleUserSignedIn ? (
+              <button
+                onClick={onGoogleSignIn}
+                disabled={!isGoogleApiReady || isDriveActionLoading}
+                className={`${driveButtonBaseClasses} ${(!isGoogleApiReady || isDriveActionLoading) ? driveButtonDisabledClasses : driveButtonEnabledClasses}`}
+                aria-label="Connect to Google Drive"
+              >
+                <GoogleDriveIcon className="w-4 h-4 mr-1.5 sm:mr-2"/> Connect Drive
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={onLoadFromDrive}
+                  disabled={!isGoogleApiReady || !isGoogleUserSignedIn || isDriveActionLoading}
+                  className={`${driveButtonBaseClasses} ${(!isGoogleApiReady || !isGoogleUserSignedIn || isDriveActionLoading) ? driveButtonDisabledClasses : driveButtonEnabledClasses}`}
+                  aria-label="Load portfolio from Google Drive"
+                >
+                  <GoogleDriveIcon className="w-4 h-4 mr-1.5 sm:mr-2"/> Load from Drive
+                </button>
+                <button
+                  onClick={onSaveToDrive}
+                  disabled={!isGoogleApiReady || !isGoogleUserSignedIn || portfolioEntries.length === 0 || isDriveActionLoading}
+                  className={`${driveButtonBaseClasses} ${(!isGoogleApiReady || !isGoogleUserSignedIn || portfolioEntries.length === 0 || isDriveActionLoading) ? driveButtonDisabledClasses : driveButtonEnabledClasses}`}
+                  aria-label="Save portfolio to Google Drive"
+                >
+                   <GoogleDriveIcon className="w-4 h-4 mr-1.5 sm:mr-2"/> Save to Drive
+                </button>
+              </>
+            )}
+             <button
                 onClick={() => setIsImportModalOpen(true)}
-                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
-                aria-label="Import portfolio data"
+                className={`${driveButtonBaseClasses} ${driveButtonEnabledClasses}`}
+                disabled={isDriveActionLoading}
+                aria-label="Import portfolio data locally"
             >
                 <UploadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-                Import
+                Import Local
             </button>
             <button
                 onClick={() => setIsExportOptionsModalOpen(true)}
-                disabled={portfolioEntries.length === 0}
-                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Export portfolio data"
+                disabled={portfolioEntries.length === 0 || isDriveActionLoading}
+                className={`${driveButtonBaseClasses} ${portfolioEntries.length === 0 || isDriveActionLoading ? driveButtonDisabledClasses : driveButtonEnabledClasses}`}
+                aria-label="Export portfolio data locally"
             >
                 <DownloadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-                Export
+                Export Local
             </button>
             <button
                 onClick={() => setIsConfirmClearAllModalOpen(true)}
-                disabled={portfolioEntries.length === 0}
+                disabled={portfolioEntries.length === 0 || isDriveActionLoading}
                 className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Clear all portfolio data"
             >
                 <TrashIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
                 Clear All
             </button>
+          </div>
         </div>
+
 
         {isSellModalOpen && itemToSell && (
           <SellInvestmentModal
