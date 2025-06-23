@@ -359,23 +359,31 @@ const App: React.FC = () => {
       if (fileContent) {
         const parsedPortfolio: PortfolioEntry[] = JSON.parse(fileContent);
         // TODO: Add more robust validation for parsedPortfolio structure
-        if (Array.isArray(parsedPortfolio)) {
+        if (Array.isArray(parsedPortfolio)) { // Basic validation
           replacePortfolio(parsedPortfolio);
           addNotification('Portfolio loaded from Google Drive!', 'success');
         } else {
           throw new Error('Invalid portfolio file format.');
         }
       } else {
-        // Picker was cancelled or no file selected
+        // Picker was cancelled or no file selected - showOpenPicker might resolve null or reject
+        // If it rejects with 'picker_closed', that's handled by the catch.
+        // If it resolves null (e.g., user explicitly closes without picking), this path is taken.
         addNotification('Load from Drive cancelled or no file selected.', 'info');
       }
     } catch (error: any) {
       console.error('Error loading from Google Drive:', error);
-       if (error.message && error.message.includes('picker_closed')) {
-        addNotification('Load from Drive cancelled by user.', 'info');
-      } else {
-        addNotification(`Failed to load from Google Drive: ${error.message || 'Invalid file or unknown error'}`, 'error');
+      let displayErrorMessage = 'Failed to load from Google Drive: Invalid file or unknown error.';
+      if (error.message && error.message.includes('picker_closed')) {
+        displayErrorMessage = 'Load from Drive cancelled by user.';
+      } else if (error.result && error.result.error && error.result.error.message) {
+        // GAPI error structure (e.g., for 404 File Not Found)
+        displayErrorMessage = `Failed to load from Drive: ${error.result.error.message}`;
+      } else if (error.message) {
+        // General JS error
+        displayErrorMessage = `Failed to load from Drive: ${error.message}`;
       }
+      addNotification(displayErrorMessage, 'error');
     } finally {
       setIsDriveActionLoading(false);
     }
