@@ -1,3 +1,4 @@
+
 import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated import path
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
@@ -31,14 +32,16 @@ export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotificati
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
 export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; 
-export const GDRIVE_ACCESS_TOKEN_KEY = 'gePulseGDriveToken'; // For storing GDrive access token in session
+// TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY is removed as this setting is no longer stored
+// TOP_MOVERS_METRIC_TYPE_STORAGE_KEY is not added as this setting is session-only
 
-export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; // For storing user's consent decision
+export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; 
 
-// Google API Credentials (to be sourced from process.env by the app)
-export const GOOGLE_API_KEY_ENV_VAR = 'GOOGLE_API_KEY';
-export const GOOGLE_CLIENT_ID_ENV_VAR = 'GOOGLE_CLIENT_ID';
-export const GDRIVE_PORTFOLIO_FILENAME = 'gepulse_portfolio_backup.json';
+// Google Drive Constants
+export const GDRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+export const GDRIVE_DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
+export const GDRIVE_APP_ID = 'YOUR_APP_ID_IF_USING_PICKER_LEGACY_APP_ID_FIELD'; // Usually Client ID is enough for Picker, but good to have if docs reference it.
+export const GDRIVE_ACCESS_TOKEN_KEY = 'gePulseGoogleDriveToken';
 
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
@@ -64,38 +67,10 @@ export const MIN_PRICE_FOR_MOVER_CONSIDERATION = 100;
 export const GE_TAX_RATE = 0.02; // 2%
 export const GE_TAX_CAP = 5_000_000; // 5 million GP
 export const TAX_EXEMPT_ITEM_IDS: number[] = [
-  // Tools (from user provided list)
-  233,   // Pestle and mortar
-  952,   // Spade
-  1733,  // Needle
-  1735,  // Shears
-  1755,  // Chisel
-  1785,  // Glassblowing pipe
-  2347,  // Hammer
-  2989,  // Chompy bird hat (ogre)
-  2990,  // Chompy bird hat (bowana)
-  2991,  // Chompy bird hat (karamjan)
-  2992,  // Chompy bird hat (bandos)
-  2993,  // Chompy bird hat (armadyl)
-  2994,  // Chompy bird hat (ancient)
-  2995,  // Chompy bird hat (guthix)
-  5325,  // Gardening trowel
-  5329,  // Secateurs
-  5331,  // Watering can (0)
-  5341,  // Rake
-  5343,  // Seed dibber
-  8794,  // Saw
-  // Bonds, Ornaments, Special Items
-  13190, // Bond (tradeable)
-  24058, // Twisted ancestral colour kit
-  26362, // Shattered relics void ornament kit
-  26364, // Shattered relics dragon ornament kit
-  26366, // Shattered relics rune ornament kit
-  27951, // 30th anniversary cake
-  28607, // Trailblazer reloaded void ornament kit
-  28610, // Trailblazer reloaded dragon ornament kit
-  28613, // Trailblazer reloaded rune ornament kit
-].sort((a, b) => a - b); // Sort numerically for easier management
+  233, 952, 1733, 1735, 1755, 1785, 2347, 2989, 2990, 2991, 2992, 2993, 2994, 2995, 
+  5325, 5329, 5331, 5341, 5343, 8794, 13190, 24058, 26362, 26364, 26366, 27951, 
+  28607, 28610, 28613,
+].sort((a, b) => a - b); 
 
 
 // List of all keys for user preferences that should be cleared if consent is revoked
@@ -112,7 +87,7 @@ export const ALL_USER_PREFERENCE_KEYS = [
   SIDEBAR_ORDER_STORAGE_KEY,
   DRAG_DROP_ENABLED_STORAGE_KEY,
   PORTFOLIO_STORAGE_KEY, 
-  // GDRIVE_ACCESS_TOKEN_KEY is session storage, not cleared with these
+  // GDRIVE_ACCESS_TOKEN_KEY is session-based, not a user preference to clear this way
 ];
 
 

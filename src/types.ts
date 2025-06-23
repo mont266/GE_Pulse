@@ -1,3 +1,5 @@
+
+
 export interface ItemMapInfo {
   examine: string;
   id: number;
@@ -205,7 +207,6 @@ export interface SectionRenderProps {
   draggedItem: string | null;
 }
 
-// Portfolio / Investment Tracking Types
 export interface PortfolioEntry {
   id: string; 
   itemId: number;
@@ -223,87 +224,23 @@ export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchas
 // Google Drive Integration Types
 export interface GoogleUserProfile {
   email: string;
-  name: string;
+  name?: string;
   picture?: string;
 }
 
 export interface GoogleDriveServiceConfig {
-  apiKey: string;
-  clientId: string;
-  onAuthChange: (isSignedIn: boolean, userProfile: GoogleUserProfile | null) => void;
-  onApiReady: () => void;
-  onApiError: (errorMsg: string) => void;
+  onGisLoaded: () => void;
+  onAuthStatusChanged: (isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null) => void;
+  // API Key and Client ID will be read from window, not passed in config
 }
 
-// Augment the global 'google' object from Google Identity Services
+// Declare google object if not already available globally (e.g. via @types/google.accounts)
 declare global {
   interface Window {
-    // gapi is already often available via @types/gapi
-    google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient: (config: TokenClientConfig) => TokenClient;
-          revoke: (token: string, callback: () => void) => void;
-        };
-        id: {
-          initialize: (config: any) => void;
-          prompt: (callback?: (notification: any) => void) => void;
-          renderButton: (parentElement: HTMLElement, options: any) => void;
-        };
-      };
-      picker?: { // For Google Picker
-        PickerBuilder: new () => PickerBuilder;
-        ViewId: { [key: string]: string }; // e.g., DOCS, DOCS_IMAGES_AND_VIDEOS, etc.
-        Feature: { [key: string]: string }; // e.g., MULTISELECT_ENABLED
-        Action: { [key: string]: string }; // e.g., PICKED, CANCEL
-        ResponseObject: any; // Type for picker callback data
-        DocsUploadView: new () => any; // If using upload view
-      };
-    };
+    gapi?: any; // For Google API Client Library (GAPI)
+    google?: any; // For Google Identity Services (GIS)
+    tokenClient?: any; // For GIS Token Client
+    GOOGLE_API_KEY?: string;
+    GOOGLE_CLIENT_ID?: string;
   }
-}
-
-// Types for Google Identity Services Token Client
-export interface TokenClientConfig {
-  client_id: string;
-  scope: string;
-  prompt?: string; // e.g. 'consent', 'select_account'
-  callback?: (tokenResponse: TokenResponse) => void;
-}
-
-export interface TokenResponse {
-  access_token: string;
-  expires_in: number; // typically 3600 (1 hour)
-  scope: string;
-  token_type: string; // "Bearer"
-  // Potentially other fields like id_token, authuser, hd, prompt, etc.
-  error?: string;
-  error_description?: string;
-  error_uri?: string;
-}
-
-export interface TokenClient {
-  requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
-}
-
-// Types for Google Picker
-interface PickerBuilder {
-  addView: (viewOrViewId: any) => PickerBuilder;
-  setOAuthToken: (token: string) => PickerBuilder;
-  setDeveloperKey: (key: string) => PickerBuilder;
-  setAppId: (appId: string) => PickerBuilder;
-  setCallback: (callback: (data: any) => void) => PickerBuilder;
-  build: () => Picker;
-  // Add more methods as needed, e.g., setOrigin, setTitle, etc.
-  enableFeature: (feature: string) => PickerBuilder;
-  disableFeature: (feature: string) => PickerBuilder;
-  setSelectableMimeTypes: (mimeTypes: string) => PickerBuilder;
-  setMaxItems: (max: number) => PickerBuilder;
-  setTitle: (title: string) => PickerBuilder;
-  setOrigin: (origin: string) => PickerBuilder;
-}
-
-interface Picker {
-  setVisible: (visible: boolean) => void;
-  dispose: () => void;
 }

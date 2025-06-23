@@ -1,7 +1,9 @@
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile, GoogleDriveServiceConfig } from './src/types'; // Updated path for types
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
-import * as googleDriveService from './services/googleDriveService'; // Import Google Drive service
+import { googleDriveService } from './services/googleDriveService'; // Import the new service
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
 import { ItemDisplay } from './components/ItemDisplay';
@@ -17,12 +19,12 @@ import { SetAlertModal } from './components/SetAlertModal';
 import { FeedbackModal } from './components/FeedbackModal'; 
 import { TopMoversSection } from './components/TopMoversSection';
 import { PortfolioModal } from './components/PortfolioModal';
-import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal';
+import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal'; // New modal
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
 import { usePortfolio } from './hooks/usePortfolio';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons';
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons'; // Added AddToPortfolioIcon
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
@@ -30,7 +32,7 @@ import {
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
   DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
-  PORTFOLIO_STORAGE_KEY, GOOGLE_API_KEY_ENV_VAR, GOOGLE_CLIENT_ID_ENV_VAR, GDRIVE_PORTFOLIO_FILENAME
+  PORTFOLIO_STORAGE_KEY, GDRIVE_ACCESS_TOKEN_KEY
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -202,6 +204,14 @@ const App: React.FC = () => {
   const initialConsent = getInitialConsentStatus();
   const [consentStatus, setConsentStatus] = useState<'pending' | 'granted' | 'denied'>(initialConsent);
 
+  // Google Drive State
+  const [isGoogleApiReady, setIsGoogleApiReady] = useState<boolean>(false);
+  const [isGoogleUserSignedIn, setIsGoogleUserSignedIn] = useState<boolean>(false);
+  const [googleUser, setGoogleUser] = useState<GoogleUserProfile | null>(null);
+  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
+  const [isDriveActionLoading, setIsDriveActionLoading] = useState<boolean>(false);
+
+
   const [allItems, setAllItems] = useState<ItemMapInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<ItemMapInfo | null>(null);
@@ -216,6 +226,7 @@ const App: React.FC = () => {
   const notificationIdCounterRef = useRef(0);
   const favoritesRefreshLockRef = useRef(false);
 
+  const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
   const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     notificationIdCounterRef.current += 1;
@@ -225,6 +236,150 @@ const App: React.FC = () => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
   }, []);
+
+  // Initialize usePortfolio hook earlier
+  const {
+    portfolioEntries,
+    addPortfolioEntry,
+    recordSaleAndUpdatePortfolio,
+    deletePortfolioEntry,
+    clearAllPortfolioData,
+    updatePortfolioEntryDetails,
+    replacePortfolio, 
+  } = usePortfolio(isConsentGranted, addNotification);
+
+
+  // Google Drive API Initialization Effect
+  useEffect(() => {
+    googleDriveService.init({
+      onGisLoaded: () => {
+        console.log('Google Identity Services (GIS) loaded.');
+        // GIS is loaded, now check for API key and Client ID to proceed with GAPI init
+        const apiKey = (window as any).GOOGLE_API_KEY;
+        const clientId = (window as any).GOOGLE_CLIENT_ID;
+
+        if (!apiKey || !clientId) {
+          console.warn("Google API Key or Client ID is missing from window. Google Drive features will be unavailable.");
+          addNotification("Google Drive features unavailable: Missing API credentials.", "error");
+          setIsGoogleApiReady(false);
+          setGoogleAuthError("API credentials missing.");
+          return;
+        }
+        
+        // Initialize GAPI now that GIS is ready and keys are confirmed
+        googleDriveService.initGapiClient(() => {
+            console.log('Google API Client (GAPI) initialized.');
+            setIsGoogleApiReady(true);
+            setGoogleAuthError(null);
+            // Attempt to restore sign-in state or check if already signed in
+             const token = googleDriveService.getToken();
+             if (token) {
+                setIsGoogleUserSignedIn(true);
+                setGoogleUser(googleDriveService.getSignedInUserProfile());
+             }
+        }, (error) => {
+            console.error("Failed to initialize GAPI client:", error);
+            addNotification("Failed to initialize Google Drive services.", "error");
+            setIsGoogleApiReady(false);
+            setGoogleAuthError("GAPI initialization failed.");
+        });
+      },
+      onAuthStatusChanged: (isSignedIn, user, error) => {
+        console.log('Google Auth Status Changed:', { isSignedIn, user, error });
+        setIsGoogleUserSignedIn(isSignedIn);
+        setGoogleUser(user);
+        setGoogleAuthError(error);
+        if (error) {
+          addNotification(`Google Sign-In: ${error}`, 'error');
+        } else if (isSignedIn && user) {
+          addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
+        } else if (!isSignedIn && !error) {
+           // Don't show notification on initial load if not signed in, or on explicit sign out
+        }
+      },
+    });
+  }, [addNotification]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    if (!isGoogleApiReady) {
+      addNotification('Google Drive service is not ready. Please try again in a moment.', 'info');
+      return;
+    }
+    try {
+      await googleDriveService.signIn();
+      // Auth status change will be handled by the callback in init
+    } catch (err: any) {
+      console.error("Error during Google Sign-In:", err);
+      addNotification(`Google Sign-In failed: ${err.message || 'Unknown error'}`, 'error');
+      setGoogleAuthError(err.message || 'Unknown error during sign-in.');
+    }
+  }, [isGoogleApiReady, addNotification]);
+
+  const handleGoogleSignOut = useCallback(async () => {
+    try {
+      await googleDriveService.signOut();
+      addNotification('Signed out from Google Drive.', 'info');
+    } catch (err: any) {
+      console.error("Error during Google Sign-Out:", err);
+      addNotification(`Google Sign-Out failed: ${err.message || 'Unknown error'}`, 'error');
+    }
+  }, [addNotification]);
+
+  const handleSaveToDrive = useCallback(async () => {
+    if (!isGoogleUserSignedIn || portfolioEntries.length === 0) {
+      addNotification('Please sign in to Google and ensure you have portfolio data to save.', 'info');
+      return;
+    }
+    setIsDriveActionLoading(true);
+    try {
+      const portfolioJson = JSON.stringify(portfolioEntries);
+      await googleDriveService.showSavePicker(portfolioJson, 'gepulse_portfolio.json');
+      addNotification('Portfolio saved to Google Drive!', 'success');
+    } catch (error: any) {
+      console.error('Error saving to Google Drive:', error);
+      if (error.message && error.message.includes('picker_closed')) {
+        addNotification('Save to Drive cancelled by user.', 'info');
+      } else {
+        addNotification(`Failed to save to Google Drive: ${error.message || 'Unknown error'}`, 'error');
+      }
+    } finally {
+      setIsDriveActionLoading(false);
+    }
+  }, [isGoogleUserSignedIn, portfolioEntries, addNotification]);
+
+  const handleLoadFromDrive = useCallback(async () => {
+    if (!isGoogleUserSignedIn) {
+      addNotification('Please sign in to Google to load data from Drive.', 'info');
+      return;
+    }
+    setIsDriveActionLoading(true);
+    try {
+      const fileContent = await googleDriveService.showOpenPicker();
+      if (fileContent) {
+        const parsedPortfolio: PortfolioEntry[] = JSON.parse(fileContent);
+        // TODO: Add more robust validation for parsedPortfolio structure
+        if (Array.isArray(parsedPortfolio)) {
+          replacePortfolio(parsedPortfolio);
+          addNotification('Portfolio loaded from Google Drive!', 'success');
+        } else {
+          throw new Error('Invalid portfolio file format.');
+        }
+      } else {
+        // Picker was cancelled or no file selected
+        addNotification('Load from Drive cancelled or no file selected.', 'info');
+      }
+    } catch (error: any) {
+      console.error('Error loading from Google Drive:', error);
+       if (error.message && error.message.includes('picker_closed')) {
+        addNotification('Load from Drive cancelled by user.', 'info');
+      } else {
+        addNotification(`Failed to load from Google Drive: ${error.message || 'Invalid file or unknown error'}`, 'error');
+      }
+    } finally {
+      setIsDriveActionLoading(false);
+    }
+  }, [isGoogleUserSignedIn, addNotification, replacePortfolio]);
+
 
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
   const prevIsAutoRefreshEnabled = usePrevious(isAutoRefreshEnabled);
@@ -242,13 +397,6 @@ const App: React.FC = () => {
   
   const [isAddInvestmentFromViewModalOpen, setIsAddInvestmentFromViewModalOpen] = useState<boolean>(false);
   const [itemForAddInvestmentFromViewModal, setItemForAddInvestmentFromViewModal] = useState<ItemMapInfo | null>(null);
-
-  // Google Drive State
-  const [isGoogleApiReady, setIsGoogleApiReady] = useState(false);
-  const [isGoogleUserSignedIn, setIsGoogleUserSignedIn] = useState(false);
-  const [googleUserProfile, setGoogleUserProfile] = useState<GoogleUserProfile | null>(null);
-  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
-  const [isDriveActionLoading, setIsDriveActionLoading] = useState<boolean>(false);
 
 
   const [isSearchSectionCollapsed, setIsSearchSectionCollapsed] = useState<boolean>(true);
@@ -329,7 +477,15 @@ const App: React.FC = () => {
   const [enableDesktopNotifications, setEnableDesktopNotifications] = useState<boolean>(() => {
     if (initialConsent === 'granted') {
       const saved = localStorage.getItem(DESKTOP_NOTIFICATIONS_ENABLED_KEY);
-      return saved !== null ? JSON.parse(saved) : false;
+      // Ensure migration for old string values if any
+      if (saved === 'true') return true;
+      if (saved === 'false') return false;
+      // Default to false if not 'true' or 'false' string, or if not JSON parsable to boolean
+      try {
+        return saved !== null ? JSON.parse(saved) : false;
+      } catch {
+        return false;
+      }
     }
     return false;
   });
@@ -371,144 +527,6 @@ const App: React.FC = () => {
   const searchBarWrapperRef = useRef<HTMLDivElement>(null);
   const itemListWrapperRef = useRef<HTMLDivElement>(null);
   const sharedItemIdProcessedRef = useRef<boolean>(false); 
-
-  const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
-
-  const {
-    portfolioEntries,
-    addPortfolioEntry,
-    recordSaleAndUpdatePortfolio,
-    deletePortfolioEntry,
-    clearAllPortfolioData,
-    updatePortfolioEntryDetails,
-    replacePortfolio, 
-  } = usePortfolio(isConsentGranted, addNotification);
-
-   // Google Drive API Initialization Effect
-  useEffect(() => {
-    const googleApiKey = process.env[GOOGLE_API_KEY_ENV_VAR];
-    const googleClientId = process.env[GOOGLE_CLIENT_ID_ENV_VAR];
-
-    if (!googleApiKey || !googleClientId) {
-      console.warn("Google API Key or Client ID is missing. Google Drive features will be unavailable.");
-      setGoogleAuthError("Google API credentials missing. Drive features disabled.");
-      setIsGoogleApiReady(false); // Explicitly set to false if keys are missing
-      return;
-    }
-
-    const handleAuthChange = (isSignedIn: boolean, userProfile: GoogleUserProfile | null) => {
-      setIsGoogleUserSignedIn(isSignedIn);
-      setGoogleUserProfile(userProfile);
-      setGoogleAuthError(null);
-      if (isSignedIn) {
-        addNotification(`Signed in to Google Drive as ${userProfile?.name || 'user'}.`, 'success');
-      }
-    };
-    
-    const config: GoogleDriveServiceConfig = {
-        apiKey: googleApiKey,
-        clientId: googleClientId,
-        onAuthChange: handleAuthChange,
-        onApiReady: () => {
-            setIsGoogleApiReady(true);
-            setGoogleAuthError(null);
-            // Check initial sign-in state
-             const initialProfile = googleDriveService.getSignedInUserProfile();
-             if (initialProfile) {
-                handleAuthChange(true, initialProfile);
-             } else {
-                handleAuthChange(false, null);
-             }
-        },
-        onApiError: (errorMsg: string) => {
-            setGoogleAuthError(errorMsg);
-            setIsGoogleApiReady(false);
-            addNotification(`Google Drive API Error: ${errorMsg}`, 'error');
-        }
-    };
-
-    googleDriveService.init(config);
-
-  }, [addNotification]);
-
-
-  const handleGoogleSignIn = useCallback(async () => {
-    if (!isGoogleApiReady) {
-      addNotification("Google Drive service is not ready. Please wait.", "info");
-      return;
-    }
-    try {
-      setGoogleAuthError(null);
-      await googleDriveService.signIn();
-      // Auth change is handled by the callback in init
-    } catch (error: any) {
-      console.error("Google Sign-In Error:", error);
-      setGoogleAuthError(error.message || "Failed to sign in with Google.");
-      addNotification(error.message || "Google Sign-In failed.", "error");
-    }
-  }, [isGoogleApiReady, addNotification]);
-
-  const handleGoogleSignOut = useCallback(async () => {
-    if (!isGoogleApiReady) return;
-    try {
-      await googleDriveService.signOut();
-      setIsGoogleUserSignedIn(false);
-      setGoogleUserProfile(null);
-      addNotification("Signed out from Google Drive.", "info");
-    } catch (error: any) {
-      console.error("Google Sign-Out Error:", error);
-      addNotification("Google Sign-Out failed.", "error");
-    }
-  }, [isGoogleApiReady, addNotification]);
-
-  const handleSaveToDrive = useCallback(async () => {
-    if (!isGoogleUserSignedIn || !isConsentGranted) {
-      addNotification("Please sign in to Google Drive and grant consent to save.", "info");
-      return;
-    }
-    if (portfolioEntries.length === 0) {
-        addNotification("No portfolio data to save.", "info");
-        return;
-    }
-    setIsDriveActionLoading(true);
-    try {
-      const portfolioJson = JSON.stringify(portfolioEntries);
-      await googleDriveService.showSavePicker(portfolioJson, GDRIVE_PORTFOLIO_FILENAME);
-      addNotification("Portfolio saved to Google Drive successfully!", "success");
-    } catch (error: any) {
-      console.error("Error saving to Google Drive:", error);
-      addNotification(`Failed to save to Google Drive: ${error.message}`, "error");
-    } finally {
-        setIsDriveActionLoading(false);
-    }
-  }, [isGoogleUserSignedIn, portfolioEntries, addNotification, isConsentGranted]);
-
-  const handleLoadFromDrive = useCallback(async () => {
-    if (!isGoogleUserSignedIn || !isConsentGranted) {
-      addNotification("Please sign in to Google Drive and grant consent to load.", "info");
-      return;
-    }
-     setIsDriveActionLoading(true);
-    try {
-      const { content } = await googleDriveService.showOpenPicker();
-      const parsedEntries = JSON.parse(content) as PortfolioEntry[];
-      // Basic validation (can be more thorough)
-      if (Array.isArray(parsedEntries) && parsedEntries.every(e => typeof e.itemId === 'number')) {
-        replacePortfolio(parsedEntries);
-        addNotification("Portfolio loaded from Google Drive!", "success");
-      } else {
-        throw new Error("Invalid portfolio file structure.");
-      }
-    } catch (error: any) {
-      console.error("Error loading from Google Drive:", error);
-      if (error.message !== "Open cancelled by user.") { // Don't show error for user cancel
-        addNotification(`Failed to load from Google Drive: ${error.message}`, "error");
-      }
-    } finally {
-      setIsDriveActionLoading(false);
-    }
-  }, [isGoogleUserSignedIn, replacePortfolio, addNotification, isConsentGranted]);
-
 
   const getItemIconUrl = useCallback((iconName: string): string => {
     if(!iconName) return 'https://via.placeholder.com/36?text=N/A'; 
@@ -828,8 +846,7 @@ const App: React.FC = () => {
     ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
     resetPreferencesToDefault();
     setConsentStatus('denied'); 
-    if(isGoogleUserSignedIn) handleGoogleSignOut(); // Sign out from Google if consent revoked
-  }, [resetPreferencesToDefault, isGoogleUserSignedIn, handleGoogleSignOut]);
+  }, [resetPreferencesToDefault]);
 
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
@@ -1254,7 +1271,6 @@ const App: React.FC = () => {
           }
         }
       }
-
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
       if (itemAlerts.length > 0 && latest) {
         checkAlerts(itemAlerts, {[currentItem.id]: latest});
@@ -1329,6 +1345,7 @@ const App: React.FC = () => {
     if (selectedItem) {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
   }, [selectedItem, selectedTimespan]); 
 
 
@@ -1819,8 +1836,7 @@ const App: React.FC = () => {
           // Google Drive Props
           isGoogleApiReady={isGoogleApiReady}
           isGoogleUserSignedIn={isGoogleUserSignedIn}
-          googleUserProfile={googleUserProfile}
-          googleAuthError={googleAuthError}
+          googleUser={googleUser}
           onGoogleSignIn={handleGoogleSignIn}
           onGoogleSignOut={handleGoogleSignOut}
           onSaveToDrive={handleSaveToDrive}

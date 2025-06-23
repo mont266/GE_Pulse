@@ -1,262 +1,325 @@
-import { GoogleUserProfile, TokenClient, TokenResponse, TokenClientConfig, GoogleDriveServiceConfig } from '../src/types';
-import { GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
-
-// Ensure these types are available globally for gapi and google.accounts
-declare const gapi: any;
-declare const google: any;
-
-let tokenClient: TokenClient | null = null;
-let gapiInited = false;
-let gisInited = false;
-let pickerApiLoaded = false;
-
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-let API_KEY_INTERNAL = '';
-let CLIENT_ID_INTERNAL = '';
-
-let onAuthChangeCallbackGlobal: (isSignedIn: boolean, userProfile: GoogleUserProfile | null) => void = () => {};
-let onApiReadyCallbackGlobal: () => void = () => {};
-let onApiErrorCallbackGlobal: (errorMsg: string) => void = () => {};
 
 
-const loadScript = (src: string, id: string): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (document.getElementById(id)) {
-      resolve();
+import { GoogleUserProfile, GoogleDriveServiceConfig } from '../src/types';
+import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_APP_ID, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
+
+// The global Window interface augmentation with gapi, google, tokenClient, etc.
+// is now expected to be in a central types file (e.g., src/types.ts) to avoid conflicts.
+
+class GoogleDriveService {
+  private apiKey: string | undefined;
+  private clientId: string | undefined;
+  private onAuthStatusChangedCallback: (isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null) => void = () => {};
+  private onGisLoadedCallback: () => void = () => {};
+  
+  private gapiLoaded: boolean = false;
+  private gisLoaded: boolean = false;
+  private pickerApiLoaded: boolean = false;
+  private tokenClient: any = null;
+
+  constructor() {
+    this.loadGisClient = this.loadGisClient.bind(this);
+    this.loadGapiClient = this.loadGapiClient.bind(this);
+  }
+
+  init(config: GoogleDriveServiceConfig): void {
+    this.onGisLoadedCallback = config.onGisLoaded;
+    this.onAuthStatusChangedCallback = config.onAuthStatusChanged;
+
+    this.apiKey = window.GOOGLE_API_KEY;
+    this.clientId = window.GOOGLE_CLIENT_ID;
+
+    if (!this.apiKey || !this.clientId) {
+      console.error("GoogleDriveService: API Key or Client ID is missing from window object.");
+      this.onAuthStatusChangedCallback(false, null, "API Key or Client ID missing.");
       return;
     }
-    const script = document.createElement('script');
-    script.src = src;
-    script.id = id;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.body.appendChild(script);
-  });
-};
+    
+    this.loadGisClient();
+  }
 
-const loadGisScript = () => loadScript('https://accounts.google.com/gsi/client', 'google-identity-services-script');
-const loadGapiScript = () => loadScript('https://apis.google.com/js/api.js', 'google-api-client-script');
+  private loadGapiClient(): void {
+    if (window.gapi) {
+      window.gapi.load('client:picker', () => {
+        console.log('GAPI client and picker loaded.');
+        this.gapiLoaded = true;
+        this.initializeGapiClient();
+      });
+    } else {
+        // This case should ideally not be hit if index.html script loads correctly
+        console.error('GAPI script not loaded yet.');
+         setTimeout(this.loadGapiClient, 100); 
+    }
+  }
+
+  private initializeGapiClient(): void {
+    if (!this.apiKey) {
+      this.onAuthStatusChangedCallback(false, null, 'API Key is missing for GAPI init.');
+      return;
+    }
+    window.gapi.client.init({
+      apiKey: this.apiKey,
+      discoveryDocs: GDRIVE_DISCOVERY_DOCS,
+    })
+    .then(() => {
+      console.log('GAPI client initialized for Drive API.');
+      this.pickerApiLoaded = true;
+      // Check if already signed in via GIS token
+      const token = sessionStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+      if (token) {
+        window.gapi.client.setToken({ access_token: token });
+        this.onAuthStatusChangedCallback(true, this.getSignedInUserProfile(), null);
+      }
+    })
+    .catch((error: any) => {
+      console.error('Error initializing GAPI client:', error);
+      this.onAuthStatusChangedCallback(false, null, `GAPI init error: ${error.message || 'Unknown error'}`);
+    });
+  }
+  
+  private loadGisClient(): void {
+    if (window.google && window.google.accounts) {
+      console.log('GIS script loaded.');
+      this.gisLoaded = true;
+      this.onGisLoadedCallback(); // Notify App.tsx GIS is ready
+      // GAPI client init will be triggered by App.tsx after GIS is loaded and keys checked
+    } else {
+      // This case should ideally not be hit if index.html script loads correctly
+      console.error('GIS script not loaded yet.');
+      setTimeout(this.loadGisClient, 100); 
+    }
+  }
+
+  // This method is called by App.tsx *after* GIS is loaded and API keys are confirmed.
+  public initGapiClient(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
+    if (!this.apiKey) {
+        gapiInitError(new Error("API Key is missing for GAPI initialization"));
+        return;
+    }
+    if (window.gapi) {
+        window.gapi.load('client:picker', () => {
+            window.gapi.client.init({
+                apiKey: this.apiKey,
+                discoveryDocs: GDRIVE_DISCOVERY_DOCS,
+            })
+            .then(() => {
+                this.gapiLoaded = true;
+                this.pickerApiLoaded = true;
+                gapiInitSuccess();
+            })
+            .catch((error: any) => {
+                gapiInitError(error);
+            });
+        });
+    } else {
+        // This case implies gapi script in index.html hasn't loaded yet, which is an issue.
+        gapiInitError(new Error("GAPI script not available on window."));
+    }
+  }
 
 
-export async function init(config: GoogleDriveServiceConfig): Promise<void> {
-  API_KEY_INTERNAL = config.apiKey;
-  CLIENT_ID_INTERNAL = config.clientId;
-  onAuthChangeCallbackGlobal = config.onAuthChange;
-  onApiReadyCallbackGlobal = config.onApiReady;
-  onApiErrorCallbackGlobal = config.onApiError;
-
-  try {
-    await loadGisScript();
-    gisInited = true;
-
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID_INTERNAL,
-      scope: SCOPES,
-      prompt: '', // No immediate prompt, wait for signIn()
-      callback: async (tokenResponse: TokenResponse) => {
+  private initializeTokenClient(): void {
+    if (!this.clientId) {
+        this.onAuthStatusChangedCallback(false, null, 'Client ID is missing for Token Client init.');
+        return;
+    }
+    this.tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: this.clientId,
+      scope: GDRIVE_SCOPES.join(' '),
+      callback: (tokenResponse: any) => {
         if (tokenResponse && tokenResponse.access_token) {
           sessionStorage.setItem(GDRIVE_ACCESS_TOKEN_KEY, tokenResponse.access_token);
-          const userProfile = await fetchUserProfile(tokenResponse.access_token);
-          onAuthChangeCallbackGlobal(true, userProfile);
-        } else if (tokenResponse && tokenResponse.error) {
-          console.error('Google Token Error:', tokenResponse.error, tokenResponse.error_description);
-          onAuthChangeCallbackGlobal(false, null);
-          onApiErrorCallbackGlobal(`Google Auth: ${tokenResponse.error_description || tokenResponse.error}`);
+          window.gapi.client.setToken(tokenResponse);
+          this.onAuthStatusChangedCallback(true, this.getSignedInUserProfile(), null);
         } else {
-          // This case might occur if the popup is closed before selection.
-          onAuthChangeCallbackGlobal(false, null);
+          const errorMsg = tokenResponse?.error || 'Token response missing access_token.';
+          console.error('Token response error:', tokenResponse);
+          this.onAuthStatusChangedCallback(false, null, `Auth error: ${errorMsg}`);
         }
       },
-    } as TokenClientConfig); // Cast to bypass potential minor type mismatches if library is slightly different
-
-    await loadGapiScript();
-    gapiInited = true;
-    
-    await new Promise<void>((resolve, reject) => {
-      gapi.load('client:picker', {
-        callback: resolve,
-        onerror: () => reject(new Error("Failed to load GAPI client or picker.")),
-        timeout: 5000, // 5 seconds
-        ontimeout: () => reject(new Error("Timeout loading GAPI client or picker."))
-      });
+      error_callback: (error: any) => {
+        console.error('Token client error_callback:', error);
+        this.onAuthStatusChangedCallback(false, null, `Auth error: ${error.message || 'Token client error'}`);
+      }
     });
-    pickerApiLoaded = true;
-
-    onApiReadyCallbackGlobal();
-
-  } catch (error: any) {
-    console.error('Error initializing Google Drive Service:', error);
-    onApiErrorCallbackGlobal(error.message || 'Failed to initialize Google Drive Service.');
   }
-}
 
-async function fetchUserProfile(accessToken: string): Promise<GoogleUserProfile | null> {
-  try {
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+  public getToken(): string | null {
+    return sessionStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+  }
+
+  public signIn(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (!this.gisLoaded || !this.gapiLoaded) {
+            reject(new Error('Google APIs not fully loaded.'));
+            return;
+        }
+        if (!this.tokenClient) {
+            this.initializeTokenClient();
+        }
+
+        const currentToken = this.getToken();
+        if (currentToken && window.gapi?.client?.getToken()?.access_token === currentToken) {
+             // If GAPI already has a valid token (potentially from a previous session that GIS restored)
+            this.onAuthStatusChangedCallback(true, this.getSignedInUserProfile(), null);
+            resolve();
+            return;
+        }
+
+        this.tokenClient.requestAccessToken({ prompt: 'consent' });
+        // The callback in initTokenClient will handle success/failure.
+        // For simplicity, this promise resolves once the request is made.
+        // Actual sign-in state is managed via onAuthStatusChangedCallback.
+        resolve(); 
     });
-    if (!response.ok) throw new Error(`Failed to fetch user profile: ${response.statusText}`);
-    const data = await response.json();
-    return {
-      email: data.email,
-      name: data.name,
-      picture: data.picture,
-    };
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
+  }
+
+  public signOut(): Promise<void> {
+    return new Promise((resolve) => {
+      const token = sessionStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+      if (token) {
+        window.google.accounts.oauth2.revoke(token, () => {
+          sessionStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY);
+          window.gapi.client.setToken(null);
+          this.onAuthStatusChangedCallback(false, null, null);
+          resolve();
+        });
+      } else {
+        this.onAuthStatusChangedCallback(false, null, null);
+        resolve();
+      }
+    });
+  }
+
+  public getSignedInUserProfile(): GoogleUserProfile | null {
+    // Note: gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile() is from old GSI.
+    // With new GIS, user info is typically obtained via an ID token or userinfo endpoint
+    // after successful token exchange. For simplicity with Picker, we might not need full profile.
+    // If an ID token was requested (e.g. scope includes 'email profile openid'), it could be parsed.
+    // For now, if there's a token, assume signed in, actual profile might be basic.
+    // If you need profile info, ensure 'email', 'profile', 'openid' scopes are included
+    // and implement ID token fetching/parsing or call userinfo endpoint.
+    const token = this.getToken(); // Check if a token exists as a proxy for being signed in
+    if (token && window.gapi?.client?.getToken()?.access_token === token) {
+      // This is a placeholder. Real profile info requires more setup with GIS.
+      // For a basic profile with GIS, you'd typically use `google.accounts.id.initialize`
+      // with a callback for `credential_response` if using "Sign In With Google" button.
+      // Since we are using token client for Drive, explicit profile fetching is needed.
+      // Let's assume for now email is the primary identifier we might want.
+      // We'll try to get it if the 'email' scope allows.
+      
+      // Try a simple profile fetch if scopes allow (this is a common pattern)
+      if (window.gapi.client.drive) { // Check if drive API is loaded as a proxy for GAPI init
+        // Placeholder: A real app would fetch profile info using the access token
+        // For demo, if we have a token, assume we can get email eventually
+        // A more robust way is to decode the id_token if available or call people API.
+        return { email: "User (Email not fetched)" }; 
+      }
+    }
     return null;
   }
-}
 
+  public showSavePicker(fileContent: string, defaultFileName: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.pickerApiLoaded || !this.gapiLoaded || !this.getToken()) {
+        reject(new Error('Google Picker or Auth not ready.'));
+        return;
+      }
 
-export function signIn(): void {
-  if (!tokenClient) {
-    onApiErrorCallbackGlobal("Google Identity Service not initialized for sign-in.");
-    return;
-  }
-  // Requesting new token. If user is already signed in and token is valid, GIS might return it without prompt.
-  // 'consent' ensures they see the scopes if it's the first time or re-auth.
-  tokenClient.requestAccessToken({ prompt: 'consent' });
-}
+      const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+      view.setMimeTypes('application/vnd.google-apps.folder'); // Show folders for saving
+      const picker = new window.google.picker.PickerBuilder()
+        .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
+        .setAppId(GDRIVE_APP_ID) 
+        .setOAuthToken(this.getToken()!)
+        .addView(view)
+        .addView(new window.google.picker.DocsUploadView().setParent('root')) // Allow upload to root
+        .setTitle('Save Portfolio to Google Drive')
+        .setCallback((data: any) => {
+          if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
+            const doc = data[window.google.picker.Response.DOCUMENTS][0];
+            const folderId = doc.id; // This is the folder ID chosen by user
+            
+            const boundary = '-------314159265358979323846';
+            const delimiter = "\r\n--" + boundary + "\r\n";
+            const close_delim = "\r\n--" + boundary + "--";
 
-export function signOut(): void {
-  const token = sessionStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
-  if (token && google && google.accounts && google.accounts.oauth2) {
-    google.accounts.oauth2.revoke(token, () => {
-      sessionStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY);
-      onAuthChangeCallbackGlobal(false, null);
+            const metadata = {
+              name: defaultFileName,
+              mimeType: 'application/json',
+              parents: [folderId]
+            };
+
+            const multipartRequestBody =
+                delimiter +
+                'Content-Type: application/json; charset=UTF-TYPE-8\r\n\r\n' +
+                JSON.stringify(metadata) +
+                delimiter +
+                'Content-Type: application/json\r\n\r\n' +
+                fileContent +
+                close_delim;
+            
+            window.gapi.client.request({
+                path: '/upload/drive/v3/files',
+                method: 'POST',
+                params: {uploadType: 'multipart'},
+                headers: {'Content-Type': 'multipart/related; boundary="' + boundary + '"'},
+                body: multipartRequestBody
+            }).then((response: any) => {
+                console.log('File saved to Drive:', response.result);
+                resolve();
+            }).catch((error: any) => {
+                console.error('Error saving file to Drive:', error);
+                reject(new Error(error.result?.error?.message || 'Failed to save file.'));
+            });
+
+          } else if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.CANCEL) {
+            console.log('Google Picker: Save cancelled by user.');
+            reject(new Error('picker_closed:Save cancelled by user.'));
+          }
+        })
+        .build();
+      picker.setVisible(true);
     });
-  } else {
-    sessionStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY); // Ensure token is cleared
-    onAuthChangeCallbackGlobal(false, null);
-  }
-}
-
-export function getSignedInUserProfile(): GoogleUserProfile | null {
-    // This function might need to re-fetch or use a stored profile
-    // For now, it's mainly to demonstrate the callback in init sets it up
-    // A more robust solution would store the profile in App.tsx state
-    return null; // App.tsx will manage this via onAuthChange callback
-}
-
-
-function getAccessToken(): string | null {
-  return sessionStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
-}
-
-export async function showSavePicker(fileContent: string, defaultFileName: string): Promise<void> {
-  const accessToken = getAccessToken();
-  if (!accessToken || !pickerApiLoaded) {
-    throw new Error("Google API not ready or user not signed in for save.");
   }
 
-  return new Promise((resolve, reject) => {
-    const docsView = new google.picker.DocsUploadView(); // Allows specifying folder and filename
-    docsView.setIncludeFolders(true); // User can select a folder
-    docsView.setParent('root'); // Start in root, user can navigate
+  public showOpenPicker(): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      if (!this.pickerApiLoaded || !this.gapiLoaded || !this.getToken()) {
+        reject(new Error('Google Picker or Auth not ready.'));
+        return;
+      }
+      const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
+      view.setMimeTypes('application/json'); // Only show JSON files
 
-    const picker = new google.picker.PickerBuilder()
-      .addView(docsView)
-      .setOAuthToken(accessToken)
-      .setDeveloperKey(API_KEY_INTERNAL)
-      .setAppId(CLIENT_ID_INTERNAL.split('-')[0]) 
-      .setCallback(async (data: any) => {
-        if (data.action === google.picker.Action.PICKED) {
-          const doc = data.docs[0];
-          let folderId = 'root'; // Default to root if no folder picked (should not happen with DocsUploadView like this)
-          if (doc.parentId) { // If a folder was selected
-             folderId = doc.parentId;
-          } else if (doc.id && doc.type === 'folder') { // If the picked item itself is a folder
-             folderId = doc.id;
-          }
-          
-          // If user selects existing file to overwrite, picker data might contain its ID
-          const fileIdToUpdate = (data.docs && data.docs[0] && !data.docs[0].isNew) ? data.docs[0].id : null;
-
-          const metadata = {
-            name: defaultFileName, // Picker name field will override this if user types
-            mimeType: 'application/json',
-            parents: fileIdToUpdate ? undefined : [folderId], // Don't specify parent if updating existing
-          };
-
-          const form = new FormData();
-          form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-          form.append('file', new Blob([fileContent], { type: 'application/json' }));
-          
-          const uploadUrl = fileIdToUpdate 
-            ? `https://www.googleapis.com/upload/drive/v3/files/${fileIdToUpdate}?uploadType=multipart`
-            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-          
-          const method = fileIdToUpdate ? 'PATCH' : 'POST';
-
-          try {
-            const res = await fetch(uploadUrl, {
-              method: method,
-              headers: new Headers({ Authorization: `Bearer ${accessToken}` }),
-              body: form,
+      const picker = new window.google.picker.PickerBuilder()
+        .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
+        .setAppId(GDRIVE_APP_ID)
+        .setOAuthToken(this.getToken()!)
+        .addView(view)
+        .setTitle('Load Portfolio from Google Drive')
+        .setCallback((data: any) => {
+          if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
+            const doc = data[window.google.picker.Response.DOCUMENTS][0];
+            const fileId = doc.id;
+            window.gapi.client.drive.files.get({
+              fileId: fileId,
+              alt: 'media'
+            }).then((response: any) => {
+              resolve(response.body); // response.body is the file content as string
+            }).catch((error: any) => {
+              console.error('Error fetching file content from Drive:', error);
+              reject(new Error(error.result?.error?.message || 'Failed to load file content.'));
             });
-            if (!res.ok) {
-              const errorData = await res.json();
-              console.error("Drive API Error Response:", errorData);
-              throw new Error(`Failed to upload file: ${errorData.error.message}`);
-            }
-            resolve();
-          } catch (error) {
-            reject(error);
+          } else if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.CANCEL) {
+            console.log('Google Picker: Open cancelled by user.');
+            reject(new Error('picker_closed:Open cancelled by user.'));
           }
-        } else if (data.action === google.picker.Action.CANCEL) {
-          reject(new Error("Save cancelled by user."));
-        }
-      })
-      .build();
-    picker.setVisible(true);
-  });
-}
-
-
-export async function showOpenPicker(): Promise<{ name: string, id: string, content: string }> {
-  const accessToken = getAccessToken();
-  if (!accessToken || !pickerApiLoaded) {
-    throw new Error("Google API not ready or user not signed in for open.");
+        })
+        .build();
+      picker.setVisible(true);
+    });
   }
-
-  return new Promise((resolve, reject) => {
-    const view = new google.picker.View(google.picker.ViewId.DOCS);
-    view.setMimeTypes("application/json");
-
-    const picker = new google.picker.PickerBuilder()
-      .addView(view)
-      .setOAuthToken(accessToken)
-      .setDeveloperKey(API_KEY_INTERNAL)
-      .setAppId(CLIENT_ID_INTERNAL.split('-')[0])
-      .setCallback(async (data: any) => {
-        if (data.action === google.picker.Action.PICKED) {
-          const file = data.docs[0];
-          const fileId = file.id;
-          const fileName = file.name;
-
-          try {
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-              method: 'GET',
-              headers: new Headers({ Authorization: `Bearer ${accessToken}` }),
-            });
-            if (!res.ok) {
-              const errorData = await res.json();
-               console.error("Drive API Error Response:", errorData);
-              throw new Error(`Failed to download file: ${errorData.error.message}`);
-            }
-            const content = await res.text();
-            resolve({ name: fileName, id: fileId, content });
-          } catch (error) {
-            reject(error);
-          }
-        } else if (data.action === google.picker.Action.CANCEL) {
-          reject(new Error("Open cancelled by user."));
-        }
-      })
-      .build();
-    picker.setVisible(true);
-  });
 }
+
+export const googleDriveService = new GoogleDriveService();
