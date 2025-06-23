@@ -292,6 +292,8 @@ class GoogleDriveService {
       console.log('[GDS] All components ready for save picker.');
 
       const view = new window.google.picker.DocsView();
+      view.setParent('root'); // Default to My Drive
+      console.log('[GDS] Save Picker view.setParent("root") called.');
       view.setIncludeFolders(true);
       console.log('[GDS] Save Picker view.setIncludeFolders(true) called.');
       view.setSelectFolderEnabled(true);
@@ -383,10 +385,11 @@ class GoogleDriveService {
       console.log('[GDS] All components ready for open picker.');
 
       const view = new window.google.picker.DocsView()
+        .setParent('root') // Default to My Drive
         .setMimeTypes('application/json') 
         .setIncludeFolders(true) 
         .setSelectFolderEnabled(false); 
-      console.log('[GDS] Open Picker DocsView configured:', view);
+      console.log('[GDS] Open Picker DocsView configured (parent=root, mimeTypes=json, includeFolders=true, selectFolderEnabled=false):', view);
 
 
       const pickerBuilder = new window.google.picker.PickerBuilder()
