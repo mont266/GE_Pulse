@@ -1,6 +1,6 @@
 
 import { GoogleUserProfile, GoogleDriveServiceConfig } from '../src/types';
-import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_APP_ID, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
+import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
 
 // The global Window interface augmentation with gapi, google, tokenClient, etc.
 // is now expected to be in a central types file (e.g., src/types.ts) to avoid conflicts.
@@ -199,6 +199,18 @@ class GoogleDriveService {
       // For simplicity in this demo, we return a generic user object.
       // If you need the actual email, ensure your scopes are correct and implement
       // the necessary API call or token decoding logic.
+      // For this app, we are not fetching user's email but can get it if required with correct scopes.
+      // Returning a generic email for now, should ideally be from id_token or people API.
+      const idToken = window.gapi.client.getToken().id_token;
+      if (idToken) {
+          try {
+            const payload = JSON.parse(atob(idToken.split('.')[1]));
+            return { email: payload.email || "User (Email not in token)", name: payload.name, picture: payload.picture };
+          } catch (e) {
+            console.error("Error decoding ID token:", e);
+            return { email: "User (Email parsing error)" };
+          }
+      }
       return { email: "User (Email not fetched)" }; 
     }
     return null;
@@ -211,15 +223,14 @@ class GoogleDriveService {
         return;
       }
 
-      // Use ViewId.FOLDERS to allow the user to select a destination folder.
       const folderView = new window.google.picker.View(window.google.picker.ViewId.FOLDERS);
-      folderView.setParent('root'); // Start navigation at My Drive
+      folderView.setParent('root'); 
       
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
-        .setAppId(GDRIVE_APP_ID) 
+        // .setAppId(GDRIVE_APP_ID) // GDRIVE_APP_ID is deprecated and often not needed if OAuth is correctly configured.
         .setOAuthToken(this.getToken()!)
-        .addView(folderView) // Only show the folder selection view.
+        .addView(folderView) 
         .setTitle('Select Folder to Save Portfolio')
         .setCallback((data: any) => {
           if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
@@ -233,12 +244,12 @@ class GoogleDriveService {
             const metadata = {
               name: defaultFileName,
               mimeType: 'application/json',
-              parents: [folderId] // Save to the selected folder
+              parents: [folderId] 
             };
 
             const multipartRequestBody =
                 delimiter +
-                'Content-Type: application/json; charset=UTF-8\r\n\r\n' + // Corrected charset
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
                 JSON.stringify(metadata) +
                 delimiter +
                 'Content-Type: application/json\r\n\r\n' +
@@ -276,12 +287,12 @@ class GoogleDriveService {
         return;
       }
       const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
-      view.setMimeTypes('application/json'); // Only show JSON files
-      view.setParent('root'); // Default to "My Drive"
+      view.setMimeTypes('application/json'); 
+      view.setParent('root'); 
       
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
-        .setAppId(GDRIVE_APP_ID)
+        // .setAppId(GDRIVE_APP_ID) // GDRIVE_APP_ID is deprecated.
         .setOAuthToken(this.getToken()!)
         .addView(view)
         .setTitle('Load Portfolio from Google Drive')
@@ -293,7 +304,7 @@ class GoogleDriveService {
               fileId: fileId,
               alt: 'media'
             }).then((response: any) => {
-              resolve(response.body); // response.body is the file content as string
+              resolve(response.body); 
             }).catch((error: any) => {
               console.error('Error fetching file content from Drive:', error);
               reject(new Error(error.result?.error?.message || 'Failed to load file content.'));
