@@ -15,6 +15,7 @@ import { SettingsModal } from './src/components/SettingsModal';
 import { FavoritesList } from './components/FavoritesList';
 import { ConsentBanner } from './components/ConsentBanner';
 import { ChangelogModal } from './src/components/ChangelogModal';
+import { PrivacyPolicyModal } from './src/components/PrivacyPolicyModal'; // Added Privacy Policy Modal
 import { SetAlertModal } from './components/SetAlertModal'; 
 import { FeedbackModal } from './components/FeedbackModal'; 
 import { TopMoversSection } from './components/TopMoversSection';
@@ -389,6 +390,7 @@ const App: React.FC = () => {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
+  const [isPrivacyPolicyModalOpen, setIsPrivacyPolicyModalOpen] = useState<boolean>(false); // Privacy Policy state
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); 
   const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
   
@@ -1441,6 +1443,8 @@ const App: React.FC = () => {
 
   const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
   const toggleChangelogModal = () => setIsChangelogModalOpen(prev => !prev); 
+  const togglePrivacyPolicyModal = () => setIsPrivacyPolicyModalOpen(prev => !prev); // Privacy Policy toggle
+
   const favTerm = wordingPreference === 'uk' ? 'favourite' : 'favorite';
 
   const handleResetView = useCallback(() => {
@@ -1806,6 +1810,13 @@ const App: React.FC = () => {
           entries={changelogEntries}
         />
       )}
+
+      {isPrivacyPolicyModalOpen && (
+        <PrivacyPolicyModal 
+          isOpen={isPrivacyPolicyModalOpen} 
+          onClose={togglePrivacyPolicyModal} 
+        />
+      )}
       
       {isFeedbackModalOpen && (
         <FeedbackModal
@@ -1979,7 +1990,9 @@ const App: React.FC = () => {
             Request Feature / Report Bug
           </button>
            <span className="mx-2 text-[var(--text-muted)]">|</span>
-           {APP_VERSION}
+           <button onClick={togglePrivacyPolicyModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
+            Privacy Policy
+          </button>
         </p>
         {consentStatus !== 'pending' && (
             <p className="mt-2">
@@ -1988,6 +2001,7 @@ const App: React.FC = () => {
                 </button>
             </p>
         )}
+        <p className="mt-2 text-xs text-[var(--text-muted)]">{APP_VERSION}</p>
       </footer>
       {consentStatus === 'pending' && (
         <ConsentBanner 

@@ -7,13 +7,13 @@ export const changelogEntries: ChangelogEntry[] = [
     version: "Beta v0.11",
     date: "2025-06-23", // Placeholder for current development
     changes: [
-      "Re-implemented Google Drive integration for portfolio backup & restore. This version correctly uses Netlify's snippet injection to access API keys from the `window` object, resolving previous deployment issues. Users can now connect their Google Drive to save and load their portfolio data.",
+      "Re-implemented Google Drive integration for portfolio backup & restore, resolving previous deployment issues. Users can now connect their Google Drive to save and load their portfolio data.",
       "Portfolio items are now clickable. Clicking an item in the Portfolio modal will close the modal and display the item's chart and details in the main view.",
       "Added a human verification field (simple math question) to the feedback form to help reduce spam submissions.",
       "Initial setup for version 0.11.",
       "Prepared application for new feature development and enhancements under v0.11."
     ],
-    notes: "Version 0.11 branch initiated. Ready for upcoming features and improvements."
+    notes: "This update focuses on enhancing Google Drive integration and user experience improvements in portfolio management."
   },
   {
     version: "Beta v0.10",

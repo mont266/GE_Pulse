@@ -1,5 +1,4 @@
 
-
 import { GoogleUserProfile, GoogleDriveServiceConfig } from '../src/types';
 import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_APP_ID, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
 
@@ -192,29 +191,15 @@ class GoogleDriveService {
   }
 
   public getSignedInUserProfile(): GoogleUserProfile | null {
-    // Note: gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile() is from old GSI.
-    // With new GIS, user info is typically obtained via an ID token or userinfo endpoint
-    // after successful token exchange. For simplicity with Picker, we might not need full profile.
-    // If an ID token was requested (e.g. scope includes 'email profile openid'), it could be parsed.
-    // For now, if there's a token, assume signed in, actual profile might be basic.
-    // If you need profile info, ensure 'email', 'profile', 'openid' scopes are included
-    // and implement ID token fetching/parsing or call userinfo endpoint.
-    const token = this.getToken(); // Check if a token exists as a proxy for being signed in
+    const token = this.getToken(); 
     if (token && window.gapi?.client?.getToken()?.access_token === token) {
-      // This is a placeholder. Real profile info requires more setup with GIS.
-      // For a basic profile with GIS, you'd typically use `google.accounts.id.initialize`
-      // with a callback for `credential_response` if using "Sign In With Google" button.
-      // Since we are using token client for Drive, explicit profile fetching is needed.
-      // Let's assume for now email is the primary identifier we might want.
-      // We'll try to get it if the 'email' scope allows.
-      
-      // Try a simple profile fetch if scopes allow (this is a common pattern)
-      if (window.gapi.client.drive) { // Check if drive API is loaded as a proxy for GAPI init
-        // Placeholder: A real app would fetch profile info using the access token
-        // For demo, if we have a token, assume we can get email eventually
-        // A more robust way is to decode the id_token if available or call people API.
-        return { email: "User (Email not fetched)" }; 
-      }
+      // This is a placeholder. A real implementation would fetch user info
+      // using the access token, e.g., by calling the Google People API or
+      // decoding an ID token if 'openid', 'email', 'profile' scopes were used.
+      // For simplicity in this demo, we return a generic user object.
+      // If you need the actual email, ensure your scopes are correct and implement
+      // the necessary API call or token decoding logic.
+      return { email: "User (Email not fetched)" }; 
     }
     return null;
   }
@@ -226,19 +211,20 @@ class GoogleDriveService {
         return;
       }
 
-      const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
-      view.setMimeTypes('application/vnd.google-apps.folder'); // Show folders for saving
+      // Use ViewId.FOLDERS to allow the user to select a destination folder.
+      const folderView = new window.google.picker.View(window.google.picker.ViewId.FOLDERS);
+      folderView.setParent('root'); // Start navigation at My Drive
+      
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
         .setAppId(GDRIVE_APP_ID) 
         .setOAuthToken(this.getToken()!)
-        .addView(view)
-        .addView(new window.google.picker.DocsUploadView().setParent('root')) // Allow upload to root
-        .setTitle('Save Portfolio to Google Drive')
+        .addView(folderView) // Only show the folder selection view.
+        .setTitle('Select Folder to Save Portfolio')
         .setCallback((data: any) => {
           if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
-            const doc = data[window.google.picker.Response.DOCUMENTS][0];
-            const folderId = doc.id; // This is the folder ID chosen by user
+            const selectedFolder = data[window.google.picker.Response.DOCUMENTS][0];
+            const folderId = selectedFolder.id;
             
             const boundary = '-------314159265358979323846';
             const delimiter = "\r\n--" + boundary + "\r\n";
@@ -247,12 +233,12 @@ class GoogleDriveService {
             const metadata = {
               name: defaultFileName,
               mimeType: 'application/json',
-              parents: [folderId]
+              parents: [folderId] // Save to the selected folder
             };
 
             const multipartRequestBody =
                 delimiter +
-                'Content-Type: application/json; charset=UTF-TYPE-8\r\n\r\n' +
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n' + // Corrected charset
                 JSON.stringify(metadata) +
                 delimiter +
                 'Content-Type: application/json\r\n\r\n' +
@@ -291,7 +277,8 @@ class GoogleDriveService {
       }
       const view = new window.google.picker.View(window.google.picker.ViewId.DOCS);
       view.setMimeTypes('application/json'); // Only show JSON files
-
+      view.setParent('root'); // Default to "My Drive"
+      
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
         .setAppId(GDRIVE_APP_ID)
