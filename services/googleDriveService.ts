@@ -215,21 +215,18 @@ class GoogleDriveService {
         return;
       }
 
-      const docsView = new window.google.picker.View(window.google.picker.ViewId.DOCS);
-      docsView.setIncludeFolders(true); // Display folders
-      docsView.setSelectFolderEnabled(true); // Allow selecting a folder
-      docsView.setParent('root'); // Start at root
+      const folderView = new window.google.picker.View(window.google.picker.ViewId.FOLDERS);
+      folderView.setParent('root'); // Start at root, user can navigate
 
       const picker = new window.google.picker.PickerBuilder()
         .enableFeature(window.google.picker.Feature.NAV_HIDDEN)
         .setOAuthToken(this.getToken()!)
-        .addView(docsView)
+        .addView(folderView)
         .setTitle('Select Folder to Save Portfolio')
         .setCallback((data: any) => {
           if (data[window.google.picker.Response.ACTION] === window.google.picker.Action.PICKED) {
             const selectedItem = data[window.google.picker.Response.DOCUMENTS][0];
             
-            // Ensure a folder was selected
             if (selectedItem.mimeType !== "application/vnd.google-apps.folder") {
                 console.error('Google Picker: Selected item is not a folder.', selectedItem);
                 reject(new Error('Please select a folder as the destination.'));
