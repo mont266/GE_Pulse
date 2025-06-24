@@ -1,5 +1,4 @@
 
-
 import { GoogleUserProfile, GoogleDriveServiceConfig } from '../src/types';
 import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
 
@@ -9,23 +8,31 @@ class GoogleDriveService {
   private onAuthStatusChangedCallback: (isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null) => void = () => {};
   private onGisLoadedCallback: () => void = () => {};
   
-  private gapiLoaded: boolean = false;
-  private gisLoaded: boolean = false;
-  private pickerApiLoaded: boolean = false; 
+  private gapiLoaded: boolean = false; // For api.js script
+  private gisLoaded: boolean = false;  // For GSI script and its onload
+  private pickerApiLoaded: boolean = false; // For gapi.load('client:picker')
+  private gapiDriveInitialized: boolean = false; // For gapi.client.init({ discoveryDocs })
+  private tokenClientInitialized: boolean = false; // For google.accounts.oauth2.initTokenClient
+  
+  private gisScriptLoading: boolean = false;
+  private gapiClientScriptLoading: boolean = false;
+  private gapiPickerLoading: boolean = false;
+  private isSilentAuthInProgress: boolean = false;
+
+
   private tokenClient: any = null;
   private accessToken: string | null = null;
   private signedInUser: GoogleUserProfile | null = null;
 
 
   constructor() {
-    this.loadGisClient = this.loadGisClient.bind(this);
-    this.loadGapiClient = this.loadGapiClient.bind(this);
-    this.initializeGapiClient = this.initializeGapiClient.bind(this);
-    this.gisTokenClientInit = this.gisTokenClientInit.bind(this);
+    // Bind methods that might be used as callbacks directly
+    this.handleGisScriptLoad = this.handleGisScriptLoad.bind(this);
+    this.handleGapiClientScriptLoad = this.handleGapiClientScriptLoad.bind(this);
   }
 
   init(config: GoogleDriveServiceConfig): void {
-    console.log('[GDS] init called');
+    console.log('[GDS] init called.');
     this.onGisLoadedCallback = config.onGisLoaded;
     this.onAuthStatusChangedCallback = config.onAuthStatusChanged;
     
@@ -40,128 +47,186 @@ class GoogleDriveService {
     }
     console.log('[GDS] API Key and Client ID found.');
     
+    if (this.gisLoaded) {
+      console.log('[GDS] GIS already fully loaded, directly calling onGisLoadedCallback.');
+      if (this.onGisLoadedCallback) this.onGisLoadedCallback();
+      return;
+    }
+    if (this.gisScriptLoading) {
+        console.log('[GDS] GIS script is already loading.');
+        return;
+    }
+
+    this.gisScriptLoading = true;
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = this.loadGisClient;
+    script.onload = this.handleGisScriptLoad;
+    script.onerror = () => {
+        console.error('[GDS] GIS script failed to load.');
+        this.gisScriptLoading = false;
+        this.onAuthStatusChangedCallback(false, null, "Failed to load Google Identity Services.");
+    };
     document.body.appendChild(script);
     console.log('[GDS] GIS script appended to body.');
   }
 
-  private loadGisClient(): void {
-    console.log('[GDS] GIS script loaded (onload event).');
-    this.gisLoaded = true;
+  private handleGisScriptLoad(): void {
+    console.log('[GDS] GIS script.onload fired.');
+    this.gisLoaded = true; 
+    this.gisScriptLoading = false;
     if (this.onGisLoadedCallback) {
       console.log('[GDS] Calling onGisLoadedCallback.');
       this.onGisLoadedCallback(); 
     }
   }
-
+  
+  // Called by App.tsx after GIS is confirmed loaded
   public initGapiClient(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
     console.log('[GDS] initGapiClient called.');
-    if (!this.apiKey || !this.clientId) {
-        const errMsg = "[GDS] Cannot initialize GAPI client without API Key or Client ID.";
-        console.error(errMsg);
-        gapiInitError(new Error(errMsg));
+
+    if (this.gapiLoaded && this.pickerApiLoaded && this.gapiDriveInitialized && this.tokenClientInitialized) {
+        console.log('[GDS] All GAPI components appear to be initialized. Calling gapiInitSuccess.');
+        gapiInitSuccess();
+        this.checkStoredTokenAndAttemptSilentAuth();
         return;
     }
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      console.log('[GDS] GAPI script loaded (api.js). Proceeding to load client:picker.');
-      this.loadGapiClient(gapiInitSuccess, gapiInitError);
-    };
-    script.onerror = (err) => {
-      console.error("[GDS] Failed to load GAPI script (api.js):", err);
-      gapiInitError(new Error("Failed to load GAPI script (api.js)."));
-    };
-    document.body.appendChild(script);
-    console.log('[GDS] GAPI script (api.js) appended to body.');
-  }
 
-
-  private loadGapiClient(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
-    console.log('[GDS] loadGapiClient (for client:picker) called.');
-    if (window.gapi) {
-      window.gapi.load('client:picker', {
-        callback: () => {
-          console.log('[GDS] GAPI client:picker API loaded.');
-          this.gapiLoaded = true;
-          this.initializeGapiClient(gapiInitSuccess, gapiInitError); 
-        },
-        onerror: (err: any) => {
-            console.error('[GDS] Error loading GAPI client:picker:', err);
-            gapiInitError(new Error('Error loading GAPI client:picker.'));
-        },
-        timeout: 5000, 
-        ontimeout: () => {
-            console.error('[GDS] Timeout loading GAPI client:picker.');
-            gapiInitError(new Error('Timeout loading GAPI client:picker.'));
+    if (!this.gapiLoaded) {
+        if (this.gapiClientScriptLoading) {
+            console.log('[GDS] GAPI client script (api.js) is already loading.');
+            return;
         }
-      });
+        console.log('[GDS] Loading GAPI client script (api.js).');
+        this.gapiClientScriptLoading = true;
+        const script = document.createElement('script');
+        script.src = 'https://apis.google.com/js/api.js';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => this.handleGapiClientScriptLoad(gapiInitSuccess, gapiInitError);
+        script.onerror = (err) => {
+            console.error("[GDS] Failed to load GAPI client script (api.js):", err);
+            this.gapiClientScriptLoading = false;
+            gapiInitError(new Error("Failed to load GAPI client script (api.js)."));
+        };
+        document.body.appendChild(script);
     } else {
-      const errMsg = '[GDS] GAPI script (api.js) not available on window when trying to load client:picker.';
-      console.error(errMsg);
-      gapiInitError(new Error(errMsg));
+        this.loadPickerApi(gapiInitSuccess, gapiInitError);
     }
   }
   
-  private initializeGapiClient(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
-    console.log('[GDS] initializeGapiClient (for Drive API) called.');
-    if (!this.apiKey) {
-      const errMsg = '[GDS] API Key is missing for GAPI client (Drive API) init.';
-      console.error(errMsg);
-      this.onAuthStatusChangedCallback(false, null, 'API Key is missing for GAPI init.');
-      gapiInitError(new Error(errMsg));
-      return;
-    }
-    window.gapi.client.init({
-      apiKey: this.apiKey,
-      discoveryDocs: GDRIVE_DISCOVERY_DOCS,
-    }).then(async () => { // Made async
-      console.log('[GDS] GAPI client initialized for Drive API.');
-      this.pickerApiLoaded = true;
-      this.gisTokenClientInit(); // Initializes this.tokenClient
-
-      // Notify App.tsx that GAPI part is ready (for API calls)
-      // App.tsx might optimistically set isGoogleUserSignedIn if localStorage token exists
-      gapiInitSuccess();
-
-      // After tokenClient is initialized, check for stored token and try silent re-auth
-      const storedToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
-      if (storedToken && this.tokenClient) {
-        console.log('[GDS] Found stored token. Attempting silent token request to restore session.');
-        // This should trigger the tokenClient's callback (success or error)
-        // which will then call onAuthStatusChanged with profile or error.
-        this.tokenClient.requestAccessToken({ prompt: 'none' });
-      } else if (this.tokenClient && !storedToken) {
-        // No stored token, ensure user is marked as signed out if they were previously.
-        // This path is important if localStorage was cleared but the service instance still exists.
-        // However, on page refresh, if no token, they are effectively signed out anyway.
-        // The onAuthStatusChanged should reflect this.
-        console.log('[GDS] No stored token found. Ensuring signed-out state if not already handled.');
-        if(this.signedInUser) { // If service instance thought user was signed in but token is gone
-             this.accessToken = null;
-             this.signedInUser = null;
-            // onAuthStatusChanged will be called by error_callback of requestAccessToken if it fails,
-            // or if no token -> no request -> onAuthStatusChanged might not fire to confirm signed-out.
-            // This is complex, rely on requestAccessToken({prompt:'none'}) error path or explicit sign out.
-            // For now, if no stored token, the user is effectively signed out until they sign in.
-        }
-      }
-
-    }).catch((error: any) => {
-      console.error('[GDS] Error initializing GAPI client for Drive API:', error);
-      this.onAuthStatusChangedCallback(false, null, `GAPI client init error: ${error.message || 'Unknown error'}`);
-      gapiInitError(error);
-    });
+  private handleGapiClientScriptLoad(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
+    console.log('[GDS] GAPI client script (api.js) loaded.');
+    this.gapiLoaded = true;
+    this.gapiClientScriptLoading = false;
+    this.loadPickerApi(gapiInitSuccess, gapiInitError);
   }
 
-  private gisTokenClientInit() {
-    console.log('[GDS] gisTokenClientInit called.');
+  private loadPickerApi(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
+    if (this.pickerApiLoaded) {
+        this.initializeDriveAndTokenClient(gapiInitSuccess, gapiInitError);
+        return;
+    }
+    if (this.gapiPickerLoading) {
+        console.log('[GDS] GAPI Picker API is already loading.');
+        return;
+    }
+    console.log('[GDS] Loading GAPI Picker API.');
+    this.gapiPickerLoading = true;
+    window.gapi.load('client:picker', {
+      callback: () => {
+        console.log('[GDS] GAPI Picker API loaded.');
+        this.pickerApiLoaded = true;
+        this.gapiPickerLoading = false;
+        this.initializeDriveAndTokenClient(gapiInitSuccess, gapiInitError);
+      },
+      onerror: (err: any) => {
+        console.error('[GDS] Error loading GAPI Picker API:', err);
+        this.gapiPickerLoading = false;
+        gapiInitError(err);
+      },
+      timeout: 5000,
+      ontimeout: () => {
+        console.error('[GDS] Timeout loading GAPI Picker API.');
+        this.gapiPickerLoading = false;
+        gapiInitError(new Error('Timeout loading GAPI Picker API.'));
+      }
+    });
+  }
+  
+  private initializeDriveAndTokenClient(gapiInitSuccess: () => void, gapiInitError: (error: any) => void): void {
+    if (this.gapiDriveInitialized && this.tokenClientInitialized) {
+        console.log('[GDS] Drive API and Token Client already initialized.');
+        gapiInitSuccess();
+        this.checkStoredTokenAndAttemptSilentAuth();
+        return;
+    }
+
+    const initDrive = () => {
+        if (this.gapiDriveInitialized) {
+            this.ensureTokenClientInitialized(gapiInitSuccess);
+            return;
+        }
+        console.log('[GDS] Initializing GAPI client for Drive API.');
+        window.gapi.client.init({
+          apiKey: this.apiKey,
+          discoveryDocs: GDRIVE_DISCOVERY_DOCS,
+        }).then(() => {
+          console.log('[GDS] GAPI client for Drive API initialized.');
+          this.gapiDriveInitialized = true;
+          this.ensureTokenClientInitialized(gapiInitSuccess);
+        }).catch((error: any) => {
+          console.error('[GDS] Error initializing GAPI client for Drive API:', error);
+          gapiInitError(error);
+        });
+    };
+    initDrive();
+  }
+
+  private ensureTokenClientInitialized(gapiInitSuccess: () => void): void {
+      if (!this.tokenClientInitialized) {
+          this.internalGisTokenClientInit(); 
+      }
+      if (this.tokenClientInitialized) { // Check again in case internalGisTokenClientInit completed synchronously
+          gapiInitSuccess();
+          this.checkStoredTokenAndAttemptSilentAuth();
+      }
+      // If internalGisTokenClientInit fails, it calls onAuthStatusChangedCallback with an error.
+  }
+
+  private checkStoredTokenAndAttemptSilentAuth(): void {
+    const storedToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    if (storedToken && this.tokenClient && !this.isSilentAuthInProgress) {
+        if (!this.signedInUser) { 
+            console.log('[GDS] Stored token found, user not marked as signed in. Attempting silent token request.');
+            this.isSilentAuthInProgress = true;
+            this.tokenClient.requestAccessToken({ prompt: 'none' });
+        } else {
+            console.log('[GDS] Stored token found, user already marked as signed in. Confirming auth status.');
+            this.onAuthStatusChangedCallback(true, this.signedInUser, null);
+        }
+    } else if (!storedToken) {
+        if(this.signedInUser) { // If service thought user was signed in but token is gone
+            console.log('[GDS] No stored token, but user was marked as signed in. Clearing state.');
+            this.accessToken = null;
+            this.signedInUser = null;
+            this.onAuthStatusChangedCallback(false, null, 'Session ended or token cleared.');
+        } else {
+            console.log('[GDS] No stored token, user not marked as signed in. Ensuring signed-out state.');
+            this.onAuthStatusChangedCallback(false, null, null);
+        }
+    } else if (this.isSilentAuthInProgress) {
+        console.log('[GDS] Silent auth is already in progress. Skipping new attempt.');
+    }
+  }
+
+  private internalGisTokenClientInit(): void {
+    if (this.tokenClientInitialized && this.tokenClient) {
+        console.log('[GDS] internalGisTokenClientInit: Token Client already initialized.');
+        return;
+    }
+    console.log('[GDS] internalGisTokenClientInit: Attempting to initialize Token Client.');
     if (!this.clientId) {
         const errMsg = "[GDS] Cannot initialize GIS Token Client without Client ID.";
         console.error(errMsg);
@@ -173,6 +238,7 @@ class GoogleDriveService {
         client_id: this.clientId,
         scope: GDRIVE_SCOPES.join(' '),
         callback: async (tokenResponse: any) => {
+          this.isSilentAuthInProgress = false;
           console.log('[GDS] GIS Token Client callback invoked. TokenResponse:', tokenResponse);
           if (tokenResponse && tokenResponse.access_token) {
             this.accessToken = tokenResponse.access_token;
@@ -191,7 +257,6 @@ class GoogleDriveService {
               this.onAuthStatusChangedCallback(true, this.signedInUser, null);
             } catch (error: any) {
               console.error('[GDS] Error fetching user profile:', error);
-              // Still signed in with token, but profile fetch failed.
               this.onAuthStatusChangedCallback(true, { email: 'Error fetching email' }, 'Failed to fetch user profile.');
             }
           } else {
@@ -204,6 +269,7 @@ class GoogleDriveService {
           }
         },
         error_callback: (error: any) => {
+          this.isSilentAuthInProgress = false;
           console.error('[GDS] GIS Token Client error_callback:', error);
           this.accessToken = null;
           this.signedInUser = null;
@@ -212,56 +278,58 @@ class GoogleDriveService {
           this.onAuthStatusChangedCallback(false, null, errorReason);
         }
       });
+      this.tokenClientInitialized = true;
       console.log('[GDS] GIS Token Client initialized successfully.');
     } catch (e: any) {
        console.error('[GDS] Exception during GIS Token Client initialization:', e);
+       this.tokenClientInitialized = false;
        this.onAuthStatusChangedCallback(false, null, `GIS Token Client init exception: ${e.message}`);
     }
   }
 
   public async signIn(): Promise<void> {
     console.log('[GDS] signIn called.');
-    if (!this.tokenClient) {
-      const errMsg = '[GDS] GIS Token Client not initialized during signIn.';
-      console.error(errMsg);
-      this.onAuthStatusChangedCallback(false, null, 'GIS Token Client not initialized.');
-      throw new Error(errMsg);
+    if (!this.tokenClientInitialized || !this.tokenClient) {
+      const errMsg = '[GDS] GIS Token Client not initialized during signIn. Attempting to initialize now.';
+      console.warn(errMsg);
+      this.internalGisTokenClientInit(); // Attempt to initialize if not already
+      if (!this.tokenClientInitialized || !this.tokenClient) { // Check again
+        this.onAuthStatusChangedCallback(false, null, 'GIS Token Client failed to initialize for sign-in.');
+        throw new Error('GIS Token Client failed to initialize for sign-in.');
+      }
     }
     console.log('[GDS] Requesting access token (interactive prompt may appear)...');
-    // For explicit sign-in, use prompt: '' or 'consent' if re-prompting for scopes is needed
     this.tokenClient.requestAccessToken({ prompt: '' }); 
   }
 
   public async signOut(): Promise<void> {
     console.log('[GDS] signOut called.');
     const tokenToRevoke = this.accessToken || localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
-    if (tokenToRevoke) {
+    
+    this.accessToken = null; // Clear in-memory token first
+    this.signedInUser = null;
+    localStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY);
+
+    if (tokenToRevoke && window.google && window.google.accounts && window.google.accounts.oauth2) {
       console.log('[GDS] Revoking access token:', tokenToRevoke.substring(0, 10) + "...");
       window.google.accounts.oauth2.revoke(tokenToRevoke, () => {
         console.log('[GDS] Access token revoked successfully callback.');
-        this.accessToken = null;
-        this.signedInUser = null;
-        localStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY);
-        this.onAuthStatusChangedCallback(false, null, null);
+        this.onAuthStatusChangedCallback(false, null, null); // Notify app of signed-out state
       });
     } else {
-        console.log('[GDS] No access token to revoke, just updating state.');
-        this.signedInUser = null; 
-        this.onAuthStatusChangedCallback(false, null, null);
+        console.log('[GDS] No access token to revoke or Google accounts API not ready, just updating state.');
+        this.onAuthStatusChangedCallback(false, null, null); // Notify app of signed-out state
     }
   }
   
   public getToken(): string | null {
-    // Ensure this.accessToken is loaded from localStorage if not already in memory.
-    if (!this.accessToken) {
+    if (!this.accessToken) { // Prioritize in-memory token
         this.accessToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
     }
     return this.accessToken;
   }
 
   public getSignedInUserProfile(): GoogleUserProfile | null {
-    // This method directly returns the current state of signedInUser.
-    // App.tsx should rely on onAuthStatusChanged for updates.
     return this.signedInUser; 
   }
 
@@ -310,13 +378,13 @@ class GoogleDriveService {
   public showSavePicker(fileContent: string, fileName: string): Promise<void> {
     console.log('[GDS] showSavePicker called for:', fileName);
     return new Promise((resolve, reject) => {
-      if (!this.gapiLoaded || !this.gisLoaded || !this.pickerApiLoaded || !this.tokenClient || !this.accessToken) {
+      if (!this.gapiLoaded || !this.gisLoaded || !this.pickerApiLoaded || !this.tokenClientInitialized || !this.accessToken) {
         const message = '[GDS] Google API components or Picker not ready for saving.';
         console.error(message, { 
             gapiLoaded: this.gapiLoaded, 
             gisLoaded: this.gisLoaded, 
             pickerApiLoaded: this.pickerApiLoaded, 
-            tokenClientReady: !!this.tokenClient, 
+            tokenClientReady: this.tokenClientInitialized, 
             accessTokenPresent: !!this.accessToken 
         });
         reject(new Error(message));
@@ -326,14 +394,10 @@ class GoogleDriveService {
 
       const view = new window.google.picker.DocsView();
       view.setParent('root'); 
-      console.log('[GDS] Save Picker view.setParent("root") called.');
       view.setIncludeFolders(true);
-      console.log('[GDS] Save Picker view.setIncludeFolders(true) called.');
       view.setSelectFolderEnabled(true);
-      console.log('[GDS] Save Picker view.setSelectFolderEnabled(true) called.');
       view.setMode(window.google.picker.DocsViewMode.LIST);
-      console.log('[GDS] Save Picker view.setMode(LIST) called.');
-      console.log('[GDS] Save Picker DocsView configured:', view);
+      console.log('[GDS] Save Picker DocsView configured.');
 
 
       const pickerBuilder = new window.google.picker.PickerBuilder()
@@ -342,7 +406,7 @@ class GoogleDriveService {
         .setTitle(`Select a folder to save "${fileName}"`)
         .setCallback(this.createPickerCallback(fileContent, fileName, resolve, reject));
       
-      console.log('[GDS] PickerBuilder configured:', pickerBuilder);
+      console.log('[GDS] PickerBuilder configured.');
       const picker = pickerBuilder.build();
       console.log('[GDS] Picker built. Setting visible.');
       picker.setVisible(true);
@@ -351,7 +415,7 @@ class GoogleDriveService {
 
   private async uploadFile(fileContent: string, fileName: string, folderId: string): Promise<void> {
     console.log(`[GDS] uploadFile called. fileName: ${fileName}, folderId: ${folderId}`);
-    if (!this.pickerApiLoaded || !this.accessToken) { 
+    if (!this.gapiDriveInitialized || !this.accessToken) { 
       const errMsg = '[GDS] Drive API client not loaded or access token missing for uploadFile.';
       console.error(errMsg);
       throw new Error(errMsg);
@@ -380,7 +444,7 @@ class GoogleDriveService {
       fileContent +
       close_delim;
     
-    console.log('[GDS] Multipart request body constructed (content omitted for brevity).');
+    console.log('[GDS] Multipart request body constructed.');
 
     try {
       console.log('[GDS] Attempting gapi.client.request for upload...');
@@ -406,13 +470,13 @@ class GoogleDriveService {
   public showOpenPicker(): Promise<string | null> {
     console.log('[GDS] showOpenPicker called.');
     return new Promise((resolve, reject) => {
-      if (!this.gapiLoaded || !this.gisLoaded || !this.pickerApiLoaded || !this.tokenClient || !this.accessToken) {
+      if (!this.gapiLoaded || !this.gisLoaded || !this.pickerApiLoaded || !this.tokenClientInitialized || !this.accessToken) {
         const message = '[GDS] Google API or Picker not ready for opening.';
         console.error(message, {
              gapiLoaded: this.gapiLoaded, 
             gisLoaded: this.gisLoaded, 
             pickerApiLoaded: this.pickerApiLoaded, 
-            tokenClientReady: !!this.tokenClient, 
+            tokenClientReady: this.tokenClientInitialized, 
             accessTokenPresent: !!this.accessToken 
         });
         reject(new Error(message));
@@ -425,7 +489,7 @@ class GoogleDriveService {
         .setMimeTypes('application/json') 
         .setIncludeFolders(true) 
         .setSelectFolderEnabled(false); 
-      console.log('[GDS] Open Picker DocsView configured (parent=root, mimeTypes=json, includeFolders=true, selectFolderEnabled=false):', view);
+      console.log('[GDS] Open Picker DocsView configured.');
 
 
       const pickerBuilder = new window.google.picker.PickerBuilder()
@@ -444,7 +508,7 @@ class GoogleDriveService {
             console.log(`[GDS] File picked. ID: ${fileId}. Name: ${data.docs[0].name}`);
             
             if (!this.accessToken) {
-              console.error('[GDS] Open Picker: Access token is null before fetching file content. This should not happen.');
+              console.error('[GDS] Open Picker: Access token is null before fetching file content.');
               reject(new Error('Authentication error: Access token missing for file fetch.'));
               return;
             }
@@ -472,7 +536,7 @@ class GoogleDriveService {
           }
         });
       
-      console.log('[GDS] Open PickerBuilder configured:', pickerBuilder);
+      console.log('[GDS] Open PickerBuilder configured.');
       const picker = pickerBuilder.build();
       console.log('[GDS] Open Picker built. Setting visible.');
       picker.setVisible(true);
@@ -481,3 +545,4 @@ class GoogleDriveService {
 }
 
 export const googleDriveService = new GoogleDriveService();
+      
