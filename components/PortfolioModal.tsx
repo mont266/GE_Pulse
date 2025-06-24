@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, GoogleUserProfile, ChartDataPoint } from '../src/types';
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint } from '../src/types'; 
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
@@ -13,8 +13,8 @@ import { DisplayCodeModal } from './portfolio/DisplayCodeModal';
 import { ImportPortfolioModal } from './portfolio/ImportPortfolioModal';
 import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal'; 
 import { PortfolioPerformanceTab } from './portfolio/PortfolioPerformanceTab';
-import { LoadingSpinner } from './LoadingSpinner';
-import { TrashIcon, UploadIcon, DownloadIcon, LoginIcon, LogoutIcon, CloudUploadIcon, CloudDownloadIcon, GoogleDriveIcon, ChevronDownIcon } from './Icons';
+import { LoadingSpinner } from './LoadingSpinner'; 
+import { TrashIcon, UploadIcon, DownloadIcon, CloudUploadIcon, CloudDownloadIcon } from './Icons'; 
 import { fetchHistoricalData as appFetchHistoricalData } from '../services/runescapeService';
 
 
@@ -37,14 +37,11 @@ interface PortfolioModalProps {
   onSelectItemAndClose: (itemId: number) => void;
 
   // Google Drive Props
-  isGoogleApiReady: boolean;
-  isGoogleUserSignedIn: boolean;
-  googleUser: GoogleUserProfile | null;
-  onGoogleSignIn: () => void;
-  onGoogleSignOut: () => void;
-  onSaveToDrive: () => void;
-  onLoadFromDrive: () => void;
+  isGoogleApiInitialized: boolean;
+  onSaveToDrive: () => Promise<void>; 
+  onLoadFromDrive: () => Promise<void>; 
   isDriveActionLoading: boolean;
+  driveError: string | null; // To display GDrive specific errors
 }
 
 const PORTFOLIO_TABS = [
@@ -75,14 +72,11 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   isConsentGranted,
   onSelectItemAndClose,
   // Google Drive Props
-  isGoogleApiReady,
-  isGoogleUserSignedIn,
-  googleUser,
-  onGoogleSignIn,
-  onGoogleSignOut,
+  isGoogleApiInitialized,
   onSaveToDrive,
   onLoadFromDrive,
   isDriveActionLoading,
+  driveError,
 }) => {
   const [activeTab, setActiveTab] = useState<PortfolioTabKey>('open');
   const [itemToSell, setItemToSell] = useState<PortfolioEntry | null>(null);
@@ -104,30 +98,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   const [isConfirmImportOverwriteModalOpen, setIsConfirmImportOverwriteModalOpen] = useState<boolean>(false);
   const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioEntry[] | null>(null); 
 
-  const [isDriveDropdownOpen, setIsDriveDropdownOpen] = useState(false);
-  const driveDropdownRef = useRef<HTMLDivElement>(null);
-
-  const toggleDriveDropdown = () => setIsDriveDropdownOpen(prev => !prev);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (driveDropdownRef.current && !driveDropdownRef.current.contains(event.target as Node)) {
-        setIsDriveDropdownOpen(false);
-      }
-    };
-    if (isDriveDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isDriveDropdownOpen]);
-
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (isConfirmImportOverwriteModalOpen) setIsConfirmImportOverwriteModalOpen(false);
-        else if (isDriveDropdownOpen) setIsDriveDropdownOpen(false);
         else if (isDisplayCodeModalOpen) setIsDisplayCodeModalOpen(false);
         else if (isExportOptionsModalOpen) setIsExportOptionsModalOpen(false);
         else if (isImportModalOpen) setIsImportModalOpen(false);
@@ -148,7 +122,6 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
     isOpen, onClose, isSellModalOpen, isConfirmDeleteModalOpen, 
     isConfirmClearAllModalOpen, isEditModalOpen, isExportOptionsModalOpen,
     isDisplayCodeModalOpen, isImportModalOpen, isConfirmImportOverwriteModalOpen,
-    isDriveDropdownOpen
   ]);
   
   const fetchAllLivePrices = useCallback(async () => {
@@ -191,11 +164,8 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
       if (activeTab === 'open' || activeTab === 'closed' || activeTab === 'performance') { 
         fetchAllLivePrices();
       }
-      if (!isSellModalOpen && !isConfirmDeleteModalOpen && !isConfirmClearAllModalOpen && !isEditModalOpen && !isImportModalOpen && !isExportOptionsModalOpen && !isDisplayCodeModalOpen && !isConfirmImportOverwriteModalOpen) {
-        setIsDriveDropdownOpen(false);
-      }
     }
-  }, [isOpen, isConsentGranted, fetchAllLivePrices, activeTab, isSellModalOpen, isConfirmDeleteModalOpen, isConfirmClearAllModalOpen, isEditModalOpen, isImportModalOpen, isExportOptionsModalOpen, isDisplayCodeModalOpen, isConfirmImportOverwriteModalOpen]);
+  }, [isOpen, isConsentGranted, fetchAllLivePrices, activeTab]);
 
 
   const handleOpenSellModal = (entry: PortfolioEntry) => {
@@ -259,10 +229,22 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   };
 
   const handleConfirmImport = (importedData: PortfolioEntry[]) => {
-    addNotification('Please review the import confirmation.', 'info');
-    setImportedDataToConfirm(importedData);
-    setIsImportModalOpen(false); 
-    setIsConfirmImportOverwriteModalOpen(true); 
+    // If portfolio is not empty, show confirmation for overwrite. Otherwise, import directly.
+    if (portfolioEntries.length > 0) {
+        addNotification('Please review the import confirmation.', 'info');
+        setImportedDataToConfirm(importedData);
+        setIsImportModalOpen(false); 
+        setIsConfirmImportOverwriteModalOpen(true);
+    } else {
+        addNotification('Importing portfolio...', 'info');
+        replacePortfolio(importedData);
+        fetchAllLivePrices().then(() => {
+            addNotification("Portfolio restored successfully!", "success");
+        }).catch(err => {
+            addNotification("Portfolio restored, but failed to refresh live prices.", "error");
+        });
+        setIsImportModalOpen(false); 
+    }
   };
 
   const executeConfirmedImport = () => {
@@ -420,7 +402,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                     tableType="closed"
                 />
             )}
-            {activeTab === 'performance' && (
+             {activeTab === 'performance' && (
                 <PortfolioPerformanceTab
                     portfolioEntries={portfolioEntries}
                     allItems={allItems}
@@ -433,78 +415,18 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
         
         {isConsentGranted && (
           <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
-            {/* Google Drive Section: Only shows if API is ready */}
-            {isGoogleApiReady && (
-              <>
-                {!isGoogleUserSignedIn ? (
-                  <button
-                    onClick={onGoogleSignIn}
-                    disabled={isDriveActionLoading}
-                    className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/70 disabled:opacity-60"
-                  >
-                    <LoginIcon className="w-4 h-4 mr-1.5 sm:mr-2" /> Connect Drive
-                  </button>
-                ) : (
-                  <>
-                    <span className="text-xs text-[var(--text-muted)] order-first sm:order-none sm:mr-auto">
-                      Drive: <strong className="text-[var(--text-accent)]">{googleUser?.email}</strong>
-                    </span>
-                    <div className="relative" ref={driveDropdownRef}>
-                      <button
-                        onClick={toggleDriveDropdown}
-                        className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--bg-input-secondary)] text-[var(--text-primary)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
-                        aria-expanded={isDriveDropdownOpen}
-                        aria-haspopup="true"
-                      >
-                        <GoogleDriveIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-                        Google Drive
-                        <ChevronDownIcon className={`w-4 h-4 ml-1.5 sm:ml-2 transition-transform ${isDriveDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                      {isDriveDropdownOpen && (
-                        <div className="absolute bottom-full mb-1 right-0 sm:left-0 sm:right-auto w-48 bg-[var(--bg-modal)] border border-[var(--border-primary)] rounded-md shadow-lg z-[105] py-1">
-                          <button
-                            onClick={() => { onSaveToDrive(); setIsDriveDropdownOpen(false); }}
-                            disabled={portfolioEntries.length === 0 || isDriveActionLoading}
-                            className="w-full flex items-center px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-input-secondary)] disabled:opacity-50"
-                          >
-                            <CloudUploadIcon className="w-4 h-4 mr-2 text-green-500 flex-shrink-0" /> Save to Drive
-                          </button>
-                          <button
-                            onClick={() => { onLoadFromDrive(); setIsDriveDropdownOpen(false); }}
-                            disabled={isDriveActionLoading}
-                            className="w-full flex items-center px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-input-secondary)] disabled:opacity-50"
-                          >
-                            <CloudDownloadIcon className="w-4 h-4 mr-2 text-sky-500 flex-shrink-0" /> Load from Drive
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={onGoogleSignOut}
-                      disabled={isDriveActionLoading}
-                      className="p-1.5 sm:p-2 rounded-full hover:bg-[var(--icon-button-hover-bg)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-60"
-                      title="Sign out from Google Drive"
-                      aria-label="Sign out from Google Drive"
-                    >
-                      <LogoutIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* Local Portfolio Actions: Always show if consent is granted */}
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
               aria-label="Import portfolio data"
+              disabled={isDriveActionLoading}
             >
               <UploadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
               Import
             </button>
             <button
               onClick={() => setIsExportOptionsModalOpen(true)}
-              disabled={portfolioEntries.length === 0}
+              disabled={portfolioEntries.length === 0 || isDriveActionLoading}
               className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Export portfolio data"
             >
@@ -513,7 +435,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             </button>
             <button
               onClick={() => setIsConfirmClearAllModalOpen(true)}
-              disabled={portfolioEntries.length === 0}
+              disabled={portfolioEntries.length === 0 || isDriveActionLoading}
               className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Clear all portfolio data"
             >
@@ -552,7 +474,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             <ConfirmClearAllPortfolioModal
                 isOpen={isConfirmClearAllModalOpen}
                 onClose={() => setIsConfirmClearAllModalOpen(false)}
-                onConfirmClearAll={clearAllPortfolioData}
+                onConfirmClearAll={() => {
+                    clearAllPortfolioData();
+                    addNotification("Portfolio data cleared successfully!", "success");
+                }}
             />
         )}
 
@@ -574,6 +499,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             portfolioEntries={portfolioEntries}
             onShowCodeModalRequest={handleShowCodeModalRequest}
             addNotification={addNotification}
+            isGoogleApiInitialized={isGoogleApiInitialized}
+            onSaveToDrive={onSaveToDrive}
+            isDriveActionLoading={isDriveActionLoading}
+            driveError={driveError}
           />
         )}
 
@@ -592,6 +521,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             onClose={() => setIsImportModalOpen(false)}
             onConfirmImport={handleConfirmImport} 
             addNotification={addNotification}
+            isGoogleApiInitialized={isGoogleApiInitialized}
+            onLoadFromDrive={onLoadFromDrive}
+            isDriveActionLoading={isDriveActionLoading}
+            driveError={driveError}
           />
         )}
 

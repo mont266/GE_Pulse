@@ -1,9 +1,8 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile } from './src/types'; // Updated path for types
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
-import { googleDriveService } from './services/googleDriveService'; // Import the new service
+import { googleDriveService } from './services/googleDriveService';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
 import { ItemDisplay } from './components/ItemDisplay';
@@ -15,17 +14,17 @@ import { SettingsModal } from './src/components/SettingsModal';
 import { FavoritesList } from './components/FavoritesList';
 import { ConsentBanner } from './components/ConsentBanner';
 import { ChangelogModal } from './src/components/ChangelogModal';
-import { PrivacyPolicyModal } from './src/components/PrivacyPolicyModal'; // Added Privacy Policy Modal
+import { PrivacyPolicyModal } from './src/components/PrivacyPolicyModal'; 
 import { SetAlertModal } from './components/SetAlertModal'; 
 import { FeedbackModal } from './components/FeedbackModal'; 
 import { TopMoversSection } from './components/TopMoversSection';
 import { PortfolioModal } from './components/PortfolioModal';
-import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal'; // New modal
+import { AddInvestmentFromViewModal } from './components/portfolio/AddInvestmentFromViewModal'; 
 import { changelogEntries } from './src/changelogData'; 
 import { usePriceAlerts } from './hooks/usePriceAlerts';
 import { useTopMovers } from './hooks/useTopMovers';
 import { usePortfolio } from './hooks/usePortfolio';
-import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, FilledHeartIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons'; // Added AddToPortfolioIcon
+import { ChevronDownIcon, SettingsIcon, ReorderIcon, ReorderDisabledIcon, SearchIcon, EmptyHeartIcon, BellIcon, TrendingUpIcon, PortfolioIcon, AddToPortfolioIcon } from './components/Icons'; 
 import { 
   API_BASE_URL, ITEM_IMAGE_BASE_URL, AUTO_REFRESH_INTERVAL_MS, AUTO_REFRESH_INTERVAL_SECONDS, APP_THEMES, 
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
@@ -33,19 +32,17 @@ import {
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
   DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
-  PORTFOLIO_STORAGE_KEY, GDRIVE_ACCESS_TOKEN_KEY
+  PORTFOLIO_STORAGE_KEY
 } from './constants'; 
 import { DragEvent } from 'react';
 
-// Helper hook to get the previous value of a prop or state
 function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T | undefined>(undefined);
   useEffect(() => {
     ref.current = value;
-  }, [value]); // Added value to dependency array
+  }, [value]);
   return ref.current;
 }
-
 
 const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   const storedConsent = localStorage.getItem(CONSENT_STORAGE_KEY);
@@ -57,7 +54,6 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
 
 const APP_VERSION = "Beta v0.12";
 
-// Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
   isSearchSectionCollapsed: boolean;
   toggleSearchSection: () => void;
@@ -68,7 +64,7 @@ interface SearchSectionLayoutProps extends SectionRenderProps {
   activeDescendantId?: string;
   filteredItems: ItemMapInfo[];
   itemListWrapperRef: React.RefObject<HTMLDivElement>;
-  handleSelectItem: (item: ItemMapInfo, origin?: string) => void; // Added origin
+  handleSelectItem: (item: ItemMapInfo, origin?: string) => void; 
   getItemIconUrl: (iconName: string) => string;
   activeSuggestionIndex: number;
   favoriteItemIds: FavoriteItemId[];
@@ -145,7 +141,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
 interface FavoritesListProps extends SectionRenderProps {
   favoriteItemIds: FavoriteItemId[];
   allItems: ItemMapInfo[];
-  onSelectItemById: (itemId: FavoriteItemId, origin?: string) => void; // Added origin
+  onSelectItemById: (itemId: FavoriteItemId, origin?: string) => void; 
   onRemoveFavorite: (itemId: FavoriteItemId) => void;
   getItemIconUrl: (iconName: string) => string;
   favoriteItemPrices: Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>;
@@ -170,7 +166,7 @@ interface TopMoversSectionProps extends SectionRenderProps {
   onRefresh: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin?: string) => void; // Added origin
+  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin?: string) => void;
   getItemIconUrl: (iconName: string) => string; 
   lastFetchedTimestamp: number;
   topMoversCalculationMode: TopMoversCalculationMode;
@@ -188,7 +184,7 @@ interface AlertsManagerProps extends SectionRenderProps {
   getItemName: (itemId: number) => string;
   getItemIconUrl: (iconName: string) => string;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onSelectAlertItemById: (itemId: number, origin?: string) => void; // Added origin
+  onSelectAlertItemById: (itemId: number, origin?: string) => void; 
   isConsentGranted: boolean;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -206,20 +202,27 @@ const App: React.FC = () => {
   const [consentStatus, setConsentStatus] = useState<'pending' | 'granted' | 'denied'>(initialConsent);
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
 
-  // Google Analytics Event Tracking Helper
   const trackGaEvent = useCallback((eventName: string, eventParams?: Record<string, any>) => {
     if (isConsentGranted && typeof window.gtag === 'function') {
       window.gtag('event', eventName, eventParams);
     }
   }, [isConsentGranted]);
 
-
-  // Google Drive State
-  const [isGoogleApiReady, setIsGoogleApiReady] = useState<boolean>(false);
-  const [isGoogleUserSignedIn, setIsGoogleUserSignedIn] = useState<boolean>(false);
-  const [googleUser, setGoogleUser] = useState<GoogleUserProfile | null>(null);
-  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
+  const [isGoogleApiInitialized, setIsGoogleApiInitialized] = useState<boolean>(false);
   const [isDriveActionLoading, setIsDriveActionLoading] = useState<boolean>(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const initDrive = async () => {
+      const success = await googleDriveService.initGoogleDriveService();
+      setIsGoogleApiInitialized(success);
+      if (!success) {
+        setDriveError("Google Drive features are unavailable. API key or Client ID might be missing or invalid.");
+        // addNotification("Google Drive features are unavailable.", "error");
+      }
+    };
+    initDrive();
+  }, []);
 
 
   const [allItems, setAllItems] = useState<ItemMapInfo[]>([]);
@@ -256,168 +259,64 @@ const App: React.FC = () => {
   } = usePortfolio(isConsentGranted, addNotification);
 
 
-  useEffect(() => {
-    googleDriveService.init({
-      onGisLoaded: () => {
-        console.log('Google Identity Services (GIS) loaded.');
-        const apiKey = (window as any).GOOGLE_API_KEY;
-        const clientId = (window as any).GOOGLE_CLIENT_ID;
-
-        if (!apiKey || !clientId) {
-          console.warn("Google API Key or Client ID is missing from window. Google Drive features will be unavailable.");
-          addNotification("Google Drive features unavailable: Missing API credentials.", "error");
-          setIsGoogleApiReady(false);
-          setGoogleAuthError("API credentials missing.");
-          return;
-        }
-        
-        googleDriveService.initGapiClient(() => {
-            console.log('Google API Client (GAPI) initialized.');
-            setIsGoogleApiReady(true);
-            setGoogleAuthError(null);
-            // Silent sign-in is attempted within initGapiClient's success path.
-            // onAuthStatusChanged will reflect the true state.
-        }, (error) => {
-            console.error("Failed to initialize GAPI client:", error);
-            addNotification("Failed to initialize Google Drive services.", "error");
-            setIsGoogleApiReady(false);
-            setGoogleAuthError("GAPI initialization failed.");
-        });
-      },
-      onAuthStatusChanged: (isSignedIn, user, gdsError) => {
-        console.log('Google Auth Status Changed:', { isSignedIn, user, error: gdsError });
-        setIsGoogleUserSignedIn(isSignedIn);
-        setGoogleUser(user);
-        setGoogleAuthError(gdsError); // Store error from GDS
-
-        if (gdsError && isSignedIn) { // E.g. signed in, but profile fetch failed
-            addNotification(`Google Drive: ${gdsError}`, 'error');
-        } else if (gdsError && !isSignedIn) { // E.g. sign in attempt failed
-            addNotification(`Google Sign-In: ${gdsError}`, 'error');
-        } else if (isSignedIn && user && !googleAuthError && !gdsError) { // Only notify on explicit sign-in success
-            // This general success notification can be noisy for silent sign-ins.
-            // Explicit sign-in success notifications are better handled in handleGoogleSignIn.
-            // Consider if this notification is still needed here or if it's too broad.
-            // addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
-        }
-        // Track GA event for sign-in status change
-        if (isSignedIn) {
-            trackGaEvent('gdrive_signin_status', { status: 'signed_in' });
-        } else if (user === null && googleUser !== null) { // User was previously signed in and is now signed out
-            trackGaEvent('gdrive_signin_status', { status: 'signed_out' });
-        }
-      },
-    });
-  }, [addNotification, trackGaEvent]); // googleUser removed from deps
-
-  const handleGoogleSignIn = useCallback(async () => {
-    if (!isGoogleApiReady) {
-      addNotification('Google Drive service is not ready. Please try again in a moment.', 'info');
+  const handleSaveToDrive = useCallback(async () => {
+    if (!isGoogleApiInitialized) {
+      addNotification(driveError || "Google Drive is not available.", "error");
       return;
     }
-    try {
-      trackGaEvent('gdrive_action', { action: 'signin_attempt' });
-      await googleDriveService.signIn();
-      // Success notification will be triggered by onAuthStatusChanged if user profile is fetched
-      // or more specifically, after a successful token acquisition and profile fetch.
-      // Let's add a more direct success notification here for the *explicit* action.
-      // Wait a brief moment for onAuthStatusChanged to potentially set the user.
-      setTimeout(() => {
-        const currentUser = googleDriveService.getSignedInUserProfile();
-        if (currentUser) {
-           addNotification(`Signed in to Google Drive as ${currentUser.email}`, 'success');
-        }
-      }, 500);
-
-
-    } catch (err: any) {
-      console.error("Error during Google Sign-In:", err);
-      addNotification(`Google Sign-In failed: ${err.message || 'Unknown error'}`, 'error');
-      setGoogleAuthError(err.message || 'Unknown error during sign-in.');
-      trackGaEvent('gdrive_action_failed', { action: 'signin', error_message: err.message || 'Unknown error' });
-    }
-  }, [isGoogleApiReady, addNotification, trackGaEvent]);
-
-  const handleGoogleSignOut = useCallback(async () => {
-    try {
-      trackGaEvent('gdrive_action', { action: 'signout_attempt' });
-      await googleDriveService.signOut();
-      addNotification('Signed out from Google Drive.', 'info');
-    } catch (err: any) {
-      console.error("Error during Google Sign-Out:", err);
-      addNotification(`Google Sign-Out failed: ${err.message || 'Unknown error'}`, 'error');
-      trackGaEvent('gdrive_action_failed', { action: 'signout', error_message: err.message || 'Unknown error' });
-    }
-  }, [addNotification, trackGaEvent]);
-
-  const handleSaveToDrive = useCallback(async () => {
-    if (!isGoogleUserSignedIn || portfolioEntries.length === 0) {
-      addNotification('Please sign in to Google and ensure you have portfolio data to save.', 'info');
+    if (portfolioEntries.length === 0) {
+      addNotification("Portfolio is empty. Nothing to save to Drive.", "info");
       return;
     }
     setIsDriveActionLoading(true);
-    trackGaEvent('gdrive_action', { action: 'save_attempt', entry_count: portfolioEntries.length });
+    setDriveError(null);
     try {
+      await googleDriveService.requestAccessToken(); // This handles token acquisition
       const portfolioJson = JSON.stringify(portfolioEntries);
-      await googleDriveService.showSavePicker(portfolioJson, 'gepulse_portfolio.json');
-      addNotification('Portfolio saved to Google Drive!', 'success');
-      trackGaEvent('gdrive_action_success', { action: 'save' });
-    } catch (error: any) {
-      console.error('Error saving to Google Drive:', error);
-      if (error.message && error.message.includes('picker_closed')) {
-        addNotification('Save to Drive cancelled by user.', 'info');
-        trackGaEvent('gdrive_action_cancelled', { action: 'save' });
-      } else {
-        addNotification(`Failed to save to Google Drive: ${error.message || 'Unknown error'}`, 'error');
-        trackGaEvent('gdrive_action_failed', { action: 'save', error_message: error.message || 'Unknown error' });
-      }
+      await googleDriveService.savePortfolioToDrive(portfolioJson);
+      addNotification("Portfolio saved to Google Drive successfully!", "success");
+      trackGaEvent('portfolio_save_gdrive_success');
+    } catch (err: any) {
+      console.error("Error saving portfolio to Drive:", err);
+      const errorMessage = err.message || "Failed to save portfolio to Google Drive. Check console for details.";
+      addNotification(errorMessage, "error");
+      setDriveError(errorMessage);
+      trackGaEvent('portfolio_save_gdrive_error', { error_message: errorMessage });
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleUserSignedIn, portfolioEntries, addNotification, trackGaEvent]);
+  }, [isGoogleApiInitialized, portfolioEntries, addNotification, driveError, trackGaEvent]);
 
   const handleLoadFromDrive = useCallback(async () => {
-    if (!isGoogleUserSignedIn) {
-      addNotification('Please sign in to Google to load data from Drive.', 'info');
+    if (!isGoogleApiInitialized) {
+      addNotification(driveError || "Google Drive is not available.", "error");
       return;
     }
     setIsDriveActionLoading(true);
-    trackGaEvent('gdrive_action', { action: 'load_attempt' });
+    setDriveError(null);
     try {
-      const fileContent = await googleDriveService.showOpenPicker();
-      if (fileContent) {
-        const parsedPortfolio: PortfolioEntry[] = JSON.parse(fileContent);
-        if (Array.isArray(parsedPortfolio)) { 
-          replacePortfolio(parsedPortfolio);
-          addNotification('Portfolio loaded from Google Drive!', 'success');
-          trackGaEvent('gdrive_action_success', { action: 'load', entry_count: parsedPortfolio.length });
-        } else {
-          throw new Error('Invalid portfolio file format.');
-        }
+      await googleDriveService.requestAccessToken();
+      const portfolioJson = await googleDriveService.loadPortfolioFromDrive();
+      if (portfolioJson) {
+        const newEntries: PortfolioEntry[] = JSON.parse(portfolioJson);
+        // Basic validation can be added here if needed
+        replacePortfolio(newEntries); // This should trigger a confirmation if existing data
+        addNotification("Portfolio loaded from Google Drive successfully!", "success");
+        trackGaEvent('portfolio_load_gdrive_success', { entry_count: newEntries.length });
       } else {
-        // Picker closed or no file selected, but not necessarily an error from GDS if it returns null
-        // Check if error message contains "picker_closed" to be sure
-        addNotification('Load from Drive cancelled or no file selected.', 'info');
-        trackGaEvent('gdrive_action_cancelled', { action: 'load' });
+        addNotification("No portfolio file found on Google Drive or file is empty.", "info");
+        trackGaEvent('portfolio_load_gdrive_not_found');
       }
-    } catch (error: any) {
-      console.error('Error loading from Google Drive:', error);
-      let displayErrorMessage = 'Failed to load from Google Drive: Invalid file or unknown error.';
-      if (error.message && error.message.includes('picker_closed')) {
-        displayErrorMessage = 'Load from Drive cancelled by user.';
-        trackGaEvent('gdrive_action_cancelled', { action: 'load' });
-      } else if (error.result && error.result.error && error.result.error.message) { // GAPI specific error structure
-        displayErrorMessage = `Failed to load from Drive: ${error.result.error.message}`;
-        trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.result.error.message });
-      } else if (error.message) { // General JS error or GDS custom error
-        displayErrorMessage = `Failed to load from Drive: ${error.message}`;
-        trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.message });
-      }
-      addNotification(displayErrorMessage, 'error');
+    } catch (err: any) {
+      console.error("Error loading portfolio from Drive:", err);
+      const errorMessage = err.message || "Failed to load portfolio from Google Drive. Check console for details.";
+      addNotification(errorMessage, "error");
+      setDriveError(errorMessage);
+      trackGaEvent('portfolio_load_gdrive_error', { error_message: errorMessage });
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleUserSignedIn, addNotification, replacePortfolio, trackGaEvent]);
+  }, [isGoogleApiInitialized, replacePortfolio, addNotification, driveError, trackGaEvent]);
 
 
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
@@ -624,7 +523,7 @@ const App: React.FC = () => {
     if ( (hasCalcModeChanged || hasMetricTypeChanged || hasTimespanChanged) && 
          !isTopMoversSectionCollapsed &&
          allItems.length > 0 &&
-         !isLoadingTopMovers // Check against current loading state
+         !isLoadingTopMovers 
        ) {
       if(hasCalcModeChanged) trackGaEvent('top_movers_change_calc_mode', { mode: topMoversCalculationMode });
       if(hasMetricTypeChanged) trackGaEvent('top_movers_change_metric_type', { type: topMoversMetricType });
@@ -637,7 +536,7 @@ const App: React.FC = () => {
     selectedMoversTimespan, 
     isTopMoversSectionCollapsed,
     allItems.length,
-    isLoadingTopMovers, // Re-added isLoadingTopMovers to prevent fetch if already loading from another source
+    isLoadingTopMovers, 
     fetchMovers, 
     prevCalcMode, 
     prevMetricType,
@@ -656,7 +555,7 @@ const App: React.FC = () => {
     allItems.length, 
     topMoversData, 
     topMoversError, 
-    isLoadingTopMovers, // Re-added isLoadingTopMovers
+    isLoadingTopMovers, 
     fetchMovers, 
     selectedMoversTimespan, 
     topMoversMetricType,
@@ -909,7 +808,7 @@ const App: React.FC = () => {
   const handleRevokeConsent = useCallback(() => {
     ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
     resetPreferencesToDefault();
-    setConsentStatus('denied'); // This will trigger consent_changed via the effect
+    setConsentStatus('denied'); 
     trackGaEvent('consent_changed', { status: 'revoked' });
   }, [resetPreferencesToDefault, trackGaEvent]);
 
@@ -1105,7 +1004,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData]); 
+  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData]); 
 
   const handleThemeChange = useCallback((themeName: string) => {
     setActiveThemeName(themeName);
@@ -1281,8 +1180,8 @@ const App: React.FC = () => {
       switch (currentTimespan) {
         case '1h': case '6h': apiTimestepToFetch = '5m'; break;
         case '1d': case '7d': apiTimestepToFetch = '1h'; break;
-        case '1mo': apiTimestepToFetch = '6h'; break;
-        case '3mo': case '6mo': case '1y': apiTimestepToFetch = '24h'; break;
+        case '1mo': case '6mo': apiTimestepToFetch = '6h'; break; // Adjusted 1mo to 6h, 6mo to 24h
+        case '3mo': case '1y': apiTimestepToFetch = '24h'; break;
         default: apiTimestepToFetch = '1h';
       }
       const [latest, rawHistoricalUnsorted] = await Promise.all([
@@ -1398,7 +1297,7 @@ const App: React.FC = () => {
     } finally {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems, trackGaEvent]);
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems, trackGaEvent]); // Added allItems here for getItemName inside checkAlerts dependency
 
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin: string = 'unknown') => {
@@ -1466,7 +1365,7 @@ const App: React.FC = () => {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData is stable via useCallback
+  }, [selectedItem, selectedTimespan]); 
 
 
   useEffect(() => {
@@ -1519,7 +1418,7 @@ const App: React.FC = () => {
       .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .slice(0, 20);
     
-    if (results.length > 0 && searchTerm !== prevSearchTerm && searchTerm.length > 1) { // Track if search term changed and yielded results
+    if (results.length > 0 && searchTerm !== prevSearchTerm && searchTerm.length > 1) { 
         trackGaEvent('search_performed', { search_term: searchTerm, results_count: results.length });
     }
     return results;
@@ -1633,9 +1532,9 @@ const App: React.FC = () => {
 
   const handleToggleFavoriteQuickAction = useCallback((itemId: FavoriteItemId) => {
     if (favoriteItemIds.includes(itemId)) {
-      removeFavoriteItem(itemId); // GA event is in removeFavoriteItem
+      removeFavoriteItem(itemId); 
     } else {
-      addFavoriteItem(itemId); // GA event is in addFavoriteItem
+      addFavoriteItem(itemId); 
     }
   }, [favoriteItemIds, addFavoriteItem, removeFavoriteItem]);
 
@@ -1647,7 +1546,6 @@ const App: React.FC = () => {
   const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
     if (allItems.length > 0) { 
       setSelectedMoversTimespan(timespan); 
-      // GA event for this is handled by the useEffect that reacts to selectedMoversTimespan change
     } else {
       addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
     }
@@ -1933,7 +1831,7 @@ const App: React.FC = () => {
           showFavoriteSparklines={showFavoriteSparklines}
           onToggleFavoriteSparklines={toggleShowFavoriteSparklines}
           activeThemeName={activeThemeName}
-          onSetThemeName={handleThemeChange} // Use new handler
+          onSetThemeName={handleThemeChange} 
           themes={APP_THEMES}
           enableDesktopNotifications={enableDesktopNotifications}
           onToggleDesktopNotifications={handleToggleDesktopNotifications}
@@ -2013,15 +1911,11 @@ const App: React.FC = () => {
           addNotification={addNotification}
           isConsentGranted={isConsentGranted}
           onSelectItemAndClose={handleSelectPortfolioItemAndCloseModal}
-          // Google Drive Props
-          isGoogleApiReady={isGoogleApiReady}
-          isGoogleUserSignedIn={isGoogleUserSignedIn}
-          googleUser={googleUser}
-          onGoogleSignIn={handleGoogleSignIn}
-          onGoogleSignOut={handleGoogleSignOut}
+          isGoogleApiInitialized={isGoogleApiInitialized}
           onSaveToDrive={handleSaveToDrive}
           onLoadFromDrive={handleLoadFromDrive}
           isDriveActionLoading={isDriveActionLoading}
+          driveError={driveError}
         />
       )}
 
@@ -2137,7 +2031,7 @@ const App: React.FC = () => {
                 onAddToPortfolio={openAddInvestmentFromViewModal}
                 isConsentGranted={isConsentGranted}
                 addNotification={addNotification}
-                onShareItem={(item) => { // Added onShareItem prop
+                onShareItem={(item) => { 
                   trackGaEvent('share_item', { item_id: item.id, item_name: item.name, method: 'clipboard_copy'});
                 }}
               />

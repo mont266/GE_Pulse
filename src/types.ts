@@ -1,5 +1,4 @@
 
-
 export interface ItemMapInfo {
   examine: string;
   id: number;
@@ -221,28 +220,13 @@ export interface PortfolioEntry {
 
 export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;
 
-// Google Drive Integration Types
-export interface GoogleUserProfile {
-  email: string;
-  name?: string;
-  picture?: string;
-}
 
-export interface GoogleDriveServiceConfig {
-  onGisLoaded: () => void;
-  onAuthStatusChanged: (isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null) => void;
-  // API Key and Client ID will be read from window, not passed in config
-}
-
-// Declare google object if not already available globally (e.g. via @types/google.accounts)
+// Declare google object if not already available globally
 declare global {
   interface Window {
-    gapi?: any; // For Google API Client Library (GAPI)
-    google?: any; // For Google Identity Services (GIS)
-    tokenClient?: any; // For GIS Token Client
-    GOOGLE_API_KEY?: string;
-    GOOGLE_CLIENT_ID?: string;
     gtag?: (...args: any[]) => void; // Google Analytics
+    gapi?: any; // Google API Client Library
+    google?: any; // Google Identity Services Library
   }
 }
 

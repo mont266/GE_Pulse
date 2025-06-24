@@ -1,7 +1,7 @@
 
 import React, { useEffect } from 'react';
 import { PortfolioEntry } from '../../src/types';
-import { DownloadIcon, CodeIcon } from '../Icons'; // Assuming CodeIcon exists or will be added
+import { DownloadIcon, CodeIcon, CloudUploadIcon } from '../Icons'; // Added CloudUploadIcon
 
 interface ExportOptionsModalProps {
   isOpen: boolean;
@@ -9,6 +9,11 @@ interface ExportOptionsModalProps {
   portfolioEntries: PortfolioEntry[];
   onShowCodeModalRequest: () => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  // Google Drive Props
+  isGoogleApiInitialized: boolean;
+  onSaveToDrive: () => Promise<void>;
+  isDriveActionLoading: boolean;
+  driveError: string | null;
 }
 
 export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
@@ -17,6 +22,10 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   portfolioEntries,
   onShowCodeModalRequest,
   addNotification,
+  isGoogleApiInitialized,
+  onSaveToDrive,
+  isDriveActionLoading,
+  driveError,
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -66,10 +75,24 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       return;
     }
     onShowCodeModalRequest();
-    onClose(); // Close this modal, PortfolioModal will open DisplayCodeModal
+    onClose(); 
+  };
+
+  const handleSaveToDriveClick = async () => {
+    if (!isGoogleApiInitialized) {
+        addNotification(driveError || "Google Drive integration is not available or not configured correctly.", "error");
+        return;
+    }
+    await onSaveToDrive();
+    // Notification of success/failure handled by onSaveToDrive in App.tsx
+    if (!driveError && !isDriveActionLoading) { // If no error was set and not still loading, close modal
+      // Potentially wait for isDriveActionLoading to be false if it's very quick
+      // For now, assume onSaveToDrive will set driveError if needed
+    }
   };
 
   const noData = portfolioEntries.length === 0;
+  const driveButtonDisabled = noData || !isGoogleApiInitialized || isDriveActionLoading;
 
   return (
     <div
@@ -109,7 +132,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
         <div className="space-y-3">
           <button
             onClick={handleDownloadJson}
-            disabled={noData}
+            disabled={noData || isDriveActionLoading}
             className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <DownloadIcon className="w-5 h-5 mr-2" />
@@ -117,19 +140,36 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
           </button>
           <button
             onClick={handleShowCopyableCode}
-            disabled={noData}
+            disabled={noData || isDriveActionLoading}
             className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <CodeIcon className="w-5 h-5 mr-2" />
             Get Copyable Code
           </button>
+          <button
+            onClick={handleSaveToDriveClick}
+            disabled={driveButtonDisabled}
+            className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
+            title={!isGoogleApiInitialized ? (driveError || "Google Drive not available") : (noData ? "Portfolio is empty" : "Save to Google Drive")}
+          >
+            {isDriveActionLoading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current mr-2"></div>
+            ) : (
+              <CloudUploadIcon className="w-5 h-5 mr-2" />
+            )}
+            Save to Google Drive
+          </button>
+          {!isGoogleApiInitialized && (
+             <p className="text-xs text-center text-[var(--error-text)] mt-1">{driveError || "Google Drive integration is not available."}</p>
+          )}
         </div>
 
         <div className="mt-6 text-right">
             <button
                 type="button"
                 onClick={onClose}
-                className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-input-secondary)] text-[var(--text-secondary)] font-semibold py-2.5 px-5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-primary)]"
+                disabled={isDriveActionLoading}
+                className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-input-secondary)] text-[var(--text-secondary)] font-semibold py-2.5 px-5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-primary)] disabled:opacity-60"
             >
                 Cancel
             </button>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PortfolioEntry } from '../../src/types';
-import { UploadIcon, PasteIcon } from '../Icons'; // Assuming PasteIcon exists
+import { UploadIcon, PasteIcon, CloudDownloadIcon } from '../Icons'; // Added CloudDownloadIcon
 
 // Utility function to validate portfolio data structure
 const isValidPortfolioArray = (data: any): data is PortfolioEntry[] => {
@@ -13,14 +13,14 @@ const isValidPortfolioArray = (data: any): data is PortfolioEntry[] => {
     entry !== null &&
     typeof entry.id === 'string' &&
     typeof entry.itemId === 'number' &&
-    typeof entry.quantityPurchased === 'number' && entry.quantityPurchased > 0 &&
+    typeof entry.quantityPurchased === 'number' && entry.quantityPurchased >= 0 && // Allow 0 for sold out
     typeof entry.purchasePricePerItem === 'number' && entry.purchasePricePerItem >= 0 &&
     typeof entry.purchaseDate === 'number' &&
     typeof entry.quantitySoldFromThisLot === 'number' && entry.quantitySoldFromThisLot >= 0 &&
     typeof entry.totalProceedsFromThisLot === 'number' && entry.totalProceedsFromThisLot >= 0 &&
     typeof entry.totalTaxPaidFromThisLot === 'number' && entry.totalTaxPaidFromThisLot >= 0 &&
     (entry.lastSaleDate === undefined || typeof entry.lastSaleDate === 'number') &&
-    entry.quantityPurchased >= entry.quantitySoldFromThisLot // Basic logical check
+    entry.quantityPurchased >= entry.quantitySoldFromThisLot 
   );
 };
 
@@ -29,7 +29,7 @@ function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T | undefined>(undefined);
   useEffect(() => {
     ref.current = value;
-  }); // Runs after every render
+  }); 
   return ref.current;
 }
 
@@ -39,6 +39,11 @@ interface ImportPortfolioModalProps {
   onClose: () => void;
   onConfirmImport: (importedData: PortfolioEntry[]) => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  // Google Drive Props
+  isGoogleApiInitialized: boolean;
+  onLoadFromDrive: () => Promise<void>;
+  isDriveActionLoading: boolean;
+  driveError: string | null;
 }
 
 export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
@@ -46,8 +51,12 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
   onClose,
   onConfirmImport,
   addNotification,
+  isGoogleApiInitialized,
+  onLoadFromDrive,
+  isDriveActionLoading,
+  driveError,
 }) => {
-  const [importMethod, setImportMethod] = useState<'file' | 'code'>('file');
+  const [importMethod, setImportMethod] = useState<'file' | 'code' | 'drive'>('file');
   const [file, setFile] = useState<File | null>(null);
   const [code, setCode] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
@@ -63,7 +72,6 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
 
     if (isOpen) {
       document.addEventListener('keydown', handleEsc);
-      // Only reset state when the modal transitions from closed to open
       if (!prevIsOpen) {
         setFile(null);
         setCode('');
@@ -89,7 +97,7 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
         addNotification('Invalid file type. Please select a .json file.', 'error');
         setFile(null);
         setFileName('');
-        if(fileInputRef.current) fileInputRef.current.value = ""; // Clear the file input
+        if(fileInputRef.current) fileInputRef.current.value = ""; 
       }
     }
   };
@@ -99,23 +107,15 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
       addNotification('Please select a file to import.', 'info');
       return;
     }
-    addNotification('Attempting to import from file...', 'info');
-    console.log('[ImportPortfolioModal] handleImportFromFile started.');
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const fileContent = event.target?.result as string;
-        console.log('[ImportPortfolioModal] File read. Attempting JSON.parse...');
-        addNotification('File read. Validating structure...', 'info');
         const parsedData = JSON.parse(fileContent);
-        console.log('[ImportPortfolioModal] JSON.parse successful. Validating array structure...');
         if (isValidPortfolioArray(parsedData)) {
-          console.log('[ImportPortfolioModal] Portfolio array from file is valid. Calling onConfirmImport.');
-          addNotification('File data structure valid. Confirming import...', 'info');
           onConfirmImport(parsedData);
+          // Success notification handled by onConfirmImport/PortfolioModal
         } else {
-          console.error('[ImportPortfolioModal] isValidPortfolioArray returned false for file data.');
           addNotification('Invalid portfolio data structure in the JSON file.', 'error');
         }
       } catch (error) {
@@ -132,35 +132,20 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
 
   const handleImportFromCode = () => {
     const trimmedCode = code.trim();
-    console.log('[ImportPortfolioModal] handleImportFromCode started. Code present:', !!trimmedCode);
-    addNotification('Attempting to import from code...', 'info');
-
     if (!trimmedCode) {
       addNotification('Please paste your backup code.', 'info');
       return;
     }
-
     let processedCode = trimmedCode;
     if (processedCode.startsWith('"') && processedCode.endsWith('"') && processedCode.length >= 2) {
       processedCode = processedCode.substring(1, processedCode.length - 1);
-      console.log('[ImportPortfolioModal] Quotes stripped from code.');
     }
-
     try {
-      console.log('[ImportPortfolioModal] Attempting atob...');
       const jsonString = atob(processedCode);
-      console.log('[ImportPortfolioModal] atob successful. Attempting JSON.parse...');
-      addNotification('Code decoded. Validating structure...', 'info');
-
       const parsedData = JSON.parse(jsonString);
-      console.log('[ImportPortfolioModal] JSON.parse successful. Validating array structure...');
-
       if (isValidPortfolioArray(parsedData)) {
-        console.log('[ImportPortfolioModal] Portfolio array from code is valid. Calling onConfirmImport.');
-        addNotification('Data structure valid. Confirming import...', 'info');
         onConfirmImport(parsedData);
       } else {
-        console.error('[ImportPortfolioModal] isValidPortfolioArray returned false for code data.');
         addNotification('Invalid portfolio data structure in the provided code.', 'error');
       }
     } catch (error) {
@@ -168,6 +153,16 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
       addNotification('Invalid backup code format. Ensure it is a valid Base64 encoded GE Pulse portfolio backup.', 'error');
     }
   };
+  
+  const handleLoadFromDriveClick = async () => {
+    if (!isGoogleApiInitialized) {
+        addNotification(driveError || "Google Drive integration is not available or not configured correctly.", "error");
+        return;
+    }
+    await onLoadFromDrive(); 
+    // Success/error/confirmation handling is managed by onLoadFromDrive in App.tsx and subsequent replacePortfolio logic
+  };
+
 
   if (!isOpen) {
     return null;
@@ -202,18 +197,21 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
 
         <div className="mb-4 border-b border-[var(--border-primary)]">
           <nav className="flex space-x-1" aria-label="Import methods">
-            {(['file', 'code'] as const).map((method) => (
+            {(['file', 'code', 'drive'] as const).map((method) => (
               <button
                 key={method}
                 onClick={() => setImportMethod(method)}
+                disabled={method === 'drive' && (!isGoogleApiInitialized || isDriveActionLoading)}
                 className={`px-4 py-2 font-medium text-sm rounded-t-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)]
                   ${importMethod === method
                     ? 'bg-[var(--bg-tertiary)] text-[var(--text-accent)]'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input-secondary)]/70'
-                  }`}
+                  }
+                  ${method === 'drive' && (!isGoogleApiInitialized || isDriveActionLoading) ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
                 aria-current={importMethod === method ? 'page' : undefined}
               >
-                {method === 'file' ? 'Upload JSON File' : 'Paste Backup Code'}
+                {method === 'file' ? 'From File' : method === 'code' ? 'From Code' : 'From Google Drive'}
               </button>
             ))}
           </nav>
@@ -249,7 +247,7 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
               </div>
               <button
                 onClick={handleImportFromFile}
-                disabled={!file}
+                disabled={!file || isDriveActionLoading}
                 className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-2.5 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <UploadIcon className="w-5 h-5 mr-2" />
@@ -275,12 +273,32 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
               </div>
               <button
                 onClick={handleImportFromCode}
-                disabled={!code.trim()}
+                disabled={!code.trim() || isDriveActionLoading}
                 className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-2.5 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <PasteIcon className="w-5 h-5 mr-2" />
                 Restore from Code
               </button>
+            </div>
+          )}
+          {importMethod === 'drive' && (
+            <div className="space-y-3">
+                 <button
+                    onClick={handleLoadFromDriveClick}
+                    disabled={!isGoogleApiInitialized || isDriveActionLoading}
+                    className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
+                    title={!isGoogleApiInitialized ? (driveError || "Google Drive not available") : "Load from Google Drive"}
+                >
+                     {isDriveActionLoading ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current mr-2"></div>
+                        ) : (
+                        <CloudDownloadIcon className="w-5 h-5 mr-2" />
+                    )}
+                    Load from Google Drive
+                </button>
+                {!isGoogleApiInitialized && (
+                    <p className="text-xs text-center text-[var(--error-text)] mt-1">{driveError || "Google Drive integration is not available."}</p>
+                )}
             </div>
           )}
         </div>
@@ -289,7 +307,8 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-input-secondary)] text-[var(--text-secondary)] font-semibold py-2.5 px-5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-primary)]"
+            disabled={isDriveActionLoading}
+            className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-input-secondary)] text-[var(--text-secondary)] font-semibold py-2.5 px-5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-primary)] disabled:opacity-60"
           >
             Cancel
           </button>

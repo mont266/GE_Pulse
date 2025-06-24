@@ -42,16 +42,8 @@ export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotificati
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
 export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; 
-// TOP_MOVERS_CALCULATION_MODE_STORAGE_KEY is removed as this setting is no longer stored
-// TOP_MOVERS_METRIC_TYPE_STORAGE_KEY is not added as this setting is session-only
 
 export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; 
-
-// Google Drive Constants
-export const GDRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
-export const GDRIVE_DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
-export const GDRIVE_APP_ID = 'YOUR_APP_ID_IF_USING_PICKER_LEGACY_APP_ID_FIELD'; // Usually Client ID is enough for Picker, but good to have if docs reference it.
-export const GDRIVE_ACCESS_TOKEN_KEY = 'gePulseGoogleDriveToken';
 
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
@@ -97,7 +89,6 @@ export const ALL_USER_PREFERENCE_KEYS = [
   SIDEBAR_ORDER_STORAGE_KEY,
   DRAG_DROP_ENABLED_STORAGE_KEY,
   PORTFOLIO_STORAGE_KEY, 
-  // GDRIVE_ACCESS_TOKEN_KEY is session-based, not a user preference to clear this way
 ];
 
 
