@@ -5,7 +5,7 @@ import { ChangelogEntry } from './types';
 export const changelogEntries: ChangelogEntry[] = [
   {
     version: "Beta v0.12",
-    date: "2025-06-23", 
+    date: "2025-06-24", 
     changes: [
       "Enhanced Changelog: Changelog entries are now collapsible, with the latest update expanded by default for a cleaner view.",
       "Added Portfolio Performance chart: Visualizes total portfolio profit and cumulative realized P/L over time. Includes selectable timespans (1M, 3M, 6M, 1Y, ALL) and a toggle for the realized P/L line.",

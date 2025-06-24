@@ -171,25 +171,27 @@ class GoogleDriveService {
   }
 
   private attemptSilentSignIn(): void {
+    const initialTokenCheck = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    console.log(`[GDS] attemptSilentSignIn called. isSilentAuthAttemptedThisLoad: ${this.isSilentAuthAttemptedThisLoad}. Stored token: ${initialTokenCheck ? `exists (val: ${initialTokenCheck.substring(0,10)}...)` : 'null'}`);
+    
     if (this.isSilentAuthAttemptedThisLoad) {
         console.log('[GDS] Silent auth already attempted this load cycle.');
-        if (!localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY)) {
+        if (!localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY)) { // If no token, definitely report signed out.
             this.updateAuthStatus(false, null, null);
         }
+        // If there IS a token here, but silent auth was attempted, it means the outcome of that attempt
+        // should have already updated the status. So, doing nothing here is okay.
         return;
     }
      if (!this.tokenClientInitialized || !this.tokenClient) {
         console.log('[GDS] Token client not ready for silent sign-in attempt.');
-        // If token client isn't ready and there's no stored token, assume signed out.
-        // If there IS a stored token, it implies a complex state we might not want to override yet.
-        // However, for initial load, if token client isn't ready, silent sign-in isn't possible.
         if (!localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY)) {
             this.updateAuthStatus(false, null, null);
         }
         return;
     }
     
-    this.isSilentAuthAttemptedThisLoad = true;
+    this.isSilentAuthAttemptedThisLoad = true; // Set this flag BEFORE making the call.
     const storedToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
 
     if (storedToken) {
@@ -197,7 +199,7 @@ class GoogleDriveService {
       this.explicitSignInSource = null; // Ensure it's null for silent attempt
       this.tokenClient.requestAccessToken({ prompt: 'none' });
     } else {
-      console.log('[GDS] No stored token, user is signed out.');
+      console.log('[GDS] No stored token, user is signed out (from attemptSilentSignIn).');
       this.updateAuthStatus(false, null, null);
     }
   }
@@ -219,18 +221,18 @@ class GoogleDriveService {
         client_id: this.clientId,
         scope: GDRIVE_SCOPES.join(' '),
         callback: (tokenResponse: any) => {
-          console.log('[GDS] Token Client Callback. Response:', tokenResponse, 'Explicit source:', this.explicitSignInSource);
+          console.log('[GDS] Token Client Callback. Response:', JSON.stringify(tokenResponse), 'Explicit source:', this.explicitSignInSource);
           if (tokenResponse && tokenResponse.access_token) {
             this.accessToken = tokenResponse.access_token;
             localStorage.setItem(GDRIVE_ACCESS_TOKEN_KEY, this.accessToken!);
             console.log('[GDS] Access token acquired and stored.');
             this.fetchUserProfileAndUpdateStatus();
-          } else { // Token acquisition failed or error in response
-            this.clearTokenAndUser(); // Essential: clear bad/old token
+          } else { 
+            this.clearTokenAndUser(); 
             let userVisibleError: string | null = null;
             if (tokenResponse?.error) {
               console.log(`[GDS] Token response error: ${tokenResponse.error}, Description: ${tokenResponse.error_description}, URI: ${tokenResponse.error_uri}`);
-              if (this.explicitSignInSource) { // Error came from an explicit user action
+              if (this.explicitSignInSource) { 
                 if (tokenResponse.error === "popup_closed_by_user" || tokenResponse.error === "user_cancel") {
                     userVisibleError = "Sign-in cancelled.";
                 } else if (tokenResponse.error === "access_denied") {
@@ -238,23 +240,19 @@ class GoogleDriveService {
                 } else {
                     userVisibleError = tokenResponse.error_description || tokenResponse.error || "Sign-in error.";
                 }
-              } else { // Silent attempt failed
-                // No user-visible error message for silent failures.
-                // Log the specific error for debugging.
+              } else { 
                 console.warn(`[GDS] Silent token acquisition failed. Error: ${tokenResponse.error}, Details: ${tokenResponse.error_description || 'N/A'}`);
                 userVisibleError = null; 
               }
             } else {
-                 // No token and no specific error from Google, treat as sign-out.
-                 // This can happen if prompt:none doesn't find a session and doesn't error out, but simply doesn't return a token.
                 console.warn('[GDS] Token acquisition failed without specific error in tokenResponse.');
                 userVisibleError = this.explicitSignInSource ? "Sign-in failed: No token received." : null;
             }
             this.updateAuthStatus(false, null, userVisibleError);
           }
-          this.explicitSignInSource = null; // Reset source after handling
+          this.explicitSignInSource = null; 
         },
-        error_callback: (error: any) => { // This callback is for GSI library errors, not API errors.
+        error_callback: (error: any) => { 
           console.error('[GDS] GIS Token Client Library error_callback:', error);
           this.clearTokenAndUser();
           const errorReason = error?.message || error?.type || 'GIS token client library error.';
@@ -295,26 +293,40 @@ class GoogleDriveService {
       this.updateAuthStatus(true, this.signedInUser, null);
     } catch (error: any) {
       console.error('[GDS] Error fetching user profile:', error);
-      this.updateAuthStatus(true, { email: 'Error fetching email' }, 'Failed to fetch user profile.');
+      const status = error?.result?.error?.code || error?.status || error?.code;
+      const errorIsAuthRelated = error?.result?.error?.status === 'UNAUTHENTICATED' || 
+                                (error?.result?.error?.code >= 400 && error?.result?.error?.code < 500) || 
+                                status === 401 || status === 403;
+
+      if (errorIsAuthRelated) {
+          console.warn('[GDS] Authentication error fetching profile. Token likely invalid/expired.');
+          this.clearTokenAndUser();
+          this.updateAuthStatus(false, null, null); // Silently sign out
+      } else {
+          this.updateAuthStatus(true, this.signedInUser, `Failed to refresh profile: ${error.message || 'Unknown error'}`);
+      }
     }
   }
   
   private clearTokenAndUser(): void {
-    console.log('[GDS] Clearing local token and user info.');
+    const tokenBefore = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    console.log(`[GDS] Clearing local token and user info. Token before: ${tokenBefore ? 'exists' : 'null'}`);
     this.accessToken = null;
     this.signedInUser = null;
     localStorage.removeItem(GDRIVE_ACCESS_TOKEN_KEY);
+    const tokenAfter = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    console.log(`[GDS] Token after clearing: ${tokenAfter ? 'exists' : 'null'}`);
   }
 
   private updateAuthStatus(isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null): void {
     this.signedInUser = isSignedIn ? user : null;
     if (!isSignedIn) { 
-        this.accessToken = null; // Ensure in-memory token is also cleared if not signed in
+        this.accessToken = null; 
     } else if (isSignedIn && !this.accessToken) { 
         this.accessToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
     }
     
-    console.log(`[GDS] Updating auth status: isSignedIn=${isSignedIn}, userEmail=${user?.email}, error=${error}`);
+    console.log(`[GDS] Updating auth status: isSignedIn=${isSignedIn}, userEmail=${user?.email || 'N/A'}, error=${error || 'N/A'}`);
     this.onAuthStatusChangedCallback(isSignedIn, user, error);
   }
 
@@ -345,7 +357,6 @@ class GoogleDriveService {
       try {
         window.google.accounts.oauth2.revoke(tokenToRevoke, () => {
           console.log('[GDS] Access token revoked successfully (Google callback).');
-          // Callback ensures status update after revocation completes or fails.
           this.updateAuthStatus(false, null, null); 
         });
       } catch (e) {
