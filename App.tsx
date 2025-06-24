@@ -277,8 +277,9 @@ const App: React.FC = () => {
             setGoogleAuthError(null);
              const token = googleDriveService.getToken();
              if (token) {
+                // Optimistically set signed-in if token exists.
+                // Profile details will come from onAuthStatusChanged.
                 setIsGoogleUserSignedIn(true);
-                setGoogleUser(googleDriveService.getSignedInUserProfile());
              }
         }, (error) => {
             console.error("Failed to initialize GAPI client:", error);
@@ -290,7 +291,7 @@ const App: React.FC = () => {
       onAuthStatusChanged: (isSignedIn, user, error) => {
         console.log('Google Auth Status Changed:', { isSignedIn, user, error });
         setIsGoogleUserSignedIn(isSignedIn);
-        setGoogleUser(user);
+        setGoogleUser(user); // This is the authoritative source for user profile
         setGoogleAuthError(error);
         if (error) {
           addNotification(`Google Sign-In: ${error}`, 'error');
@@ -298,12 +299,11 @@ const App: React.FC = () => {
           addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
           trackGaEvent('gdrive_signin_status', { status: 'signed_in' });
         } else if (!isSignedIn && !error) {
-           // Track explicit sign out if user was previously signed in
            if (googleUser) trackGaEvent('gdrive_signin_status', { status: 'signed_out' });
         }
       },
     });
-  }, [addNotification, trackGaEvent, googleUser]);
+  }, [addNotification, trackGaEvent, googleUser]); // googleUser in deps for sign-out tracking
 
   const handleGoogleSignIn = useCallback(async () => {
     if (!isGoogleApiReady) {

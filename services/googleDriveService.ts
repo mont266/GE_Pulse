@@ -1,4 +1,5 @@
 
+
 import { GoogleUserProfile, GoogleDriveServiceConfig } from '../src/types';
 import { GDRIVE_SCOPES, GDRIVE_DISCOVERY_DOCS, GDRIVE_ACCESS_TOKEN_KEY } from '../constants';
 
@@ -120,11 +121,38 @@ class GoogleDriveService {
     window.gapi.client.init({
       apiKey: this.apiKey,
       discoveryDocs: GDRIVE_DISCOVERY_DOCS,
-    }).then(() => {
+    }).then(async () => { // Made async
       console.log('[GDS] GAPI client initialized for Drive API.');
-      this.pickerApiLoaded = true; 
-      this.gisTokenClientInit();
+      this.pickerApiLoaded = true;
+      this.gisTokenClientInit(); // Initializes this.tokenClient
+
+      // Notify App.tsx that GAPI part is ready (for API calls)
+      // App.tsx might optimistically set isGoogleUserSignedIn if localStorage token exists
       gapiInitSuccess();
+
+      // After tokenClient is initialized, check for stored token and try silent re-auth
+      const storedToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+      if (storedToken && this.tokenClient) {
+        console.log('[GDS] Found stored token. Attempting silent token request to restore session.');
+        // This should trigger the tokenClient's callback (success or error)
+        // which will then call onAuthStatusChanged with profile or error.
+        this.tokenClient.requestAccessToken({ prompt: 'none' });
+      } else if (this.tokenClient && !storedToken) {
+        // No stored token, ensure user is marked as signed out if they were previously.
+        // This path is important if localStorage was cleared but the service instance still exists.
+        // However, on page refresh, if no token, they are effectively signed out anyway.
+        // The onAuthStatusChanged should reflect this.
+        console.log('[GDS] No stored token found. Ensuring signed-out state if not already handled.');
+        if(this.signedInUser) { // If service instance thought user was signed in but token is gone
+             this.accessToken = null;
+             this.signedInUser = null;
+            // onAuthStatusChanged will be called by error_callback of requestAccessToken if it fails,
+            // or if no token -> no request -> onAuthStatusChanged might not fire to confirm signed-out.
+            // This is complex, rely on requestAccessToken({prompt:'none'}) error path or explicit sign out.
+            // For now, if no stored token, the user is effectively signed out until they sign in.
+        }
+      }
+
     }).catch((error: any) => {
       console.error('[GDS] Error initializing GAPI client for Drive API:', error);
       this.onAuthStatusChangedCallback(false, null, `GAPI client init error: ${error.message || 'Unknown error'}`);
@@ -152,7 +180,6 @@ class GoogleDriveService {
             console.log('[GDS] Access token acquired and stored.');
             try {
               console.log('[GDS] Fetching user profile...');
-              // Ensure gapi.client has the token set for this call too
               window.gapi.client.setToken({ access_token: this.accessToken });
               const profileResponse = await window.gapi.client.drive.about.get({ fields: "user" });
               this.signedInUser = {
@@ -164,7 +191,8 @@ class GoogleDriveService {
               this.onAuthStatusChangedCallback(true, this.signedInUser, null);
             } catch (error: any) {
               console.error('[GDS] Error fetching user profile:', error);
-              this.onAuthStatusChangedCallback(true, { email: 'Unknown User (profile fetch failed)' }, 'Failed to fetch user profile.');
+              // Still signed in with token, but profile fetch failed.
+              this.onAuthStatusChangedCallback(true, { email: 'Error fetching email' }, 'Failed to fetch user profile.');
             }
           } else {
             console.error('[GDS] Token response error or access token missing:', tokenResponse);
@@ -199,15 +227,17 @@ class GoogleDriveService {
       this.onAuthStatusChangedCallback(false, null, 'GIS Token Client not initialized.');
       throw new Error(errMsg);
     }
-    console.log('[GDS] Requesting access token...');
+    console.log('[GDS] Requesting access token (interactive prompt may appear)...');
+    // For explicit sign-in, use prompt: '' or 'consent' if re-prompting for scopes is needed
     this.tokenClient.requestAccessToken({ prompt: '' }); 
   }
 
   public async signOut(): Promise<void> {
     console.log('[GDS] signOut called.');
-    if (this.accessToken) {
-      console.log('[GDS] Revoking access token:', this.accessToken.substring(0, 10) + "..."); // Log only a portion
-      window.google.accounts.oauth2.revoke(this.accessToken, () => {
+    const tokenToRevoke = this.accessToken || localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    if (tokenToRevoke) {
+      console.log('[GDS] Revoking access token:', tokenToRevoke.substring(0, 10) + "...");
+      window.google.accounts.oauth2.revoke(tokenToRevoke, () => {
         console.log('[GDS] Access token revoked successfully callback.');
         this.accessToken = null;
         this.signedInUser = null;
@@ -222,15 +252,16 @@ class GoogleDriveService {
   }
   
   public getToken(): string | null {
+    // Ensure this.accessToken is loaded from localStorage if not already in memory.
     if (!this.accessToken) {
         this.accessToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
-        console.log('[GDS] getToken: Retrieved token from localStorage:', this.accessToken ? 'Exists' : 'Not found');
     }
     return this.accessToken;
   }
 
   public getSignedInUserProfile(): GoogleUserProfile | null {
-    console.log('[GDS] getSignedInUserProfile called. Current user:', this.signedInUser);
+    // This method directly returns the current state of signedInUser.
+    // App.tsx should rely on onAuthStatusChanged for updates.
     return this.signedInUser; 
   }
 
