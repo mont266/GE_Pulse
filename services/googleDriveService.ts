@@ -1,9 +1,11 @@
 
 // Ensure gapi and google types are available globally after scripts load
-// Removed redundant declare global block as it's handled in src/types.ts
 
-const API_KEY = process.env.GOOGLE_API_KEY;
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const SAFE_PROCESS_ENV = typeof process !== 'undefined' && process.env ? process.env : ({} as Record<string, string | undefined>);
+
+const API_KEY = SAFE_PROCESS_ENV.GOOGLE_API_KEY;
+const CLIENT_ID = SAFE_PROCESS_ENV.GOOGLE_CLIENT_ID;
+
 const SCOPES = 'https://www.googleapis.com/auth/drive.file'; // Scope for files created or opened by the app
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 const PORTFOLIO_FILENAME = 'gepulse_portfolio.json';
@@ -46,7 +48,25 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
   }
 
   try {
-    await loadScript('https://apis.google.com/js/api.js', 'gapi-script');
+    // GAPI script is loaded via index.html, ensure it's ready
+    if (!window.gapi) {
+        await loadScript('https://apis.google.com/js/api.js', 'gapi-script');
+    }
+    await new Promise<void>((resolve, reject) => {
+        const interval = setInterval(() => {
+            if (window.gapi && window.gapi.load) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+        setTimeout(() => { // Timeout to prevent infinite loop
+            clearInterval(interval);
+            if (!window.gapi || !window.gapi.load) {
+                reject(new Error("GAPI script failed to load or initialize window.gapi.load"));
+            }
+        }, 5000); // 5 second timeout
+    });
+    
     await new Promise<void>((resolve) => window.gapi.load('client', resolve));
     
     await window.gapi.client.init({
@@ -55,7 +75,25 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
     });
     gapiClientInitialized = true;
 
-    await loadScript('https://accounts.google.com/gsi/client', 'gis-script');
+    // GIS script is loaded via index.html, ensure it's ready
+    if (!(window.google && window.google.accounts && window.google.accounts.oauth2)) {
+      await loadScript('https://accounts.google.com/gsi/client', 'gis-script');
+    }
+     await new Promise<void>((resolve, reject) => {
+        const interval = setInterval(() => {
+            if (window.google && window.google.accounts && window.google.accounts.oauth2 && window.google.accounts.oauth2.initTokenClient) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+         setTimeout(() => { // Timeout
+            clearInterval(interval);
+            if (!(window.google && window.google.accounts && window.google.accounts.oauth2 && window.google.accounts.oauth2.initTokenClient)) {
+                 reject(new Error("Google Identity Services (GIS) script failed to load or initialize window.google.accounts.oauth2.initTokenClient"));
+            }
+        }, 5000); // 5 second timeout
+    });
+
     tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
@@ -81,12 +119,8 @@ export const requestAccessToken = (): Promise<string> => {
       return;
     }
 
-    // Check if there's an existing valid token
     const currentToken = window.gapi.client.getToken();
     if (currentToken && currentToken.access_token) {
-       // Simple check: if token exists, assume it's fresh enough for this transactional approach.
-       // For robust check, you'd compare currentToken.expires_in or expires_at.
-       // Given transactional nature, re-requesting might be fine if it's stale.
        resolve(currentToken.access_token);
        return;
     }
@@ -96,7 +130,7 @@ export const requestAccessToken = (): Promise<string> => {
         console.error("Google Access Token Error:", resp.error, resp);
         reject(new Error(resp.error.toString()));
       } else {
-        window.gapi.client.setToken(resp); // Set token for GAPI client
+        window.gapi.client.setToken(resp); 
         resolve(resp.access_token);
       }
     };
