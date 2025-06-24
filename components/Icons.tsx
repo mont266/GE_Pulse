@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 
 export const EmptyHeartIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -164,5 +163,12 @@ export const CloudUploadIcon: React.FC<{ className?: string }> = ({ className })
 export const CloudDownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9.75v6.75m0 0l-3-3m3 3l3-3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.045 11.09A4.502 4.502 0 0118.75 19.5H6.75z" />
+  </svg>
+);
+
+export const GoogleDriveIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className || "w-5 h-5"}>
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" fill="var(--icon-button-default-text)" fillOpacity="0.2" stroke="var(--icon-button-default-text)" strokeOpacity="0.5"></path>
+    <text x="12" y="13.5" textAnchor="middle" fontSize="6.5" fontWeight="bold" fill="currentColor" stroke="none">GD</text>
   </svg>
 );

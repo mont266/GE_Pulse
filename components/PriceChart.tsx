@@ -188,7 +188,6 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, showGrid, showLine
           <Tooltip content={<CustomPriceTooltip />} />
           <Legend 
             wrapperStyle={{color: 'var(--legend-text)', paddingTop: '10px'}} 
-            payload={[{ value: 'Average High Price', type: 'line', id: 'price', color: 'var(--chart-line)' }]}
           />
           <Line 
               type="monotone" 
@@ -237,10 +236,6 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, showGrid, showLine
             <Tooltip content={<CustomVolumeTooltip />} />
             <Legend 
                 wrapperStyle={{color: 'var(--legend-text)', paddingTop: '10px'}} 
-                payload={[
-                    { value: 'Buy Volume', type: 'rect', id: 'highPriceVolume', color: 'var(--chart-volume-buy)' },
-                    { value: 'Sell Volume', type: 'rect', id: 'lowPriceVolume', color: 'var(--chart-volume-sell)' },
-                ]}
             />
             <Bar yAxisId="right" dataKey="highPriceVolume" fill="var(--chart-volume-buy)" name="Buy Volume" stackId="volume" />
             <Bar yAxisId="right" dataKey="lowPriceVolume" fill="var(--chart-volume-sell)" name="Sell Volume" stackId="volume" />

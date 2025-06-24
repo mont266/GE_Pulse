@@ -4,8 +4,19 @@ import { ChangelogEntry } from './types';
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.12",
+    date: "2025-06-23", 
+    changes: [
+      "Enhanced Changelog: Changelog entries are now collapsible, with the latest update expanded by default for a cleaner view.",
+      "Added Portfolio Performance chart: Visualizes total portfolio profit and cumulative realized P/L over time. Includes selectable timespans (1M, 3M, 6M, 1Y, ALL) and a toggle for the realized P/L line.",
+      "Redesigned Google Drive integration buttons in the Portfolio modal for a cleaner UI: Uses a dropdown for Save/Load actions when signed in, and a separate Sign Out icon button.",
+      "Fixed visibility of local Import/Export/Clear All buttons in Portfolio modal, ensuring they are available when consent is granted, independent of Google Drive status."
+    ],
+    notes: "Key updates include the portfolio performance chart, a revamped Google Drive UI in the portfolio section, important visibility fixes for local portfolio actions, and an improved changelog display."
+  },
+  {
     version: "Beta v0.11",
-    date: "2025-06-23", // Placeholder for current development
+    date: "2025-06-23", 
     changes: [
       "Re-implemented Google Drive integration for portfolio backup & restore, resolving previous deployment issues. Users can now connect their Google Drive to save and load their portfolio data.",
       "Portfolio items are now clickable. Clicking an item in the Portfolio modal will close the modal and display the item's chart and details in the main view.",

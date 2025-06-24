@@ -242,5 +242,15 @@ declare global {
     tokenClient?: any; // For GIS Token Client
     GOOGLE_API_KEY?: string;
     GOOGLE_CLIENT_ID?: string;
+    gtag?: (...args: any[]) => void; // Google Analytics
   }
+}
+
+// Portfolio Performance Chart Types
+export type PortfolioChartTimespan = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+
+export interface PortfolioPerformanceDataPoint {
+  timestamp: number; // Unix timestamp for X-axis (representing a day)
+  profit: number;    // Total portfolio profit on that day (Unrealized P/L of open + Cumulative Realized P/L)
+  realizedPL?: number; // Optional: Cumulative realized P/L up to this day
 }

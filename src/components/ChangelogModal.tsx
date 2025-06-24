@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ChangelogEntry } from '../types';
+import { ChevronDownIcon } from '../../components/Icons'; // Corrected path
 
 interface ChangelogModalProps {
   isOpen: boolean;
@@ -8,6 +10,10 @@ interface ChangelogModalProps {
 }
 
 export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose, entries }) => {
+  const [expandedEntries, setExpandedEntries] = useState<string[]>(() =>
+    entries.length > 0 ? [entries[0].version] : []
+  );
+
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -16,15 +22,33 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose,
     };
     if (isOpen) {
       document.addEventListener('keydown', handleEsc);
+      // Ensure expanded state is valid and default to latest if needed
+      setExpandedEntries(currentExpanded => {
+        const validExpanded = currentExpanded.filter(version =>
+          entries.some(entry => entry.version === version)
+        );
+        if (validExpanded.length === 0 && entries.length > 0) {
+          return [entries[0].version];
+        }
+        return validExpanded;
+      });
     }
     return () => {
       document.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, entries, onClose]); // Added onClose to dependencies
 
   if (!isOpen) {
     return null;
   }
+
+  const toggleEntry = (version: string) => {
+    setExpandedEntries(prevExpanded =>
+      prevExpanded.includes(version)
+        ? prevExpanded.filter(v => v !== version)
+        : [...prevExpanded, version]
+    );
+  };
 
   return (
     <div
@@ -38,7 +62,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose,
         className="bg-[var(--bg-modal)] p-6 rounded-lg shadow-xl w-full max-w-lg text-[var(--text-primary)] max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4 pb-4 border-b border-[var(--border-primary)]">
           <h2 id="changelog-modal-title" className="text-2xl font-semibold text-[var(--text-accent)]">Application Changelog</h2>
           <button
             onClick={onClose}
@@ -51,27 +75,50 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose,
           </button>
         </div>
 
-        <div className="space-y-6 overflow-y-auto pr-2 flex-grow">
+        <div className="space-y-1 overflow-y-auto pr-2 flex-grow">
           {entries.length === 0 ? (
             <p className="text-[var(--text-secondary)]">No changelog entries available.</p>
           ) : (
-            entries.map((entry, index) => (
-              <div key={entry.version} className={`py-4 ${index < entries.length -1 ? 'border-b border-[var(--border-primary)]' : ''}`}>
-                <h3 className="text-xl font-semibold text-[var(--text-accent)]">{entry.version}</h3>
-                <p className="text-xs text-[var(--text-muted)] mb-2">{new Date(entry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <ul className="list-disc list-inside space-y-1 text-[var(--text-primary)] text-sm pl-2">
-                  {entry.changes.map((change, idx) => (
-                    <li key={idx}>{change}</li>
-                  ))}
-                </ul>
-                {entry.notes && (
-                  <p className="mt-3 text-sm italic text-[var(--text-secondary)] bg-[var(--bg-input-secondary)] p-2 rounded-md">{entry.notes}</p>
-                )}
-              </div>
-            ))
+            entries.map((entry, index) => {
+              const isExpanded = expandedEntries.includes(entry.version);
+              return (
+                <div key={entry.version} className={`py-1 ${index < entries.length -1 ? 'border-b border-[var(--border-primary)]' : ''}`}>
+                  <button
+                    onClick={() => toggleEntry(entry.version)}
+                    className="w-full flex items-center justify-between py-3 px-2 rounded-md hover:bg-[var(--bg-input-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg-modal)] transition-colors"
+                    aria-expanded={isExpanded}
+                    aria-controls={`changelog-details-${entry.version}`}
+                  >
+                    <div className="text-left">
+                      <h3 className="text-lg font-semibold text-[var(--text-accent)]">{entry.version}</h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {new Date(entry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <ChevronDownIcon className={`w-5 h-5 text-[var(--text-secondary)] transition-transform duration-200 ${isExpanded ? 'transform rotate-180' : ''}`} />
+                  </button>
+                  {isExpanded && (
+                    <div 
+                      id={`changelog-details-${entry.version}`} 
+                      className="pt-2 pb-3 pl-4 pr-2 text-sm space-y-2"
+                      role="region"
+                    >
+                      <ul className="list-disc list-inside space-y-1 text-[var(--text-primary)]">
+                        {entry.changes.map((change, idx) => (
+                          <li key={idx}>{change}</li>
+                        ))}
+                      </ul>
+                      {entry.notes && (
+                        <p className="mt-2 text-sm italic text-[var(--text-secondary)] bg-[var(--bg-input-secondary)] p-2 rounded-md">{entry.notes}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
-        <div className="mt-6 text-right">
+        <div className="mt-6 pt-4 border-t border-[var(--border-primary)] text-right">
             <button
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"

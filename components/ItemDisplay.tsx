@@ -24,9 +24,10 @@ interface ItemDisplayProps {
   onRemoveFavorite: (itemId: FavoriteItemId) => void;
   wordingPreference: WordingPreference;
   onSetAlertForItem: (item: ItemMapInfo) => void;
-  onAddToPortfolio: (item: ItemMapInfo) => void; // New prop for portfolio modal
+  onAddToPortfolio: (item: ItemMapInfo) => void; 
   isConsentGranted: boolean; 
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onShareItem?: (item: ItemMapInfo) => void; // New prop for GA tracking
 }
 
 export const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -46,9 +47,10 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onRemoveFavorite,
   wordingPreference,
   onSetAlertForItem,
-  onAddToPortfolio, // Destructure new prop
+  onAddToPortfolio, 
   isConsentGranted,
   addNotification, 
+  onShareItem, // Destructure new prop
 }) => {
   const [currentImageUrl, setCurrentImageUrl] = useState<string>('https://via.placeholder.com/96?text=No+Icon');
   const [hasAttemptedDetail, setHasAttemptedDetail] = useState<boolean>(false);
@@ -78,22 +80,25 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     }
   };
 
-  const handleShareItem = useCallback(async () => {
+  const handleShareItemClick = useCallback(async () => {
     if (!item) return;
 
     try {
-      const baseUrl = 'https://beta.gepulse.net/';
+      const baseUrl = 'https://beta.gepulse.net/'; // Or window.location.origin if it's always hosted on the desired domain
       const shareUrl = new URL(baseUrl);
       shareUrl.searchParams.set('itemId', item.id.toString());
       const shareableLink = shareUrl.toString();
       
       await navigator.clipboard.writeText(shareableLink);
       addNotification(`Shareable link for ${item.name} copied!`, 'success');
+      if (onShareItem) { // Call the callback for GA tracking
+        onShareItem(item);
+      }
     } catch (err) {
       console.error('Failed to copy share link:', err);
       addNotification('Failed to copy share link. Please try again.', 'error');
     }
-  }, [item, addNotification]);
+  }, [item, addNotification, onShareItem]);
 
   if (!item) {
     return null; 
@@ -188,7 +193,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <h2 className="text-3xl font-bold text-[var(--text-accent)]">{item.name}</h2>
             <button
-              onClick={handleShareItem}
+              onClick={handleShareItemClick}
               aria-label={`Share link for ${item.name}`}
               className="p-1 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"
               title={`Share link for ${item.name}`}

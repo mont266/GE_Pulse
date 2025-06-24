@@ -1,5 +1,6 @@
 
-import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType } from './src/types'; // Updated import path
+
+import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType, PortfolioChartTimespan } from './src/types'; // Updated import path
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
 export const ITEM_IMAGE_BASE_URL = 'https://oldschool.runescape.wiki/images/';
@@ -14,6 +15,15 @@ export const TIMESPAN_OPTIONS: { label: string; value: Timespan }[] = [
   { label: '6 Months', value: '6mo' },
   { label: '1 Year', value: '1y' },
 ];
+
+export const PORTFOLIO_CHART_TIMESPAN_OPTIONS: { label: string; value: PortfolioChartTimespan }[] = [
+  { label: '1 Month', value: '1M' },
+  { label: '3 Months', value: '3M' },
+  { label: '6 Months', value: '6M' },
+  { label: '1 Year', value: '1Y' },
+  { label: 'All Time', value: 'ALL' },
+];
+
 
 export const ALERT_CHECK_INTERVAL = 60 * 1000; // 60 seconds
 export const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes

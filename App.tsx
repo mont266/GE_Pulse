@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
@@ -42,7 +41,7 @@ function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T | undefined>(undefined);
   useEffect(() => {
     ref.current = value;
-  });
+  }); // Runs after every render
   return ref.current;
 }
 
@@ -55,7 +54,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.11";
+const APP_VERSION = "Beta v0.12";
 
 // Define SearchSectionLayout component
 interface SearchSectionLayoutProps extends SectionRenderProps {
@@ -68,7 +67,7 @@ interface SearchSectionLayoutProps extends SectionRenderProps {
   activeDescendantId?: string;
   filteredItems: ItemMapInfo[];
   itemListWrapperRef: React.RefObject<HTMLDivElement>;
-  handleSelectItem: (item: ItemMapInfo) => void;
+  handleSelectItem: (item: ItemMapInfo, origin?: string) => void; // Added origin
   getItemIconUrl: (iconName: string) => string;
   activeSuggestionIndex: number;
   favoriteItemIds: FavoriteItemId[];
@@ -123,7 +122,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
             <div ref={itemListWrapperRef}>
               <ItemList
                 items={filteredItems}
-                onSelectItem={handleSelectItem}
+                onSelectItem={(item) => handleSelectItem(item, 'search_results')}
                 getItemIconUrl={getItemIconUrl}
                 activeSuggestionIndex={activeSuggestionIndex}
                 favoriteItemIds={favoriteItemIds}
@@ -145,7 +144,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
 interface FavoritesListProps extends SectionRenderProps {
   favoriteItemIds: FavoriteItemId[];
   allItems: ItemMapInfo[];
-  onSelectItemById: (itemId: FavoriteItemId) => void;
+  onSelectItemById: (itemId: FavoriteItemId, origin?: string) => void; // Added origin
   onRemoveFavorite: (itemId: FavoriteItemId) => void;
   getItemIconUrl: (iconName: string) => string;
   favoriteItemPrices: Record<FavoriteItemId, LatestPriceData | null | 'loading' | 'error'>;
@@ -170,7 +169,7 @@ interface TopMoversSectionProps extends SectionRenderProps {
   onRefresh: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => void; 
+  onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin?: string) => void; // Added origin
   getItemIconUrl: (iconName: string) => string; 
   lastFetchedTimestamp: number;
   topMoversCalculationMode: TopMoversCalculationMode;
@@ -188,7 +187,7 @@ interface AlertsManagerProps extends SectionRenderProps {
   getItemName: (itemId: number) => string;
   getItemIconUrl: (iconName: string) => string;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onSelectAlertItemById: (itemId: number) => void;
+  onSelectAlertItemById: (itemId: number, origin?: string) => void; // Added origin
   isConsentGranted: boolean;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -204,6 +203,15 @@ type SpecificAppSectionProps =
 const App: React.FC = () => {
   const initialConsent = getInitialConsentStatus();
   const [consentStatus, setConsentStatus] = useState<'pending' | 'granted' | 'denied'>(initialConsent);
+  const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
+
+  // Google Analytics Event Tracking Helper
+  const trackGaEvent = useCallback((eventName: string, eventParams?: Record<string, any>) => {
+    if (isConsentGranted && typeof gtag === 'function') {
+      gtag('event', eventName, eventParams);
+    }
+  }, [isConsentGranted]);
+
 
   // Google Drive State
   const [isGoogleApiReady, setIsGoogleApiReady] = useState<boolean>(false);
@@ -227,8 +235,6 @@ const App: React.FC = () => {
   const notificationIdCounterRef = useRef(0);
   const favoritesRefreshLockRef = useRef(false);
 
-  const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
-
   const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     notificationIdCounterRef.current += 1;
     const id = `notif-${notificationIdCounterRef.current}`;
@@ -238,7 +244,6 @@ const App: React.FC = () => {
     }, 5000);
   }, []);
 
-  // Initialize usePortfolio hook earlier
   const {
     portfolioEntries,
     addPortfolioEntry,
@@ -250,12 +255,10 @@ const App: React.FC = () => {
   } = usePortfolio(isConsentGranted, addNotification);
 
 
-  // Google Drive API Initialization Effect
   useEffect(() => {
     googleDriveService.init({
       onGisLoaded: () => {
         console.log('Google Identity Services (GIS) loaded.');
-        // GIS is loaded, now check for API key and Client ID to proceed with GAPI init
         const apiKey = (window as any).GOOGLE_API_KEY;
         const clientId = (window as any).GOOGLE_CLIENT_ID;
 
@@ -267,12 +270,10 @@ const App: React.FC = () => {
           return;
         }
         
-        // Initialize GAPI now that GIS is ready and keys are confirmed
         googleDriveService.initGapiClient(() => {
             console.log('Google API Client (GAPI) initialized.');
             setIsGoogleApiReady(true);
             setGoogleAuthError(null);
-            // Attempt to restore sign-in state or check if already signed in
              const token = googleDriveService.getToken();
              if (token) {
                 setIsGoogleUserSignedIn(true);
@@ -294,12 +295,14 @@ const App: React.FC = () => {
           addNotification(`Google Sign-In: ${error}`, 'error');
         } else if (isSignedIn && user) {
           addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
+          trackGaEvent('gdrive_signin_status', { status: 'signed_in' });
         } else if (!isSignedIn && !error) {
-           // Don't show notification on initial load if not signed in, or on explicit sign out
+           // Track explicit sign out if user was previously signed in
+           if (googleUser) trackGaEvent('gdrive_signin_status', { status: 'signed_out' });
         }
       },
     });
-  }, [addNotification]);
+  }, [addNotification, trackGaEvent, googleUser]);
 
   const handleGoogleSignIn = useCallback(async () => {
     if (!isGoogleApiReady) {
@@ -307,24 +310,27 @@ const App: React.FC = () => {
       return;
     }
     try {
+      trackGaEvent('gdrive_action', { action: 'signin_attempt' });
       await googleDriveService.signIn();
-      // Auth status change will be handled by the callback in init
     } catch (err: any) {
       console.error("Error during Google Sign-In:", err);
       addNotification(`Google Sign-In failed: ${err.message || 'Unknown error'}`, 'error');
       setGoogleAuthError(err.message || 'Unknown error during sign-in.');
+      trackGaEvent('gdrive_action_failed', { action: 'signin', error_message: err.message || 'Unknown error' });
     }
-  }, [isGoogleApiReady, addNotification]);
+  }, [isGoogleApiReady, addNotification, trackGaEvent]);
 
   const handleGoogleSignOut = useCallback(async () => {
     try {
+      trackGaEvent('gdrive_action', { action: 'signout_attempt' });
       await googleDriveService.signOut();
       addNotification('Signed out from Google Drive.', 'info');
     } catch (err: any) {
       console.error("Error during Google Sign-Out:", err);
       addNotification(`Google Sign-Out failed: ${err.message || 'Unknown error'}`, 'error');
+      trackGaEvent('gdrive_action_failed', { action: 'signout', error_message: err.message || 'Unknown error' });
     }
-  }, [addNotification]);
+  }, [addNotification, trackGaEvent]);
 
   const handleSaveToDrive = useCallback(async () => {
     if (!isGoogleUserSignedIn || portfolioEntries.length === 0) {
@@ -332,21 +338,25 @@ const App: React.FC = () => {
       return;
     }
     setIsDriveActionLoading(true);
+    trackGaEvent('gdrive_action', { action: 'save_attempt', entry_count: portfolioEntries.length });
     try {
       const portfolioJson = JSON.stringify(portfolioEntries);
       await googleDriveService.showSavePicker(portfolioJson, 'gepulse_portfolio.json');
       addNotification('Portfolio saved to Google Drive!', 'success');
+      trackGaEvent('gdrive_action_success', { action: 'save' });
     } catch (error: any) {
       console.error('Error saving to Google Drive:', error);
       if (error.message && error.message.includes('picker_closed')) {
         addNotification('Save to Drive cancelled by user.', 'info');
+        trackGaEvent('gdrive_action_cancelled', { action: 'save' });
       } else {
         addNotification(`Failed to save to Google Drive: ${error.message || 'Unknown error'}`, 'error');
+        trackGaEvent('gdrive_action_failed', { action: 'save', error_message: error.message || 'Unknown error' });
       }
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleUserSignedIn, portfolioEntries, addNotification]);
+  }, [isGoogleUserSignedIn, portfolioEntries, addNotification, trackGaEvent]);
 
   const handleLoadFromDrive = useCallback(async () => {
     if (!isGoogleUserSignedIn) {
@@ -354,40 +364,40 @@ const App: React.FC = () => {
       return;
     }
     setIsDriveActionLoading(true);
+    trackGaEvent('gdrive_action', { action: 'load_attempt' });
     try {
       const fileContent = await googleDriveService.showOpenPicker();
       if (fileContent) {
         const parsedPortfolio: PortfolioEntry[] = JSON.parse(fileContent);
-        // TODO: Add more robust validation for parsedPortfolio structure
-        if (Array.isArray(parsedPortfolio)) { // Basic validation
+        if (Array.isArray(parsedPortfolio)) { 
           replacePortfolio(parsedPortfolio);
           addNotification('Portfolio loaded from Google Drive!', 'success');
+          trackGaEvent('gdrive_action_success', { action: 'load', entry_count: parsedPortfolio.length });
         } else {
           throw new Error('Invalid portfolio file format.');
         }
       } else {
-        // Picker was cancelled or no file selected - showOpenPicker might resolve null or reject
-        // If it rejects with 'picker_closed', that's handled by the catch.
-        // If it resolves null (e.g., user explicitly closes without picking), this path is taken.
         addNotification('Load from Drive cancelled or no file selected.', 'info');
+        trackGaEvent('gdrive_action_cancelled', { action: 'load' });
       }
     } catch (error: any) {
       console.error('Error loading from Google Drive:', error);
       let displayErrorMessage = 'Failed to load from Google Drive: Invalid file or unknown error.';
       if (error.message && error.message.includes('picker_closed')) {
         displayErrorMessage = 'Load from Drive cancelled by user.';
+        trackGaEvent('gdrive_action_cancelled', { action: 'load' });
       } else if (error.result && error.result.error && error.result.error.message) {
-        // GAPI error structure (e.g., for 404 File Not Found)
         displayErrorMessage = `Failed to load from Drive: ${error.result.error.message}`;
+        trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.result.error.message });
       } else if (error.message) {
-        // General JS error
         displayErrorMessage = `Failed to load from Drive: ${error.message}`;
+        trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.message });
       }
       addNotification(displayErrorMessage, 'error');
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleUserSignedIn, addNotification, replacePortfolio]);
+  }, [isGoogleUserSignedIn, addNotification, replacePortfolio, trackGaEvent]);
 
 
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
@@ -398,7 +408,7 @@ const App: React.FC = () => {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
-  const [isPrivacyPolicyModalOpen, setIsPrivacyPolicyModalOpen] = useState<boolean>(false); // Privacy Policy state
+  const [isPrivacyPolicyModalOpen, setIsPrivacyPolicyModalOpen] = useState<boolean>(false); 
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); 
   const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
   
@@ -446,8 +456,14 @@ const App: React.FC = () => {
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
 
-  const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => !prev);
-  const toggleAlertsSection = () => setIsAlertsSectionCollapsed(prev => !prev);
+  const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => {
+    trackGaEvent('toggle_section_collapse', { section_name: 'search', is_collapsed: !prev });
+    return !prev;
+  });
+  const toggleAlertsSection = () => setIsAlertsSectionCollapsed(prev => {
+    trackGaEvent('toggle_section_collapse', { section_name: 'alerts', is_collapsed: !prev });
+    return !prev;
+  });
  
   const [showChartGrid, setShowChartGrid] = useState<boolean>(() => {
     if (initialConsent === 'granted') {
@@ -487,10 +503,8 @@ const App: React.FC = () => {
   const [enableDesktopNotifications, setEnableDesktopNotifications] = useState<boolean>(() => {
     if (initialConsent === 'granted') {
       const saved = localStorage.getItem(DESKTOP_NOTIFICATIONS_ENABLED_KEY);
-      // Ensure migration for old string values if any
       if (saved === 'true') return true;
       if (saved === 'false') return false;
-      // Default to false if not 'true' or 'false' string, or if not JSON parsable to boolean
       try {
         return saved !== null ? JSON.parse(saved) : false;
       } catch {
@@ -543,15 +557,15 @@ const App: React.FC = () => {
     return `${ITEM_IMAGE_BASE_URL}${iconName.replace(/ /g, '_')}`;
   }, []);
 
-  // Effect for Drag & Drop toggle notification
   useEffect(() => {
     if (isConsentGranted) {
       localStorage.setItem(DRAG_DROP_ENABLED_STORAGE_KEY, JSON.stringify(isDragAndDropEnabled));
     }
     if (prevIsDragAndDropEnabled !== undefined && prevIsDragAndDropEnabled !== isDragAndDropEnabled) {
       addNotification(`Section reordering ${isDragAndDropEnabled ? 'enabled' : 'disabled'}.`, 'info');
+      trackGaEvent('toggle_drag_drop', { is_enabled: isDragAndDropEnabled });
     }
-  }, [isDragAndDropEnabled, prevIsDragAndDropEnabled, addNotification, isConsentGranted]);
+  }, [isDragAndDropEnabled, prevIsDragAndDropEnabled, addNotification, isConsentGranted, trackGaEvent]);
 
   const toggleDragAndDrop = useCallback(() => {
     setIsDragAndDropEnabled(prev => !prev);
@@ -592,6 +606,9 @@ const App: React.FC = () => {
          allItems.length > 0 &&
          !isLoadingTopMovers
        ) {
+      if(hasCalcModeChanged) trackGaEvent('top_movers_change_calc_mode', { mode: topMoversCalculationMode });
+      if(hasMetricTypeChanged) trackGaEvent('top_movers_change_metric_type', { type: topMoversMetricType });
+      if(hasTimespanChanged) trackGaEvent('top_movers_change_timespan', { timespan: selectedMoversTimespan });
       fetchMovers(selectedMoversTimespan, topMoversMetricType);
     }
   }, [
@@ -604,12 +621,14 @@ const App: React.FC = () => {
     fetchMovers, 
     prevCalcMode, 
     prevMetricType,
-    prevSelectedMoversTimespan
+    prevSelectedMoversTimespan,
+    trackGaEvent
   ]);
 
 
   useEffect(() => {
     if (!isTopMoversSectionCollapsed && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
+      trackGaEvent('view_top_movers'); // Track when section is expanded and data needs to be fetched initially
       fetchMovers(selectedMoversTimespan, topMoversMetricType);
     }
   }, [
@@ -620,14 +639,17 @@ const App: React.FC = () => {
     isLoadingTopMovers, 
     fetchMovers, 
     selectedMoversTimespan, 
-    topMoversMetricType
+    topMoversMetricType,
+    trackGaEvent
   ]);
 
 
   const toggleTopMoversSection = useCallback(() => {
     setIsTopMoversSectionCollapsed(prev => {
         const newCollapsedState = !prev;
+        trackGaEvent('toggle_section_collapse', { section_name: 'top_movers', is_collapsed: newCollapsedState });
         if (!newCollapsedState && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
+            trackGaEvent('view_top_movers');
             fetchMovers(selectedMoversTimespan, topMoversMetricType);
         }
         return newCollapsedState;
@@ -639,7 +661,8 @@ const App: React.FC = () => {
     isLoadingTopMovers, 
     fetchMovers, 
     selectedMoversTimespan, 
-    topMoversMetricType
+    topMoversMetricType,
+    trackGaEvent
   ]);
 
   const memoizedToggleTopMoversSection = useCallback(toggleTopMoversSection, [
@@ -649,13 +672,15 @@ const App: React.FC = () => {
     topMoversError, 
     fetchMovers, 
     selectedMoversTimespan, 
-    topMoversMetricType
+    topMoversMetricType,
+    trackGaEvent
   ]);
 
   const handleRefreshAllFavorites = useCallback(async (isAutoRefresh: boolean = false) => {
     if (favoritesRefreshLockRef.current) return;
     if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
   
+    if (!isAutoRefresh) trackGaEvent('refresh_favorites', { count: favoriteItemIds.length });
     favoritesRefreshLockRef.current = true;
     setIsRefreshingFavorites(true);
     const isMountedRef = { current: true };
@@ -751,25 +776,24 @@ const App: React.FC = () => {
   
     if (isMountedRef.current) {
       setIsRefreshingFavorites(false);
-      if (allSucceeded && favoriteItemIds.length > 0 && !isAutoRefresh) { // Only show success if not auto-refresh
+      if (allSucceeded && favoriteItemIds.length > 0 && !isAutoRefresh) { 
         addNotification('Favorite items data refreshed!', 'success');
-      } else if (!allSucceeded && favoriteItemIds.length > 0) { // Always show error
+      } else if (!allSucceeded && favoriteItemIds.length > 0) { 
         addNotification('Some favorite items could not be refreshed.', 'error');
       }
     }
     favoritesRefreshLockRef.current = false;
-  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted]);
+  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent]);
 
-  // 1-minute auto-refresh for favorites
   useEffect(() => {
     let intervalId: number | null = null;
 
     if (isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
       intervalId = window.setInterval(() => {
         if (!favoritesRefreshLockRef.current && !isRefreshingFavorites) {
-          handleRefreshAllFavorites(true); // Pass true for auto-refresh to suppress success notification
+          handleRefreshAllFavorites(true); 
         }
-      }, 60 * 1000); // 1 minute
+      }, 60 * 1000); 
     }
 
     return () => {
@@ -783,6 +807,7 @@ const App: React.FC = () => {
   const toggleFavoritesSection = useCallback(() => {
     setIsFavoritesSectionCollapsed(prev => {
       const newCollapsedState = !prev;
+      trackGaEvent('toggle_section_collapse', { section_name: 'favorites', is_collapsed: newCollapsedState });
       if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
         const shouldInitialRefresh = Object.values(favoriteItemPrices).some(price => price === null || price === undefined) || Object.values(favoriteItemPrices).length < favoriteItemIds.length;
 
@@ -792,7 +817,7 @@ const App: React.FC = () => {
       }
       return newCollapsedState;
     });
-  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites, favoriteItemPrices]);
+  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites, favoriteItemPrices, trackGaEvent]);
 
 
   useEffect(() => {
@@ -804,6 +829,13 @@ const App: React.FC = () => {
   const handleAlertTriggered = useCallback((triggeredAlert: PriceAlert) => {
     const message = `Alert: ${triggeredAlert.itemName} ${triggeredAlert.condition === 'above' ? '>' : '<'} ${triggeredAlert.targetPrice.toLocaleString()} GP! Current: ${triggeredAlert.priceAtTrigger?.toLocaleString()} GP`;
     addNotification(message, 'success');
+    trackGaEvent('alert_triggered_notification', {
+      item_id: triggeredAlert.itemId,
+      item_name: triggeredAlert.itemName,
+      condition: triggeredAlert.condition,
+      target_price: triggeredAlert.targetPrice,
+      price_at_trigger: triggeredAlert.priceAtTrigger
+    });
 
     if (enableDesktopNotifications && desktopNotificationPermission === 'granted' && isConsentGranted) {
       if (Notification.permission === 'granted') {
@@ -814,7 +846,7 @@ const App: React.FC = () => {
         });
       }
     }
-  }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl]);
+  }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl, trackGaEvent]);
 
   const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
     handleAlertTriggered,
@@ -843,20 +875,23 @@ const App: React.FC = () => {
 
   const handleConsentGranted = useCallback(() => {
     setConsentStatus('granted');
+    trackGaEvent('consent_changed', { status: 'granted' });
     addNotification('Thanks! Your preferences will now be saved.', 'success');
-  }, [addNotification]);
+  }, [addNotification, trackGaEvent]);
 
   const handleConsentDenied = useCallback(() => {
     setConsentStatus('denied');
+    trackGaEvent('consent_changed', { status: 'denied' });
     ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
     resetPreferencesToDefault(); 
-  }, [resetPreferencesToDefault]);
+  }, [resetPreferencesToDefault, trackGaEvent]);
 
   const handleRevokeConsent = useCallback(() => {
     ALL_USER_PREFERENCE_KEYS.forEach(key => localStorage.removeItem(key));
     resetPreferencesToDefault();
-    setConsentStatus('denied'); 
-  }, [resetPreferencesToDefault]);
+    setConsentStatus('denied'); // This will trigger consent_changed via the effect
+    trackGaEvent('consent_changed', { status: 'revoked' });
+  }, [resetPreferencesToDefault, trackGaEvent]);
 
   const getItemName = useCallback((itemId: number): string => {
     return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
@@ -898,15 +933,17 @@ const App: React.FC = () => {
   const addFavoriteItem = useCallback((itemId: FavoriteItemId) => {
     setFavoriteItemIds(prevIds => {
       if (!prevIds.includes(itemId)) {
+        trackGaEvent('toggle_favorite', { item_id: itemId, item_name: getItemName(itemId), action: 'added' });
         return [...prevIds, itemId];
       }
       return prevIds;
     });
-  }, []);
+  }, [trackGaEvent, getItemName]);
 
   const removeFavoriteItem = useCallback((itemId: FavoriteItemId) => {
     setFavoriteItemIds(prevIds => {
       if (prevIds.includes(itemId)) {
+        trackGaEvent('toggle_favorite', { item_id: itemId, item_name: getItemName(itemId), action: 'removed' });
         setFavoriteItemPrices(currentPrices => {
             const newPrices = {...currentPrices};
             delete newPrices[itemId];
@@ -926,7 +963,7 @@ const App: React.FC = () => {
       }
       return prevIds;
     });
-  }, []);
+  }, [trackGaEvent, getItemName]);
 
 
   useEffect(() => {
@@ -1042,7 +1079,12 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted]); 
+  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice, favoriteItemPrices]); 
+
+  const handleThemeChange = useCallback((themeName: string) => {
+    setActiveThemeName(themeName);
+    trackGaEvent('change_theme', { theme_name: themeName });
+  }, [trackGaEvent]);
 
   useEffect(() => {
     const currentActiveTheme = APP_THEMES.find(theme => theme.id === activeThemeName) || APP_THEMES.find(theme => theme.id === DEFAULT_THEME_ID) || APP_THEMES[0];
@@ -1128,6 +1170,7 @@ const App: React.FC = () => {
       setEnableDesktopNotifications(false);
       return;
     }
+    trackGaEvent('toggle_desktop_notifications', { is_enabled: !enableDesktopNotifications });
     if (enableDesktopNotifications) {
       setEnableDesktopNotifications(false);
       addNotification('Desktop notifications disabled.', 'info');
@@ -1141,24 +1184,54 @@ const App: React.FC = () => {
         if (permission === 'granted') {
           setEnableDesktopNotifications(true);
           addNotification('Desktop notifications enabled.', 'success');
+          trackGaEvent('desktop_notification_permission', { status: 'granted' });
         } else {
           setEnableDesktopNotifications(false);
           addNotification('Desktop notification permission denied by user.', 'info');
+          trackGaEvent('desktop_notification_permission', { status: 'denied_by_user' });
         }
       }
     }
-  }, [desktopNotificationPermission, enableDesktopNotifications, addNotification]);
+  }, [desktopNotificationPermission, enableDesktopNotifications, addNotification, trackGaEvent]);
 
-  const toggleChartGrid = useCallback(() => setShowChartGrid(prev => !prev), []);
-  const toggleChartLineGlow = useCallback(() => setShowChartLineGlow(prev => !prev), []);
-  const toggleShowVolumeChart = useCallback(() => setShowVolumeChart(prev => !prev), []);
-  const toggleShowFavoriteSparklines = useCallback(() => setShowFavoriteSparklines(prev => !prev), []);
-  const toggleFeedbackModal = () => setIsFeedbackModalOpen(prev => !prev); 
+  const toggleChartGrid = useCallback(() => { 
+    setShowChartGrid(prev => {
+      trackGaEvent('toggle_chart_setting', { setting_name: 'chart_grid', setting_value: !prev });
+      return !prev;
+    });
+  }, [trackGaEvent]);
+
+  const toggleChartLineGlow = useCallback(() => {
+    setShowChartLineGlow(prev => {
+      trackGaEvent('toggle_chart_setting', { setting_name: 'chart_line_glow', setting_value: !prev });
+      return !prev;
+    });
+  }, [trackGaEvent]);
+
+  const toggleShowVolumeChart = useCallback(() => {
+    setShowVolumeChart(prev => {
+      trackGaEvent('toggle_chart_setting', { setting_name: 'volume_chart', setting_value: !prev });
+      return !prev;
+    });
+  }, [trackGaEvent]);
+  
+  const toggleShowFavoriteSparklines = useCallback(() => {
+    setShowFavoriteSparklines(prev => {
+      trackGaEvent('toggle_favorite_sparklines', { is_visible: !prev });
+      return !prev;
+    });
+  }, [trackGaEvent]);
+
+  const toggleFeedbackModal = () => {
+    if(!isFeedbackModalOpen) trackGaEvent('view_feedback_form');
+    setIsFeedbackModalOpen(prev => !prev);
+  }
   const togglePortfolioModal = () => {
     if (!isConsentGranted) {
       addNotification('Please enable preference storage in settings to use the Portfolio feature.', 'info');
       return;
     }
+    if(!isPortfolioModalOpen) trackGaEvent('view_portfolio');
     setIsPortfolioModalOpen(prev => !prev);
   }
 
@@ -1215,6 +1288,7 @@ const App: React.FC = () => {
       
       if (isUserInitiated && options.isUserInitiated !== false) { 
         addNotification(`${currentItem.name} data refreshed!`, 'success');
+        trackGaEvent('manual_item_refresh', { item_id: currentItem.id, item_name: currentItem.name });
       }
       
       if (favoriteItemIds.includes(currentItem.id) && isConsentGranted) {
@@ -1298,25 +1372,28 @@ const App: React.FC = () => {
     } finally {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems]);
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems, trackGaEvent]);
 
 
-  const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
+  const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin: string = 'unknown') => {
     setSelectedItem(item);
     setSearchTerm('');
     setActiveSuggestionIndex(-1); 
+    trackGaEvent('select_item', { item_id: item.id, item_name: item.name, origin: origin });
+    trackGaEvent('screen_view_item', { screen_name: 'ItemDisplay', item_id: item.id, item_name: item.name });
+
     if (originTimespan) {
         setSelectedTimespan(originTimespan); 
         await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false, timespanToUse: originTimespan, snapshotTimestampMs: originSnapshotTimestampMs });
     } else {
         await refreshCurrentItemData({ itemToRefresh: item, isUserInitiated: false, snapshotTimestampMs: originSnapshotTimestampMs }); 
     }
-  }, [refreshCurrentItemData]); 
+  }, [refreshCurrentItemData, trackGaEvent]); 
 
-  const handleSelectItemById = useCallback((itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => {
+  const handleSelectItemById = useCallback((itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin: string = 'unknown') => {
     const itemToSelect = allItems.find(item => item.id === itemId);
     if (itemToSelect) {
-      handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs);
+      handleSelectItem(itemToSelect, originTimespan, originSnapshotTimestampMs, origin);
       const itemDisplaySection = document.getElementById('item-display-section');
       if (itemDisplaySection) {
         setTimeout(() => {
@@ -1335,7 +1412,7 @@ const App: React.FC = () => {
       if (itemIdFromUrl) {
         const numericItemId = parseInt(itemIdFromUrl, 10);
         if (!isNaN(numericItemId)) {
-          handleSelectItemById(numericItemId);
+          handleSelectItemById(numericItemId, undefined, undefined, 'shared_link');
           const newUrl = window.location.pathname + window.location.hash; 
           window.history.replaceState({}, document.title, newUrl);
         } else {
@@ -1348,22 +1425,30 @@ const App: React.FC = () => {
 
 
   const handleTimespanChange = useCallback(async (timespan: Timespan) => {
+    if (selectedItem && timespan !== selectedTimespan) {
+      trackGaEvent('change_item_timespan', {
+        item_id: selectedItem.id,
+        item_name: selectedItem.name,
+        timespan_selected: timespan
+      });
+    }
     setSelectedTimespan(timespan); 
-  }, []); 
+  }, [selectedItem, selectedTimespan, trackGaEvent]); 
 
   useEffect(() => {
     if (selectedItem) {
       refreshCurrentItemData({ itemToRefresh: selectedItem, isUserInitiated: false, timespanToUse: selectedTimespan });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [selectedItem, selectedTimespan]); 
+  }, [selectedItem, selectedTimespan]); // refreshCurrentItemData is stable via useCallback
 
 
   useEffect(() => {
     if (prevIsAutoRefreshEnabled !== undefined && prevIsAutoRefreshEnabled !== isAutoRefreshEnabled) {
       addNotification(`Auto-refresh ${isAutoRefreshEnabled ? 'enabled' : 'disabled'}.`, 'info');
+      trackGaEvent('toggle_auto_refresh', { is_enabled: isAutoRefreshEnabled });
     }
-  }, [isAutoRefreshEnabled, prevIsAutoRefreshEnabled, addNotification]);
+  }, [isAutoRefreshEnabled, prevIsAutoRefreshEnabled, addNotification, trackGaEvent]);
 
   const handleToggleAutoRefresh = useCallback(() => {
     setIsAutoRefreshEnabled(prev => !prev);
@@ -1399,6 +1484,7 @@ const App: React.FC = () => {
     };
   }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger, refreshCurrentItemData]);
 
+  const prevSearchTerm = usePrevious(searchTerm);
   const filteredItems = useMemo(() => {
     if (!searchTerm) {
       return [];
@@ -1406,8 +1492,12 @@ const App: React.FC = () => {
     const results = allItems
       .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .slice(0, 20);
+    
+    if (results.length > 0 && searchTerm !== prevSearchTerm && searchTerm.length > 1) { // Track if search term changed and yielded results
+        trackGaEvent('search_performed', { search_term: searchTerm, results_count: results.length });
+    }
     return results;
-  }, [allItems, searchTerm]); 
+  }, [allItems, searchTerm, prevSearchTerm, trackGaEvent]); 
 
   useEffect(() => {
     if (activeSuggestionIndex >= filteredItems.length && searchTerm) { 
@@ -1432,7 +1522,7 @@ const App: React.FC = () => {
       case 'Enter':
         event.preventDefault();
         if (activeSuggestionIndex >= 0 && activeSuggestionIndex < filteredItems.length) {
-          handleSelectItem(filteredItems[activeSuggestionIndex]);
+          handleSelectItem(filteredItems[activeSuggestionIndex], undefined, undefined, 'search_enter_key');
         }
         break;
       case 'Escape':
@@ -1449,9 +1539,18 @@ const App: React.FC = () => {
     return activeSuggestionIndex !== -1 ? `search-suggestion-${activeSuggestionIndex}` : undefined;
   }, [activeSuggestionIndex]);
 
-  const toggleSettingsModal = () => setIsSettingsOpen(prev => !prev);
-  const toggleChangelogModal = () => setIsChangelogModalOpen(prev => !prev); 
-  const togglePrivacyPolicyModal = () => setIsPrivacyPolicyModalOpen(prev => !prev); // Privacy Policy toggle
+  const toggleSettingsModal = () => {
+    if (!isSettingsOpen) trackGaEvent('view_settings');
+    setIsSettingsOpen(prev => !prev);
+  }
+  const toggleChangelogModal = () => {
+    if(!isChangelogModalOpen) trackGaEvent('view_changelog');
+    setIsChangelogModalOpen(prev => !prev);
+  }
+  const togglePrivacyPolicyModal = () => {
+    if(!isPrivacyPolicyModalOpen) trackGaEvent('view_privacy_policy');
+    setIsPrivacyPolicyModalOpen(prev => !prev);
+  }
 
   const favTerm = wordingPreference === 'uk' ? 'favourite' : 'favorite';
 
@@ -1462,14 +1561,16 @@ const App: React.FC = () => {
       setHistoricalData([]);
       setError(null);
       addNotification('Item view has been reset.', 'info');
+      trackGaEvent('reset_item_view');
     }
-  }, [selectedItem, addNotification]);
+  }, [selectedItem, addNotification, trackGaEvent]);
 
   const openSetAlertModalForItem = useCallback((item: ItemMapInfo) => {
     setItemForSetAlertModal(item);
     setIsSetAlertModalOpen(true);
     if (isSettingsOpen) setIsSettingsOpen(false); 
-  }, [isSettingsOpen]);
+    trackGaEvent('open_set_alert_modal', { item_id: item.id, item_name: item.name, origin: 'item_display' });
+  }, [isSettingsOpen, trackGaEvent]);
 
   const closeSetAlertModal = useCallback(() => {
     setItemForSetAlertModal(null);
@@ -1483,7 +1584,8 @@ const App: React.FC = () => {
     }
     setItemForAddInvestmentFromViewModal(item);
     setIsAddInvestmentFromViewModalOpen(true);
-  }, [isConsentGranted, addNotification]);
+    trackGaEvent('open_add_to_portfolio_modal', { item_id: item.id, item_name: item.name, origin: 'item_display' });
+  }, [isConsentGranted, addNotification, trackGaEvent]);
 
   const closeAddInvestmentFromViewModal = useCallback(() => {
     setItemForAddInvestmentFromViewModal(null);
@@ -1499,24 +1601,27 @@ const App: React.FC = () => {
       condition,
     });
     addNotification(`Alert set for ${item.name}!`, 'success');
+    trackGaEvent('set_price_alert', { item_id: item.id, item_name: item.name, target_price: targetPrice, condition: condition });
     closeSetAlertModal();
-  }, [addAlert, addNotification, closeSetAlertModal]);
+  }, [addAlert, addNotification, closeSetAlertModal, trackGaEvent]);
 
   const handleToggleFavoriteQuickAction = useCallback((itemId: FavoriteItemId) => {
     if (favoriteItemIds.includes(itemId)) {
-      removeFavoriteItem(itemId);
+      removeFavoriteItem(itemId); // GA event is in removeFavoriteItem
     } else {
-      addFavoriteItem(itemId);
+      addFavoriteItem(itemId); // GA event is in addFavoriteItem
     }
   }, [favoriteItemIds, addFavoriteItem, removeFavoriteItem]);
 
   const handleQuickSetAlertFromFavorites = useCallback((item: ItemMapInfo) => {
     openSetAlertModalForItem(item);
-  }, [openSetAlertModalForItem]);
+    trackGaEvent('open_set_alert_modal', { item_id: item.id, item_name: item.name, origin: 'favorites_list' });
+  }, [openSetAlertModalForItem, trackGaEvent]);
 
   const handleSetTopMoversTimespan = useCallback((timespan: TopMoversTimespan) => {
     if (allItems.length > 0) { 
       setSelectedMoversTimespan(timespan); 
+      // GA event for this is handled by the useEffect that reacts to selectedMoversTimespan change
     } else {
       addNotification("Item data still loading, please wait before changing Top Movers timespan.", "info");
     }
@@ -1525,10 +1630,11 @@ const App: React.FC = () => {
   const handleRefreshTopMovers = useCallback(() => {
     if (allItems.length > 0) { 
       refreshMovers();
+      trackGaEvent('top_movers_refresh');
     } else {
        addNotification("Item data still loading, please wait before refreshing Top Movers.", "info");
     }
-  },[refreshMovers, allItems, addNotification]);
+  },[refreshMovers, allItems, addNotification, trackGaEvent]);
 
   const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => {
     if (!isDragAndDropEnabled) return;
@@ -1584,12 +1690,13 @@ const App: React.FC = () => {
       
       const [removed] = newOrder.splice(currentIndex, 1);
       newOrder.splice(targetIndex, 0, removed);
+      trackGaEvent('reorder_sections', { new_order: newOrder.join(',') });
       return newOrder;
     });
     
     setDraggedItem(null);
     setDragOverItem(null);
-  }, [isDragAndDropEnabled, draggedItem]); 
+  }, [isDragAndDropEnabled, draggedItem, trackGaEvent]); 
 
   const handleDragEnd = useCallback(() => {
     if (!isDragAndDropEnabled) return;
@@ -1630,7 +1737,7 @@ const App: React.FC = () => {
       togglePortfolioModal(); 
     }
     setTimeout(() => {
-      handleSelectItemById(itemId); 
+      handleSelectItemById(itemId, undefined, undefined, 'portfolio_item_click'); 
     }, 50); 
   }, [isPortfolioModalOpen, handleSelectItemById, togglePortfolioModal]);
 
@@ -1663,7 +1770,7 @@ const App: React.FC = () => {
           ...dndProps,
           favoriteItemIds,
           allItems,
-          onSelectItemById: handleSelectItemById,
+          onSelectItemById: (itemId) => handleSelectItemById(itemId, undefined, undefined, 'favorites_list'),
           onRemoveFavorite: removeFavoriteItem,
           getItemIconUrl,
           favoriteItemPrices,
@@ -1690,13 +1797,19 @@ const App: React.FC = () => {
           isCollapsed: isTopMoversSectionCollapsed,
           onToggleCollapse: memoizedToggleTopMoversSection,
           onSelectItemById: (itemId: number, originTimespan?: Timespan, originSnapshotTimestampMs?: number) => 
-            handleSelectItemById(itemId, originTimespan, originSnapshotTimestampMs),
+            handleSelectItemById(itemId, originTimespan, originSnapshotTimestampMs, 'top_movers_list'),
           getItemIconUrl,
           lastFetchedTimestamp: topMoversLastFetched,
           topMoversCalculationMode,
-          onSetTopMoversCalculationMode: setTopMoversCalculationMode,
+          onSetTopMoversCalculationMode: (mode) => {
+            setTopMoversCalculationMode(mode);
+            // GA event for this is handled by the useEffect that reacts to topMoversCalculationMode change
+          },
           topMoversMetricType,
-          onSetTopMoversMetricType: setTopMoversMetricType,
+          onSetTopMoversMetricType: (metric) => {
+            setTopMoversMetricType(metric);
+            // GA event for this is handled by the useEffect that reacts to topMoversMetricType change
+          },
         };
       case SECTION_KEYS.ALERTS:
         return {
@@ -1709,7 +1822,7 @@ const App: React.FC = () => {
           getItemName,
           getItemIconUrl,
           addNotification,
-          onSelectAlertItemById: handleSelectItemById,
+          onSelectAlertItemById: (itemId) => handleSelectItemById(itemId, undefined, undefined, 'alerts_list'),
           isConsentGranted,
           isCollapsed: isAlertsSectionCollapsed,
           onToggleCollapse: toggleAlertsSection,
@@ -1796,13 +1909,16 @@ const App: React.FC = () => {
           showFavoriteSparklines={showFavoriteSparklines}
           onToggleFavoriteSparklines={toggleShowFavoriteSparklines}
           activeThemeName={activeThemeName}
-          onSetThemeName={setActiveThemeName}
+          onSetThemeName={handleThemeChange} // Use new handler
           themes={APP_THEMES}
           enableDesktopNotifications={enableDesktopNotifications}
           onToggleDesktopNotifications={handleToggleDesktopNotifications}
           desktopNotificationPermission={desktopNotificationPermission}
           wordingPreference={wordingPreference}
-          onSetWordingPreference={setWordingPreference}
+          onSetWordingPreference={(pref) => {
+            setWordingPreference(pref);
+            trackGaEvent('change_wording_preference', { preference: pref });
+          }}
           consentStatus={consentStatus}
           onGrantConsent={handleConsentGranted}
           onRevokeConsent={handleRevokeConsent}
@@ -1839,12 +1955,33 @@ const App: React.FC = () => {
           isOpen={isPortfolioModalOpen}
           onClose={togglePortfolioModal}
           portfolioEntries={portfolioEntries}
-          addPortfolioEntry={addPortfolioEntry}
-          recordSaleAndUpdatePortfolio={recordSaleAndUpdatePortfolio}
-          deletePortfolioEntry={deletePortfolioEntry} 
-          clearAllPortfolioData={clearAllPortfolioData} 
-          updatePortfolioEntryDetails={updatePortfolioEntryDetails}
-          replacePortfolio={replacePortfolio} 
+          addPortfolioEntry={(item, quantity, price, date) => {
+            addPortfolioEntry(item, quantity, price, date);
+            trackGaEvent('portfolio_add_investment', {item_id: item.id, item_name: item.name, quantity: quantity});
+          }}
+          recordSaleAndUpdatePortfolio={(entryId, quantity, price, date) => {
+             const entry = portfolioEntries.find(e => e.id === entryId);
+             recordSaleAndUpdatePortfolio(entryId, quantity, price, date);
+             if (entry) trackGaEvent('portfolio_record_sale', {item_id: entry.itemId, item_name: getItemName(entry.itemId), quantity_sold: quantity});
+          }}
+          deletePortfolioEntry={(entryId) => {
+             const entry = portfolioEntries.find(e => e.id === entryId);
+             deletePortfolioEntry(entryId);
+             if (entry) trackGaEvent('portfolio_delete_entry', {item_id: entry.itemId, item_name: getItemName(entry.itemId)});
+          }} 
+          clearAllPortfolioData={() => {
+            clearAllPortfolioData();
+            trackGaEvent('portfolio_clear_all');
+          }} 
+          updatePortfolioEntryDetails={(entryId, updates) => {
+             const entry = portfolioEntries.find(e => e.id === entryId);
+             updatePortfolioEntryDetails(entryId, updates);
+             if (entry) trackGaEvent('portfolio_edit_entry', {item_id: entry.itemId, item_name: getItemName(entry.itemId)});
+          }}
+          replacePortfolio={(newEntries) => {
+            replacePortfolio(newEntries);
+            trackGaEvent('portfolio_import', { entry_count: newEntries.length });
+          }} 
           allItems={allItems}
           getItemIconUrl={getItemIconUrl}
           getItemName={getItemName}
@@ -1880,7 +2017,10 @@ const App: React.FC = () => {
           isOpen={isAddInvestmentFromViewModalOpen}
           onClose={closeAddInvestmentFromViewModal}
           itemToAdd={itemForAddInvestmentFromViewModal}
-          addPortfolioEntryCallback={addPortfolioEntry}
+          addPortfolioEntryCallback={(item, quantity, price, date) => {
+            addPortfolioEntry(item, quantity, price, date);
+            trackGaEvent('portfolio_add_investment', {item_id: item.id, item_name: item.name, quantity: quantity, origin: 'item_display_modal'});
+          }}
           addNotification={addNotification}
           isConsentGranted={isConsentGranted}
           getItemIconUrl={getItemIconUrl}
@@ -1973,6 +2113,9 @@ const App: React.FC = () => {
                 onAddToPortfolio={openAddInvestmentFromViewModal}
                 isConsentGranted={isConsentGranted}
                 addNotification={addNotification}
+                onShareItem={(item) => { // Added onShareItem prop
+                  trackGaEvent('share_item', { item_id: item.id, item_name: item.name, method: 'clipboard_copy'});
+                }}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
