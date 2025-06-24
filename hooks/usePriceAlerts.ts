@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; // Added useRef
 import { PriceAlert, LatestPriceData } from '../types';
 import { ALERT_CHECK_INTERVAL, ALERTS_STORAGE_KEY } from '../constants';
 
@@ -21,6 +21,12 @@ export const usePriceAlerts = (
     }
     return [];
   });
+
+  const alertsRef = useRef(alerts); // Create a ref to hold the current alerts
+  useEffect(() => {
+    alertsRef.current = alerts; // Keep the ref updated
+  }, [alerts]);
+
 
   useEffect(() => {
     if (isConsentGranted) {
@@ -72,62 +78,66 @@ export const usePriceAlerts = (
   }, []);
 
   const checkAlerts = useCallback(async (alertsToCheck: PriceAlert[], specificPrices?: Record<number, LatestPriceData>) => {
-    const currentAlertsCopy = [...alerts]; // Work with a copy of the current state alerts
+    const currentAlertsState = alertsRef.current; // Read from ref
+    const updatedAlertsFromState = [...currentAlertsState]; // Make a mutable copy
     let anyAlertTriggeredThisCheck = false;
 
-    for (const alert of alertsToCheck) { // Iterate over the passed alertsToCheck (likely active ones)
-      if (alert.status !== 'active') continue;
+    for (const alertToCheck of alertsToCheck) { // Iterate over the subset passed in
+      if (alertToCheck.status !== 'active') continue;
 
-      let currentPriceData = specificPrices?.[alert.itemId];
+      const originalAlertIndex = updatedAlertsFromState.findIndex(a => a.id === alertToCheck.id);
+      if (originalAlertIndex === -1 || updatedAlertsFromState[originalAlertIndex].status !== 'active') continue;
+
+      let currentPriceData = specificPrices?.[alertToCheck.itemId];
       if (!currentPriceData) {
           try {
-            currentPriceData = await fetchPrice(alert.itemId);
+            currentPriceData = await fetchPrice(alertToCheck.itemId);
           } catch (error) {
-            console.error(`Failed to fetch price for alert check (item ${alert.itemId}):`, error);
+            console.error(`Failed to fetch price for alert check (item ${alertToCheck.itemId}):`, error);
             continue; 
           }
       }
       
       if (currentPriceData) {
-        const priceToCheck = alert.condition === 'below' ? currentPriceData.low : currentPriceData.high;
-        if (priceToCheck === null) continue;
+        const priceForCondition = alertToCheck.condition === 'below' ? currentPriceData.low : currentPriceData.high;
+        if (priceForCondition === null) continue;
 
-        const conditionMet = alert.condition === 'below' 
-          ? priceToCheck < alert.targetPrice 
-          : priceToCheck > alert.targetPrice;
+        const conditionMet = alertToCheck.condition === 'below' 
+          ? priceForCondition < alertToCheck.targetPrice 
+          : priceForCondition > alertToCheck.targetPrice;
 
         if (conditionMet) {
-          const alertIndexInMainList = currentAlertsCopy.findIndex(a => a.id === alert.id);
-          if (alertIndexInMainList !== -1 && currentAlertsCopy[alertIndexInMainList].status === 'active') {
-            const triggeredAlertUpdate = {
-              ...currentAlertsCopy[alertIndexInMainList],
-              status: 'triggered' as 'triggered',
-              priceAtTrigger: priceToCheck,
-              triggeredAt: Date.now(),
-            };
-            currentAlertsCopy[alertIndexInMainList] = triggeredAlertUpdate;
-            onAlertTriggered(triggeredAlertUpdate);
-            anyAlertTriggeredThisCheck = true;
-          }
+          const triggeredAlertUpdate: PriceAlert = {
+            ...updatedAlertsFromState[originalAlertIndex],
+            status: 'triggered',
+            priceAtTrigger: priceForCondition,
+            triggeredAt: Date.now(),
+          };
+          updatedAlertsFromState[originalAlertIndex] = triggeredAlertUpdate;
+          onAlertTriggered(triggeredAlertUpdate);
+          anyAlertTriggeredThisCheck = true;
         }
       }
     }
     if (anyAlertTriggeredThisCheck) {
-      setAlerts(currentAlertsCopy); // Update state with all modifications from this check
+      setAlerts(updatedAlertsFromState); 
     }
-  }, [alerts, fetchPrice, onAlertTriggered]);
+  }, [fetchPrice, onAlertTriggered, setAlerts]); // Removed 'alerts' from deps, alertsRef handles it
 
   useEffect(() => {
-    const activeAlertsToCheck = alerts.filter(alert => alert.status === 'active');
-    if (activeAlertsToCheck.length === 0) return;
+    const activeAlertsToCheck = alertsRef.current.filter(alert => alert.status === 'active');
+    if (activeAlertsToCheck.length === 0 || !isConsentGranted) return; // Added isConsentGranted check
 
     const intervalId = setInterval(() => {
       console.log('Periodically checking alerts...', new Date().toLocaleTimeString());
-      checkAlerts(activeAlertsToCheck);
+      const currentActiveAlerts = alertsRef.current.filter(alert => alert.status === 'active');
+      if (currentActiveAlerts.length > 0) {
+        checkAlerts(currentActiveAlerts);
+      }
     }, ALERT_CHECK_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [alerts, checkAlerts]);
+  }, [checkAlerts, isConsentGranted]); // checkAlerts is now stable
 
   const clearAllAlertsAndStorage = useCallback(() => {
     setAlerts([]);

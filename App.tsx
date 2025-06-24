@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, GoogleUserProfile } from './src/types'; // Updated path for types
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
@@ -41,7 +42,7 @@ function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T | undefined>(undefined);
   useEffect(() => {
     ref.current = value;
-  }); // Runs after every render
+  }, [value]); // Added value to dependency array
   return ref.current;
 }
 
@@ -207,8 +208,8 @@ const App: React.FC = () => {
 
   // Google Analytics Event Tracking Helper
   const trackGaEvent = useCallback((eventName: string, eventParams?: Record<string, any>) => {
-    if (isConsentGranted && typeof gtag === 'function') {
-      gtag('event', eventName, eventParams);
+    if (isConsentGranted && typeof window.gtag === 'function') {
+      window.gtag('event', eventName, eventParams);
     }
   }, [isConsentGranted]);
 
@@ -604,7 +605,7 @@ const App: React.FC = () => {
     if ( (hasCalcModeChanged || hasMetricTypeChanged || hasTimespanChanged) && 
          !isTopMoversSectionCollapsed &&
          allItems.length > 0 &&
-         !isLoadingTopMovers
+         !isLoadingTopMovers // Check against current loading state
        ) {
       if(hasCalcModeChanged) trackGaEvent('top_movers_change_calc_mode', { mode: topMoversCalculationMode });
       if(hasMetricTypeChanged) trackGaEvent('top_movers_change_metric_type', { type: topMoversMetricType });
@@ -617,7 +618,7 @@ const App: React.FC = () => {
     selectedMoversTimespan, 
     isTopMoversSectionCollapsed,
     allItems.length,
-    isLoadingTopMovers,
+    // isLoadingTopMovers, // Removed from dependencies
     fetchMovers, 
     prevCalcMode, 
     prevMetricType,
@@ -628,7 +629,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isTopMoversSectionCollapsed && allItems.length > 0 && !topMoversData && !topMoversError && !isLoadingTopMovers) {
-      trackGaEvent('view_top_movers'); // Track when section is expanded and data needs to be fetched initially
+      trackGaEvent('view_top_movers'); 
       fetchMovers(selectedMoversTimespan, topMoversMetricType);
     }
   }, [
@@ -636,7 +637,7 @@ const App: React.FC = () => {
     allItems.length, 
     topMoversData, 
     topMoversError, 
-    isLoadingTopMovers, 
+    // isLoadingTopMovers, // Removed from dependencies
     fetchMovers, 
     selectedMoversTimespan, 
     topMoversMetricType,
@@ -783,7 +784,7 @@ const App: React.FC = () => {
       }
     }
     favoritesRefreshLockRef.current = false;
-  }, [isRefreshingFavorites, favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent]);
+  }, [favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent]); // Removed isRefreshingFavorites
 
   useEffect(() => {
     let intervalId: number | null = null;
@@ -801,7 +802,7 @@ const App: React.FC = () => {
         window.clearInterval(intervalId);
       }
     };
-  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites, isRefreshingFavorites]);
+  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites]); // Removed isRefreshingFavorites
 
 
   const toggleFavoritesSection = useCallback(() => {
@@ -986,16 +987,25 @@ const App: React.FC = () => {
 
         const itemDetail = allItems.find(it => it.id === itemId);
         if (itemDetail) {
-          if (favoriteItemPrices[itemId] !== undefined && 
-              favoriteItemPrices[itemId] !== 'loading' &&
-              favoriteItemPrices[itemId] !== 'error') { 
+          // Check if data (price, hourly, sparkline) already exists and is not 'loading' or 'error'
+          // This check helps prevent re-fetching if data is already considered loaded and valid.
+          const priceState = favoriteItemPrices[itemId];
+          const hourlyState = favoriteItemHourlyChanges[itemId];
+          const sparklineState = favoriteItemSparklineData[itemId];
+          
+          if (priceState && priceState !== 'loading' && priceState !== 'error' &&
+              hourlyState && hourlyState !== 'loading' && hourlyState !== 'error' &&
+              sparklineState && sparklineState !== 'loading' && sparklineState !== 'error' &&
+              priceState !== null && hourlyState !== null && sparklineState !== null
+            ) { 
              continue; 
           }
           
           if (isMountedRefHook.current) {
-            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
+            // Only set to 'loading' if not already loading to avoid excessive state updates if this effect runs multiple times quickly
+            if (favoriteItemPrices[itemId] !== 'loading') setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
+            if (favoriteItemHourlyChanges[itemId] !== 'loading') setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
+            if (favoriteItemSparklineData[itemId] !== 'loading') setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
           }
 
           try {
@@ -1079,7 +1089,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice, favoriteItemPrices]); 
+  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice]); // Removed favoriteItemPrices from deps
 
   const handleThemeChange = useCallback((themeName: string) => {
     setActiveThemeName(themeName);
