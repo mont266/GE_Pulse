@@ -275,12 +275,8 @@ const App: React.FC = () => {
             console.log('Google API Client (GAPI) initialized.');
             setIsGoogleApiReady(true);
             setGoogleAuthError(null);
-             const token = googleDriveService.getToken();
-             if (token) {
-                // Optimistically set signed-in if token exists.
-                // Profile details will come from onAuthStatusChanged.
-                setIsGoogleUserSignedIn(true);
-             }
+            // Silent sign-in is attempted within initGapiClient's success path.
+            // onAuthStatusChanged will reflect the true state.
         }, (error) => {
             console.error("Failed to initialize GAPI client:", error);
             addNotification("Failed to initialize Google Drive services.", "error");
@@ -288,22 +284,31 @@ const App: React.FC = () => {
             setGoogleAuthError("GAPI initialization failed.");
         });
       },
-      onAuthStatusChanged: (isSignedIn, user, error) => {
-        console.log('Google Auth Status Changed:', { isSignedIn, user, error });
+      onAuthStatusChanged: (isSignedIn, user, gdsError) => {
+        console.log('Google Auth Status Changed:', { isSignedIn, user, error: gdsError });
         setIsGoogleUserSignedIn(isSignedIn);
-        setGoogleUser(user); // This is the authoritative source for user profile
-        setGoogleAuthError(error);
-        if (error) {
-          addNotification(`Google Sign-In: ${error}`, 'error');
-        } else if (isSignedIn && user) {
-          addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
-          trackGaEvent('gdrive_signin_status', { status: 'signed_in' });
-        } else if (!isSignedIn && !error) {
-           if (googleUser) trackGaEvent('gdrive_signin_status', { status: 'signed_out' });
+        setGoogleUser(user);
+        setGoogleAuthError(gdsError); // Store error from GDS
+
+        if (gdsError && isSignedIn) { // E.g. signed in, but profile fetch failed
+            addNotification(`Google Drive: ${gdsError}`, 'error');
+        } else if (gdsError && !isSignedIn) { // E.g. sign in attempt failed
+            addNotification(`Google Sign-In: ${gdsError}`, 'error');
+        } else if (isSignedIn && user && !googleAuthError && !gdsError) { // Only notify on explicit sign-in success
+            // This general success notification can be noisy for silent sign-ins.
+            // Explicit sign-in success notifications are better handled in handleGoogleSignIn.
+            // Consider if this notification is still needed here or if it's too broad.
+            // addNotification(`Signed in to Google Drive as ${user.email}`, 'success');
+        }
+        // Track GA event for sign-in status change
+        if (isSignedIn) {
+            trackGaEvent('gdrive_signin_status', { status: 'signed_in' });
+        } else if (user === null && googleUser !== null) { // User was previously signed in and is now signed out
+            trackGaEvent('gdrive_signin_status', { status: 'signed_out' });
         }
       },
     });
-  }, [addNotification, trackGaEvent, googleUser]); // googleUser in deps for sign-out tracking
+  }, [addNotification, trackGaEvent]); // googleUser removed from deps
 
   const handleGoogleSignIn = useCallback(async () => {
     if (!isGoogleApiReady) {
@@ -313,6 +318,18 @@ const App: React.FC = () => {
     try {
       trackGaEvent('gdrive_action', { action: 'signin_attempt' });
       await googleDriveService.signIn();
+      // Success notification will be triggered by onAuthStatusChanged if user profile is fetched
+      // or more specifically, after a successful token acquisition and profile fetch.
+      // Let's add a more direct success notification here for the *explicit* action.
+      // Wait a brief moment for onAuthStatusChanged to potentially set the user.
+      setTimeout(() => {
+        const currentUser = googleDriveService.getSignedInUserProfile();
+        if (currentUser) {
+           addNotification(`Signed in to Google Drive as ${currentUser.email}`, 'success');
+        }
+      }, 500);
+
+
     } catch (err: any) {
       console.error("Error during Google Sign-In:", err);
       addNotification(`Google Sign-In failed: ${err.message || 'Unknown error'}`, 'error');
@@ -378,6 +395,8 @@ const App: React.FC = () => {
           throw new Error('Invalid portfolio file format.');
         }
       } else {
+        // Picker closed or no file selected, but not necessarily an error from GDS if it returns null
+        // Check if error message contains "picker_closed" to be sure
         addNotification('Load from Drive cancelled or no file selected.', 'info');
         trackGaEvent('gdrive_action_cancelled', { action: 'load' });
       }
@@ -387,10 +406,10 @@ const App: React.FC = () => {
       if (error.message && error.message.includes('picker_closed')) {
         displayErrorMessage = 'Load from Drive cancelled by user.';
         trackGaEvent('gdrive_action_cancelled', { action: 'load' });
-      } else if (error.result && error.result.error && error.result.error.message) {
+      } else if (error.result && error.result.error && error.result.error.message) { // GAPI specific error structure
         displayErrorMessage = `Failed to load from Drive: ${error.result.error.message}`;
         trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.result.error.message });
-      } else if (error.message) {
+      } else if (error.message) { // General JS error or GDS custom error
         displayErrorMessage = `Failed to load from Drive: ${error.message}`;
         trackGaEvent('gdrive_action_failed', { action: 'load', error_message: error.message });
       }
@@ -618,7 +637,7 @@ const App: React.FC = () => {
     selectedMoversTimespan, 
     isTopMoversSectionCollapsed,
     allItems.length,
-    // isLoadingTopMovers, // Removed from dependencies
+    isLoadingTopMovers, // Re-added isLoadingTopMovers to prevent fetch if already loading from another source
     fetchMovers, 
     prevCalcMode, 
     prevMetricType,
@@ -637,7 +656,7 @@ const App: React.FC = () => {
     allItems.length, 
     topMoversData, 
     topMoversError, 
-    // isLoadingTopMovers, // Removed from dependencies
+    isLoadingTopMovers, // Re-added isLoadingTopMovers
     fetchMovers, 
     selectedMoversTimespan, 
     topMoversMetricType,
@@ -784,7 +803,7 @@ const App: React.FC = () => {
       }
     }
     favoritesRefreshLockRef.current = false;
-  }, [favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent]); // Removed isRefreshingFavorites
+  }, [favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent, isRefreshingFavorites]); 
 
   useEffect(() => {
     let intervalId: number | null = null;
@@ -802,7 +821,7 @@ const App: React.FC = () => {
         window.clearInterval(intervalId);
       }
     };
-  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites]); // Removed isRefreshingFavorites
+  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites, isRefreshingFavorites]);
 
 
   const toggleFavoritesSection = useCallback(() => {
@@ -987,8 +1006,6 @@ const App: React.FC = () => {
 
         const itemDetail = allItems.find(it => it.id === itemId);
         if (itemDetail) {
-          // Check if data (price, hourly, sparkline) already exists and is not 'loading' or 'error'
-          // This check helps prevent re-fetching if data is already considered loaded and valid.
           const priceState = favoriteItemPrices[itemId];
           const hourlyState = favoriteItemHourlyChanges[itemId];
           const sparklineState = favoriteItemSparklineData[itemId];
@@ -1002,7 +1019,6 @@ const App: React.FC = () => {
           }
           
           if (isMountedRefHook.current) {
-            // Only set to 'loading' if not already loading to avoid excessive state updates if this effect runs multiple times quickly
             if (favoriteItemPrices[itemId] !== 'loading') setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
             if (favoriteItemHourlyChanges[itemId] !== 'loading') setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
             if (favoriteItemSparklineData[itemId] !== 'loading') setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
@@ -1089,7 +1105,7 @@ const App: React.FC = () => {
 
     fetchAllFavoriteDataSequentiallyHook();
     return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice]); // Removed favoriteItemPrices from deps
+  }, [favoriteItemIds, allItems, isConsentGranted, fetchLatestPrice, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData]); 
 
   const handleThemeChange = useCallback((themeName: string) => {
     setActiveThemeName(themeName);
@@ -1813,12 +1829,10 @@ const App: React.FC = () => {
           topMoversCalculationMode,
           onSetTopMoversCalculationMode: (mode) => {
             setTopMoversCalculationMode(mode);
-            // GA event for this is handled by the useEffect that reacts to topMoversCalculationMode change
           },
           topMoversMetricType,
           onSetTopMoversMetricType: (metric) => {
             setTopMoversMetricType(metric);
-            // GA event for this is handled by the useEffect that reacts to topMoversMetricType change
           },
         };
       case SECTION_KEYS.ALERTS:
