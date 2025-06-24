@@ -18,6 +18,7 @@ class GoogleDriveService {
   private gapiClientScriptLoading: boolean = false;
   private gapiPickerLoading: boolean = false;
   private isSilentAuthAttemptedThisLoad: boolean = false;
+  private explicitSignInSource: 'signInButton' | null = null; // New flag
 
   private tokenClient: any = null;
   private accessToken: string | null = null;
@@ -172,6 +173,11 @@ class GoogleDriveService {
   private attemptSilentSignIn(): void {
     if (this.isSilentAuthAttemptedThisLoad) {
         console.log('[GDS] Silent auth already attempted this load cycle.');
+        // If a token exists, it implies a previous attempt in this load might have succeeded or is in progress.
+        // If no token, and it was attempted, means it failed silently, so ensure signed-out state.
+        if (!localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY)) {
+            this.updateAuthStatus(false, null, null);
+        }
         return;
     }
      if (!this.tokenClientInitialized || !this.tokenClient) {
@@ -182,7 +188,7 @@ class GoogleDriveService {
         return;
     }
     
-    this.isSilentAuthAttemptedThisLoad = true;
+    this.isSilentAuthAttemptedThisLoad = true; // Mark that an attempt will be made this load cycle
     const storedToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
 
     if (storedToken) {
@@ -218,23 +224,35 @@ class GoogleDriveService {
             console.log('[GDS] Access token acquired and stored.');
             this.fetchUserProfileAndUpdateStatus();
           } else {
-            console.warn('[GDS] Token acquisition failed or denied by user. Response:', tokenResponse);
             this.clearTokenAndUser(); 
-            let errorMessage = null;
-            if (tokenResponse?.error === "popup_closed_by_user" || tokenResponse?.error === "user_cancel" || tokenResponse?.error === "access_denied") {
-                 errorMessage = "Sign-in cancelled or denied.";
-            } else if (tokenResponse?.error) {
-                 errorMessage = tokenResponse.error_description || tokenResponse.error || "Token error.";
+            let userVisibleError: string | null = null;
+            if (tokenResponse?.error) {
+              if (this.explicitSignInSource) { // Error came from an explicit user action
+                if (tokenResponse.error === "popup_closed_by_user" || tokenResponse.error === "user_cancel") {
+                    userVisibleError = "Sign-in cancelled.";
+                } else if (tokenResponse.error === "access_denied") {
+                    userVisibleError = "Access denied by user or admin.";
+                } else {
+                    userVisibleError = tokenResponse.error_description || tokenResponse.error || "Sign-in error.";
+                }
+              } else {
+                // Silent attempt failed (e.g. 'immediate_failed', or 'access_denied' without explicit prompt)
+                // No user-visible error message for silent failures.
+                userVisibleError = null; 
+                console.log(`[GDS] Silent token acquisition failed. Error: ${tokenResponse.error}`);
+              }
             }
-            // For silent failures (prompt: 'none' resulting in no token without explicit error), errorMessage remains null.
-            this.updateAuthStatus(false, null, errorMessage);
+            this.updateAuthStatus(false, null, userVisibleError);
           }
+          this.explicitSignInSource = null; // Reset source after handling
         },
         error_callback: (error: any) => {
           console.error('[GDS] GIS Token Client error_callback:', error);
           this.clearTokenAndUser();
           const errorReason = error?.message || error?.type || 'GIS token client error.';
-          this.updateAuthStatus(false, null, errorReason);
+          // Report error only if it was from an explicit attempt
+          this.updateAuthStatus(false, null, this.explicitSignInSource ? errorReason : null);
+          this.explicitSignInSource = null; // Reset source
         }
       });
       this.tokenClientInitialized = true;
@@ -254,6 +272,7 @@ class GoogleDriveService {
     }
     if (!this.gapiDriveInitialized || !window.gapi?.client?.drive?.about) {
         console.error('[GDS] GAPI Drive client or "about" service not ready for fetching user profile.');
+        // If token exists, they are technically signed in, but profile fetch failed.
         this.updateAuthStatus(true, { email: 'Profile fetch error (GAPI not ready)' }, 'Drive API not ready for profile.');
         return;
     }
@@ -270,6 +289,7 @@ class GoogleDriveService {
       this.updateAuthStatus(true, this.signedInUser, null);
     } catch (error: any) {
       console.error('[GDS] Error fetching user profile:', error);
+      // User is signed in (has token), but profile fetch failed.
       this.updateAuthStatus(true, { email: 'Error fetching email' }, 'Failed to fetch user profile.');
     }
   }
@@ -283,7 +303,12 @@ class GoogleDriveService {
 
   private updateAuthStatus(isSignedIn: boolean, user: GoogleUserProfile | null, error: string | null): void {
     this.signedInUser = isSignedIn ? user : null;
-    this.accessToken = isSignedIn && user ? localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY) : null; // Ensure accessToken aligns
+    if (!isSignedIn) { // If signing out or auth failed, ensure local access token is null
+        this.accessToken = null;
+    } else if (isSignedIn && !this.accessToken) { // If signed in state but no local token, try to load from storage
+        this.accessToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    }
+    
     console.log(`[GDS] Updating auth status: isSignedIn=${isSignedIn}, userEmail=${user?.email}, error=${error}`);
     this.onAuthStatusChangedCallback(isSignedIn, user, error);
   }
@@ -291,14 +316,15 @@ class GoogleDriveService {
   public async signIn(): Promise<void> {
     console.log('[GDS] signIn (explicit) called.');
     if (!this.tokenClientInitialized || !this.tokenClient) {
-      this.internalGisTokenClientInit();
+      this.internalGisTokenClientInit(); // Attempt to initialize if not already
       if (!this.tokenClientInitialized || !this.tokenClient) {
         const errMsg = 'GIS Token Client failed to initialize for sign-in.';
         console.error(`[GDS] ${errMsg}`);
-        this.updateAuthStatus(false, null, errMsg);
+        this.updateAuthStatus(false, null, errMsg); // Report error as this is an explicit attempt
         throw new Error(errMsg);
       }
     }
+    this.explicitSignInSource = 'signInButton'; // Mark as explicit attempt
     console.log('[GDS] Requesting access token with interactive prompt.');
     this.tokenClient.requestAccessToken({ prompt: '' }); 
   }
@@ -313,6 +339,7 @@ class GoogleDriveService {
       console.log('[GDS] Revoking Google access token.');
       window.google.accounts.oauth2.revoke(tokenToRevoke, () => {
         console.log('[GDS] Access token revoked successfully (Google callback).');
+        // No explicit error message needed for successful sign-out.
         this.updateAuthStatus(false, null, null);
       });
     } else {
@@ -320,10 +347,14 @@ class GoogleDriveService {
         this.updateAuthStatus(false, null, null);
     }
     this.isSilentAuthAttemptedThisLoad = false; 
+    this.explicitSignInSource = null; // Clear any explicit sign-in context
   }
   
   public getToken(): string | null {
-    return this.accessToken || localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    // Prioritize in-memory token, then check localStorage
+    if (this.accessToken) return this.accessToken;
+    this.accessToken = localStorage.getItem(GDRIVE_ACCESS_TOKEN_KEY);
+    return this.accessToken;
   }
 
   public getSignedInUserProfile(): GoogleUserProfile | null {
