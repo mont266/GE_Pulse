@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
@@ -214,11 +215,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initDrive = async () => {
+      console.log("App.tsx: Starting Google Drive Service initialization...");
       const success = await googleDriveService.initGoogleDriveService();
       setIsGoogleApiInitialized(success);
       if (!success) {
-        setDriveError("Google Drive features are unavailable. API key or Client ID might be missing or invalid.");
-        // addNotification("Google Drive features are unavailable.", "error");
+        const initErrorMessage = "Google Drive features are unavailable. API key or Client ID might be missing, invalid, or the service failed to load. Check console for details.";
+        setDriveError(initErrorMessage);
+        console.error("App.tsx: Google Drive Service initialization failed.");
+        // addNotification is not used here to avoid premature notifications during startup issues
+      } else {
+        console.log("App.tsx: Google Drive Service initialized successfully.");
+        setDriveError(null); // Clear any previous init error
       }
     };
     initDrive();
@@ -262,22 +269,26 @@ const App: React.FC = () => {
   const handleSaveToDrive = useCallback(async () => {
     if (!isGoogleApiInitialized) {
       addNotification(driveError || "Google Drive is not available.", "error");
+      console.error("handleSaveToDrive: Drive not initialized.");
       return;
     }
     if (portfolioEntries.length === 0) {
       addNotification("Portfolio is empty. Nothing to save to Drive.", "info");
       return;
     }
+    console.log("handleSaveToDrive: Attempting to save...");
+    addNotification("Attempting to save to Google Drive...", "info");
     setIsDriveActionLoading(true);
     setDriveError(null);
     try {
-      await googleDriveService.requestAccessToken(); // This handles token acquisition
+      await googleDriveService.requestAccessToken();
+      console.log("handleSaveToDrive: Access token process completed. Current token state:", window.gapi?.client?.getToken());
       const portfolioJson = JSON.stringify(portfolioEntries);
       await googleDriveService.savePortfolioToDrive(portfolioJson);
       addNotification("Portfolio saved to Google Drive successfully!", "success");
       trackGaEvent('portfolio_save_gdrive_success');
     } catch (err: any) {
-      console.error("Error saving portfolio to Drive:", err);
+      console.error("Error saving portfolio to Drive in App.tsx:", err);
       const errorMessage = err.message || "Failed to save portfolio to Google Drive. Check console for details.";
       addNotification(errorMessage, "error");
       setDriveError(errorMessage);
@@ -290,17 +301,20 @@ const App: React.FC = () => {
   const handleLoadFromDrive = useCallback(async () => {
     if (!isGoogleApiInitialized) {
       addNotification(driveError || "Google Drive is not available.", "error");
+      console.error("handleLoadFromDrive: Drive not initialized.");
       return;
     }
+    console.log("handleLoadFromDrive: Attempting to load...");
+    addNotification("Attempting to load from Google Drive...", "info");
     setIsDriveActionLoading(true);
     setDriveError(null);
     try {
       await googleDriveService.requestAccessToken();
+      console.log("handleLoadFromDrive: Access token process completed. Current token state:", window.gapi?.client?.getToken());
       const portfolioJson = await googleDriveService.loadPortfolioFromDrive();
       if (portfolioJson) {
         const newEntries: PortfolioEntry[] = JSON.parse(portfolioJson);
-        // Basic validation can be added here if needed
-        replacePortfolio(newEntries); // This should trigger a confirmation if existing data
+        replacePortfolio(newEntries); 
         addNotification("Portfolio loaded from Google Drive successfully!", "success");
         trackGaEvent('portfolio_load_gdrive_success', { entry_count: newEntries.length });
       } else {
@@ -308,7 +322,7 @@ const App: React.FC = () => {
         trackGaEvent('portfolio_load_gdrive_not_found');
       }
     } catch (err: any) {
-      console.error("Error loading portfolio from Drive:", err);
+      console.error("Error loading portfolio from Drive in App.tsx:", err);
       const errorMessage = err.message || "Failed to load portfolio from Google Drive. Check console for details.";
       addNotification(errorMessage, "error");
       setDriveError(errorMessage);
@@ -1180,7 +1194,7 @@ const App: React.FC = () => {
       switch (currentTimespan) {
         case '1h': case '6h': apiTimestepToFetch = '5m'; break;
         case '1d': case '7d': apiTimestepToFetch = '1h'; break;
-        case '1mo': case '6mo': apiTimestepToFetch = '6h'; break; // Adjusted 1mo to 6h, 6mo to 24h
+        case '1mo': case '6mo': apiTimestepToFetch = '6h'; break; 
         case '3mo': case '1y': apiTimestepToFetch = '24h'; break;
         default: apiTimestepToFetch = '1h';
       }
@@ -1297,7 +1311,7 @@ const App: React.FC = () => {
     } finally {
       if (isMountedRefreshRef.current) setIsLoadingPrice(false);
     }
-  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems, trackGaEvent]); // Added allItems here for getItemName inside checkAlerts dependency
+  }, [selectedItem, selectedTimespan, addNotification, alerts, checkAlerts, favoriteItemIds, isConsentGranted, allItems, trackGaEvent]);
 
 
   const handleSelectItem = useCallback(async (item: ItemMapInfo, originTimespan?: Timespan, originSnapshotTimestampMs?: number, origin: string = 'unknown') => {

@@ -41,7 +41,7 @@ interface PortfolioModalProps {
   onSaveToDrive: () => Promise<void>; 
   onLoadFromDrive: () => Promise<void>; 
   isDriveActionLoading: boolean;
-  driveError: string | null; // To display GDrive specific errors
+  driveError: string | null; 
 }
 
 const PORTFOLIO_TABS = [
@@ -229,7 +229,6 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   };
 
   const handleConfirmImport = (importedData: PortfolioEntry[]) => {
-    // If portfolio is not empty, show confirmation for overwrite. Otherwise, import directly.
     if (portfolioEntries.length > 0) {
         addNotification('Please review the import confirmation.', 'info');
         setImportedDataToConfirm(importedData);
@@ -414,7 +413,12 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
         </div>
         
         {isConsentGranted && (
-          <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-end gap-x-3 gap-y-2">
+            {driveError && (
+              <div className="w-full sm:w-auto text-center sm:text-left text-xs text-[var(--error-text)] p-1.5 bg-[var(--error-bg)]/20 rounded-md mb-2 sm:mb-0 sm:mr-auto">
+                 Google Drive Error: {driveError}
+              </div>
+            )}
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
