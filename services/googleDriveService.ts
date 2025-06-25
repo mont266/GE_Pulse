@@ -1,10 +1,28 @@
 
 // Ensure gapi and google types are available globally after scripts load
 
-const SAFE_PROCESS_ENV = typeof process !== 'undefined' && process.env ? process.env : ({} as Record<string, string | undefined>);
+// Helper to get values from window object, falling back to undefined
+// Also checks if Netlify's placeholder syntax is present, indicating an injection issue.
+const getWindowVariable = (key: string): string | undefined => {
+  if (typeof window !== 'undefined' && (window as any)[key]) {
+    const value = (window as any)[key];
+    // Check if the value is the Netlify placeholder, which means it wasn't replaced.
+    if (typeof value === 'string' && value.startsWith("{{") && value.endsWith("}}")) {
+      console.warn(`Google Drive Service: Environment variable ${key} appears to be an unreplaced Netlify placeholder: ${value}. Ensure the variable is set in Netlify's build environment.`);
+      return undefined;
+    }
+    // Check if the value is explicitly the string "undefined", which can happen with some CI/CD variable handlings
+    if (value === "undefined") {
+        console.warn(`Google Drive Service: Environment variable ${key} was resolved to the string "undefined". Ensure the variable is correctly set in Netlify.`);
+        return undefined;
+    }
+    return value;
+  }
+  return undefined;
+};
 
-const API_KEY = SAFE_PROCESS_ENV.GOOGLE_API_KEY;
-const CLIENT_ID = SAFE_PROCESS_ENV.GOOGLE_CLIENT_ID;
+const API_KEY = getWindowVariable('GOOGLE_API_KEY');
+const CLIENT_ID = getWindowVariable('GOOGLE_CLIENT_ID');
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file'; // Scope for files created or opened by the app
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
@@ -43,7 +61,7 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
   if (gapiClientInitialized && tokenClient) return true;
 
   if (!API_KEY || !CLIENT_ID) {
-    console.warn("Google Drive Service: API_KEY or CLIENT_ID is missing. Drive functionality will be disabled.");
+    console.warn("Google Drive Service: API_KEY or CLIENT_ID is missing or invalid after attempting to read from window. Drive functionality will be disabled.");
     return false;
   }
 
@@ -99,6 +117,7 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
       scope: SCOPES,
       callback: '', // Callback is handled by the promise in requestAccessToken
     });
+    console.log("Google Drive Service initialized successfully.");
     return true;
   } catch (error) {
     console.error("Error initializing Google Drive Service:", error);
