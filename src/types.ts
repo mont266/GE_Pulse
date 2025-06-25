@@ -204,7 +204,12 @@ export interface SectionRenderProps {
   isDragAndDropEnabled: boolean;
   handleDragStart: (event: React.DragEvent<HTMLButtonElement | HTMLDivElement>, sectionId: string) => void;
   draggedItem: string | null;
+  currentHeight: number; // Current height of the section content area
+  isResizable: boolean; // Whether the section is currently resizable
+  onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>, sectionId: string) => void; // Handler for starting resize
 }
+
+export type SectionHeights = Record<string, number>;
 
 export interface PortfolioEntry {
   id: string; 
@@ -219,6 +224,11 @@ export interface PortfolioEntry {
 }
 
 export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;
+
+export interface DriveFeedback {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
 
 
 // Declare google object if not already available globally

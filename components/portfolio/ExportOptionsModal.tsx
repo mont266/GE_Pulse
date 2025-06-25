@@ -1,7 +1,7 @@
 
 import React, { useEffect } from 'react';
-import { PortfolioEntry } from '../../src/types';
-import { DownloadIcon, CodeIcon, CloudUploadIcon } from '../Icons'; // Added CloudUploadIcon
+import { PortfolioEntry, DriveFeedback } from '../../src/types';
+import { DownloadIcon, CodeIcon, CloudUploadIcon } from '../Icons'; 
 
 interface ExportOptionsModalProps {
   isOpen: boolean;
@@ -9,11 +9,10 @@ interface ExportOptionsModalProps {
   portfolioEntries: PortfolioEntry[];
   onShowCodeModalRequest: () => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  // Google Drive Props
   isGoogleApiInitialized: boolean;
   onSaveToDrive: () => Promise<void>;
   isDriveActionLoading: boolean;
-  driveError: string | null;
+  driveFeedback: DriveFeedback | null;
 }
 
 export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
@@ -25,7 +24,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   isGoogleApiInitialized,
   onSaveToDrive,
   isDriveActionLoading,
-  driveError,
+  driveFeedback,
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -79,20 +78,23 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   };
 
   const handleSaveToDriveClick = async () => {
-    if (!isGoogleApiInitialized) {
-        addNotification(driveError || "Google Drive integration is not available or not configured correctly.", "error");
-        return;
-    }
+    // Notification of success/failure handled by onSaveToDrive in App.tsx via driveFeedback prop
     await onSaveToDrive();
-    // Notification of success/failure handled by onSaveToDrive in App.tsx
-    if (!driveError && !isDriveActionLoading) { // If no error was set and not still loading, close modal
-      // Potentially wait for isDriveActionLoading to be false if it's very quick
-      // For now, assume onSaveToDrive will set driveError if needed
-    }
   };
 
   const noData = portfolioEntries.length === 0;
   const driveButtonDisabled = noData || !isGoogleApiInitialized || isDriveActionLoading;
+
+  const getFeedbackTextColor = () => {
+    if (!driveFeedback) return 'text-[var(--text-muted)]';
+    switch (driveFeedback.type) {
+      case 'success': return 'text-[var(--price-high)]';
+      case 'error': return 'text-[var(--error-text)]';
+      case 'info':
+      default: return 'text-[var(--text-secondary)]';
+    }
+  };
+
 
   return (
     <div
@@ -150,7 +152,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             onClick={handleSaveToDriveClick}
             disabled={driveButtonDisabled}
             className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
-            title={!isGoogleApiInitialized ? (driveError || "Google Drive not available") : (noData ? "Portfolio is empty" : "Save to Google Drive")}
+            title={!isGoogleApiInitialized ? (driveFeedback?.message || "Google Drive not available") : (noData ? "Portfolio is empty" : "Save to Google Drive")}
           >
             {isDriveActionLoading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current mr-2"></div>
@@ -159,8 +161,10 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             )}
             Save to Google Drive
           </button>
-          {!isGoogleApiInitialized && (
-             <p className="text-xs text-center text-[var(--error-text)] mt-1">{driveError || "Google Drive integration is not available."}</p>
+          {driveFeedback && driveFeedback.message && (
+            <p className={`text-xs text-center mt-2 px-1 py-0.5 rounded ${getFeedbackTextColor()} ${driveFeedback.type === 'error' ? 'bg-[var(--error-bg)]/20' : driveFeedback.type === 'success' ? 'bg-[var(--price-high)]/10' : 'bg-[var(--bg-input-secondary)]'}`}>
+                {driveFeedback.message}
+            </p>
           )}
         </div>
 

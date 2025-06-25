@@ -5,7 +5,7 @@ import { PriceChart } from './PriceChart';
 import { TimespanSelector } from './TimespanSelector';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ITEM_IMAGE_BASE_URL, TIMESPAN_OPTIONS } from '../constants';
-import { EmptyHeartIcon, FilledHeartIcon, BellIcon, ArrowUpIcon, ArrowDownIcon, ShareIcon, AddToPortfolioIcon } from './Icons'; // Added AddToPortfolioIcon
+import { EmptyHeartIcon, FilledHeartIcon, BellIcon, ArrowUpIcon, ArrowDownIcon, ShareNetworkIcon, AddToPortfolioIcon } from './Icons'; // Updated ShareIcon to ShareNetworkIcon
 
 interface ItemDisplayProps {
   item: ItemMapInfo | null;
@@ -27,7 +27,7 @@ interface ItemDisplayProps {
   onAddToPortfolio: (item: ItemMapInfo) => void; 
   isConsentGranted: boolean; 
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onShareItem?: (item: ItemMapInfo) => void; // New prop for GA tracking
+  onShareItem?: (item: ItemMapInfo) => void; 
 }
 
 export const ItemDisplay: React.FC<ItemDisplayProps> = ({
@@ -50,7 +50,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
   onAddToPortfolio, 
   isConsentGranted,
   addNotification, 
-  onShareItem, // Destructure new prop
+  onShareItem,
 }) => {
   const [currentImageUrl, setCurrentImageUrl] = useState<string>('https://via.placeholder.com/96?text=No+Icon');
   const [hasAttemptedDetail, setHasAttemptedDetail] = useState<boolean>(false);
@@ -84,14 +84,14 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     if (!item) return;
 
     try {
-      const baseUrl = 'https://beta.gepulse.net/'; // Or window.location.origin if it's always hosted on the desired domain
+      const baseUrl = 'https://beta.gepulse.net/'; 
       const shareUrl = new URL(baseUrl);
       shareUrl.searchParams.set('itemId', item.id.toString());
       const shareableLink = shareUrl.toString();
       
       await navigator.clipboard.writeText(shareableLink);
       addNotification(`Shareable link for ${item.name} copied!`, 'success');
-      if (onShareItem) { // Call the callback for GA tracking
+      if (onShareItem) { 
         onShareItem(item);
       }
     } catch (err) {
@@ -198,7 +198,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
               className="p-1 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"
               title={`Share link for ${item.name}`}
             >
-              <ShareIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--text-accent)]" />
+              <ShareNetworkIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--text-accent)]" />
             </button>
             {isConsentGranted && (
               <>

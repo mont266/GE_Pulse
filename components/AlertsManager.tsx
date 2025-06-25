@@ -5,7 +5,7 @@ import { PriceAlertForm } from './PriceAlertForm';
 import { PriceAlertList } from './PriceAlertList';
 import { ChevronDownIcon, BellIcon } from './Icons'; 
 
-interface AlertsManagerProps extends SectionRenderProps { // Inherit drag props
+interface AlertsManagerProps extends SectionRenderProps { 
   alerts: PriceAlert[];
   addAlert: (alert: Omit<PriceAlert, 'id' | 'createdAt' | 'status'>) => void;
   removeAlert: (alertId: string) => void;
@@ -18,7 +18,6 @@ interface AlertsManagerProps extends SectionRenderProps { // Inherit drag props
   isConsentGranted: boolean;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  // sectionId, isDragAndDropEnabled, handleDragStart, draggedItem are now part of SectionRenderProps
 }
 
 export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
@@ -35,11 +34,13 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
     addNotification,
     onSelectAlertItemById,
     isConsentGranted,
-    // Drag props from SectionRenderProps
     sectionId,
     isDragAndDropEnabled,
     handleDragStart,
     draggedItem,
+    currentHeight, 
+    isResizable, 
+    onResizeMouseDown,
   } = props;
   
   const [editingAlert, setEditingAlert] = useState<PriceAlert | null>(null);
@@ -93,7 +94,7 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
         aria-grabbed={isDragAndDropEnabled && draggedItem === sectionId ? 'true' : 'false'}
         className={`${getButtonCursorClass()} w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors ${!isCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
         aria-expanded={!isCollapsed}
-        aria-controls="alerts-section-content"
+        aria-controls={`${sectionId}-content-wrapper`}
       >
         <div className="flex-grow flex items-center min-w-0">
           <BellIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
@@ -105,33 +106,53 @@ export const AlertsManager: React.FC<AlertsManagerProps> = (props) => {
       </button>
 
       {!isCollapsed && (
-        <div id="alerts-section-content" className="p-4 md:p-6 rounded-b-lg space-y-6">
-          {(!isConsentGranted && alerts.length === 0 && !editingAlert) ? (
-             <p className="text-[var(--text-secondary)] text-center py-4">
-                Enable preference storage in settings to use Price Alerts.
-            </p>
-          ) : (
-            <>
-              <PriceAlertForm 
-                allItems={allItems} 
-                onAddAlert={propAddAlert}
-                addNotification={addNotification}
-                editingAlert={editingAlert}
-                onUpdateAlert={handleUpdateAlertInternal}
-                onCancelEdit={handleCancelEdit}
-                isConsentGranted={isConsentGranted}
-              />
-              {!editingAlert && (
-                <PriceAlertList 
-                  alerts={alerts} 
-                  onRemoveAlert={propRemoveAlert} 
-                  getItemName={getItemName} 
-                  getItemIconUrl={getItemIconUrl}
-                  onSelectAlertItem={onSelectAlertItemById}
-                  onStartEdit={handleStartEditAlertInternal}
+        <div className="rounded-b-lg">
+          <div 
+            id={`${sectionId}-content-wrapper`} 
+            className="p-4 md:p-6 space-y-6"
+            style={{ 
+              maxHeight: isResizable ? `${currentHeight}px` : undefined, 
+              overflowY: 'auto',
+              transition: isResizable ? 'max-height 0.1s linear' : 'none',
+            }}
+          >
+            {(!isConsentGranted && alerts.length === 0 && !editingAlert) ? (
+              <p className="text-[var(--text-secondary)] text-center py-4">
+                  Enable preference storage in settings to use Price Alerts.
+              </p>
+            ) : (
+              <>
+                <PriceAlertForm 
+                  allItems={allItems} 
+                  onAddAlert={propAddAlert}
+                  addNotification={addNotification}
+                  editingAlert={editingAlert}
+                  onUpdateAlert={handleUpdateAlertInternal}
+                  onCancelEdit={handleCancelEdit}
+                  isConsentGranted={isConsentGranted}
                 />
-              )}
-            </>
+                {!editingAlert && (
+                  <PriceAlertList 
+                    alerts={alerts} 
+                    onRemoveAlert={propRemoveAlert} 
+                    getItemName={getItemName} 
+                    getItemIconUrl={getItemIconUrl}
+                    onSelectAlertItem={onSelectAlertItemById}
+                    onStartEdit={handleStartEditAlertInternal}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          {isResizable && (
+            <div
+              className="section-resize-handle"
+              onMouseDown={(e) => onResizeMouseDown(e, sectionId)}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={`Resize Alerts Manager section`}
+              title="Drag to resize section"
+            />
           )}
         </div>
       )}

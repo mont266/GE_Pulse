@@ -30,16 +30,17 @@ export const PrivacyPolicyContent: React.FC = () => {
             <strong>Preferences Stored Locally (with your consent):</strong> If you grant consent, we store certain 
             preferences in your browser's Local Storage to enhance your experience. This includes:
             <ul className="list-circle list-inside space-y-0.5 pl-6 text-xs">
-              <li>Theme selection (e.g., dark mode)</li>
-              <li>Favourited items</li>
-              <li>Price alert configurations</li>
-              <li>Chart display settings (grid, line glow, volume chart visibility)</li>
-              <li>Visibility of sparklines in your favourites list</li>
-              <li>Desktop notification preferences for alerts</li>
-              <li>Wording preference (e.g., UK/US English)</li>
-              <li>Custom order of sidebar sections</li>
-              <li>Drag & drop reordering enabled status</li>
-              <li>Portfolio data (if you use the Portfolio feature)</li>
+              <li>Your consent status regarding preference storage.</li>
+              <li>Selected application theme (e.g., "GE Pulse Dark", "Rune Light").</li>
+              <li>List of your favourited items (item IDs).</li>
+              <li>Configurations for any price alerts you set (item ID, target price, condition).</li>
+              <li>Chart display settings: visibility of the chart grid, line glow effect, and volume chart.</li>
+              <li>Visibility of mini sparkline charts in your favourites list.</li>
+              <li>Preference for enabling or disabling desktop notifications for price alerts.</li>
+              <li>Your preferred wording style (e.g., UK/US English for terms like "favourite").</li>
+              <li>Custom order of sidebar sections (Search, Favourites, Top Movers, Alerts).</li>
+              <li>Status of whether drag & drop reordering for sidebar sections is enabled.</li>
+              <li>Portfolio data: If you use the Portfolio feature, all your investment entries (item ID, quantity, purchase price, purchase date, sales data) are stored locally.</li>
             </ul>
             This data is stored directly in your browser and is not transmitted to our servers.
           </li>
@@ -62,10 +63,10 @@ export const PrivacyPolicyContent: React.FC = () => {
             </ul>
           </li>
           <li>
-            <strong>Feedback (if you choose to submit it):</strong> If you use the feedback form, we collect the type of feedback, your message, and your answer to the human verification question. This information is processed by Netlify Forms.
+            <strong>Feedback (if you choose to submit it):</strong> If you use the feedback form, we collect the type of feedback (feature request, bug report, general), your message, and your answer to the human verification question (e.g., "What is 2 + 3?"). This information is processed by Netlify Forms.
           </li>
           <li>
-            <strong>Usage Data (Analytics):</strong> We use Google Analytics to collect anonymised information about how you interact with GE Pulse, such as features used and pages visited. This helps us understand usage patterns and improve the application. This data is aggregated and does not personally identify you.
+            <strong>Usage Data (Analytics - with your consent):</strong> If you grant consent, we use Google Analytics to collect anonymised information about how you interact with GE Pulse, such as features used and pages visited. This helps us understand usage patterns and improve the application. This data is aggregated and does not personally identify you.
           </li>
         </ul>
       </section>
@@ -76,10 +77,10 @@ export const PrivacyPolicyContent: React.FC = () => {
         <ul className="list-disc list-inside space-y-1 pl-4 mt-1">
           <li>Provide, operate, and maintain the GE Pulse application.</li>
           <li>Personalise your experience based on your saved preferences.</li>
-          <li>Enable features such as price alerts, favourites, and portfolio tracking.</li>
+          <li>Enable features such as price alerts, favourites, portfolio tracking, and custom UI layouts.</li>
           <li>Facilitate the backup and restoration of your portfolio data to/from your Google Drive, at your direction.</li>
           <li>Process and respond to your feedback and support requests.</li>
-          <li>Monitor and analyse usage and trends to improve the application's functionality and user experience.</li>
+          <li>Monitor and analyse usage and trends (with consent for analytics) to improve the application's functionality and user experience.</li>
         </ul>
       </section>
       
@@ -107,7 +108,7 @@ export const PrivacyPolicyContent: React.FC = () => {
         <p>We only share information with third-party services as necessary to provide GE Pulse features and as described below:</p>
         <ul className="list-disc list-inside space-y-1 pl-4 mt-1">
           <li>
-            <strong>Google:</strong> For Google Drive integration (authentication, file storage/retrieval in your Drive) and Google Analytics (anonymised usage data). Google's use of your information is governed by <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[var(--link-text)] hover:text-[var(--link-text-hover)]">Google's Privacy Policy</a>.
+            <strong>Google:</strong> For Google Drive integration (authentication, file storage/retrieval in your Drive) and, with your consent, Google Analytics (anonymised usage data). Google's use of your information is governed by <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[var(--link-text)] hover:text-[var(--link-text-hover)]">Google's Privacy Policy</a>.
           </li>
           <li>
             <strong>Netlify:</strong> For processing feedback submissions via Netlify Forms. Netlify's use of your information is governed by <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer" className="text-[var(--link-text)] hover:text-[var(--link-text-hover)]">Netlify's Privacy Policy</a>.
@@ -119,13 +120,13 @@ export const PrivacyPolicyContent: React.FC = () => {
         <h3 className="text-lg font-semibold text-[var(--text-accent)] mb-2">6. Your Rights and Choices</h3>
         <ul className="list-disc list-inside space-y-1 pl-4 mt-1">
           <li>
-            <strong>Consent Management:</strong> You can grant or revoke consent for storing preferences and using features like Portfolio and Google Drive backup at any time via the Settings panel in GE Pulse. Revoking consent will clear locally stored data related to these preferences.
+            <strong>Consent Management:</strong> You can grant or revoke consent for storing preferences and using features like Portfolio, Google Drive backup, and Google Analytics at any time via the Settings panel in GE Pulse. Revoking consent will clear locally stored data related to these preferences and disable associated features.
           </li>
           <li>
             <strong>Google Drive Access:</strong> You can manage GE Pulse's access to your Google Drive account through your Google Account security settings page.
           </li>
           <li>
-            <strong>Google Analytics Opt-out:</strong> You can opt-out of Google Analytics tracking by using browser add-ons provided by Google or by adjusting your browser settings.
+            <strong>Google Analytics Opt-out:</strong> Even if you initially consent, you can effectively opt-out of Google Analytics by revoking consent in the settings panel, which will stop future tracking. For broader opt-out, consider browser add-ons provided by Google or adjusting your browser settings.
           </li>
           <li>
             <strong>Feedback:</strong> Submitting feedback is entirely optional.
@@ -141,7 +142,7 @@ export const PrivacyPolicyContent: React.FC = () => {
         <p>GE Pulse utilises the following third-party services:</p>
         <ul className="list-disc list-inside space-y-1 pl-4 mt-1">
           <li><strong>RuneScape Wiki API:</strong> For fetching Old School RuneScape item and price data.</li>
-          <li><strong>Google (Google Identity Services, Google Drive API, Google Analytics):</strong> For authentication, cloud backup, and usage analytics.</li>
+          <li><strong>Google (Google Identity Services, Google Drive API, Google Analytics):</strong> For authentication, cloud backup, and usage analytics (with consent).</li>
           <li><strong>Netlify (Netlify Forms):</strong> For handling feedback submissions.</li>
         </ul>
         <p>The use of information by these third-party services is governed by their respective privacy policies, which we encourage you to review.</p>

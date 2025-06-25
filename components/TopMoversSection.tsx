@@ -40,7 +40,7 @@ const MoverListItem: React.FC<{
   isWinner: boolean;
   metricType: TopMoversMetricType;
   currentMoversTimespan: TopMoversTimespan;
-  snapshotTimestamp: number; // Added to pass snapshot time
+  snapshotTimestamp: number; 
 }> = ({ item, onSelectItemById, getItemIconUrl, isWinner, metricType, currentMoversTimespan, snapshotTimestamp }) => {
   const SvgIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3 h-3 mr-1 ${isWinner ? 'text-[var(--price-high)] transform rotate-0' : 'text-[var(--price-low)] transform rotate-180'}`}>
@@ -103,11 +103,13 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
   onSetTopMoversCalculationMode,
   topMoversMetricType,
   onSetTopMoversMetricType,
-  // Drag props from SectionRenderProps
   sectionId,
   isDragAndDropEnabled,
   handleDragStart,
   draggedItem,
+  currentHeight, 
+  isResizable, 
+  onResizeMouseDown,
 }) => {
 
   const handleRefreshClick = (e: React.MouseEvent) => {
@@ -152,7 +154,7 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
         aria-grabbed={isDragAndDropEnabled && draggedItem === sectionId ? 'true' : 'false'}
         className={`${getButtonCursorClass()} w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors ${!isCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
         aria-expanded={!isCollapsed}
-        aria-controls="top-movers-section-content"
+        aria-controls={`${sectionId}-content-wrapper`}
       >
         <div className="flex-grow flex items-center min-w-0">
           <TrendingUpIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
@@ -174,7 +176,16 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
       </button>
 
       {!isCollapsed && (
-        <div id="top-movers-section-content" className="p-4 md:p-6 rounded-b-lg space-y-4">
+        <div className="rounded-b-lg">
+          <div 
+            id={`${sectionId}-content-wrapper`} 
+            className="p-4 md:p-6 space-y-4"
+            style={{ 
+              maxHeight: isResizable ? `${currentHeight}px` : undefined, 
+              overflowY: 'auto',
+              transition: isResizable ? 'max-height 0.1s linear' : 'none',
+            }}
+          >
             <>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 flex-wrap">
                 <div className="flex gap-2">
@@ -292,6 +303,17 @@ export const TopMoversSection: React.FC<TopMoversSectionProps> = ({
                 </p>
               )}
             </>
+          </div>
+          {isResizable && (
+            <div
+              className="section-resize-handle"
+              onMouseDown={(e) => onResizeMouseDown(e, sectionId)}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={`Resize Top Market Movers section`}
+              title="Drag to resize section"
+            />
+          )}
         </div>
       )}
     </div>

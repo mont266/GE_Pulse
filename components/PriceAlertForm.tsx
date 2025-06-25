@@ -87,7 +87,10 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
       setTargetPriceInput(editingAlert.targetPrice.toString());
       setCondition(editingAlert.condition);
       setActiveAlertSuggestionIndex(-1); 
-      if (priceInputRef.current) { // Focus price input when editing
+      // Focus logic: Condition is now first, then price.
+      // It's generally okay to focus price input even if condition is first.
+      // Alternatively, focus condition first. For now, price focus is fine.
+      if (priceInputRef.current) { 
         priceInputRef.current.focus();
       }
     } else if (!isEditing) { 
@@ -96,7 +99,7 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
       setTargetPriceInput('');
       setCondition('below');
       setActiveAlertSuggestionIndex(-1);
-      if (itemSearchInputRef.current) { // Focus item search when adding new
+      if (itemSearchInputRef.current) { 
           itemSearchInputRef.current.focus();
       }
     }
@@ -154,7 +157,12 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
     setSelectedItemId(item.id.toString());
     setItemSearch(item.name); 
     setActiveAlertSuggestionIndex(-1); 
-    if (priceInputRef.current) { 
+    // Focus condition first, then price. This might be more intuitive.
+    // For now, focusing price is okay as it's often the next immediate action after item select.
+    const conditionElement = document.getElementById('condition') as HTMLSelectElement | null;
+    if (conditionElement) {
+        conditionElement.focus();
+    } else if (priceInputRef.current) { 
         priceInputRef.current.focus();
     }
   }, []);
@@ -370,6 +378,21 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
       {((selectedItemId || isEditing) && (!formDisabled || isEditing)) && (
         <>
           <div>
+            <label htmlFor="condition" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Condition
+            </label>
+            <select
+              id="condition"
+              value={condition}
+              onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
+              className={`w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none ${formDisabled && !isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
+              disabled={formDisabled && !isEditing}
+            >
+              <option value="below">Price drops below</option>
+              <option value="above">Price rises above</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="targetPrice" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Target Price (GP)
             </label>
@@ -384,21 +407,6 @@ export const PriceAlertForm: React.FC<PriceAlertFormProps> = ({
               disabled={formDisabled && !isEditing}
               required
             />
-          </div>
-          <div>
-            <label htmlFor="condition" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-              Condition
-            </label>
-            <select
-              id="condition"
-              value={condition}
-              onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
-              className={`w-full p-2 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none ${formDisabled && !isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
-              disabled={formDisabled && !isEditing}
-            >
-              <option value="below">Price drops below</option>
-              <option value="above">Price rises above</option>
-            </select>
           </div>
           <div className="flex space-x-2 pt-2">
             <button

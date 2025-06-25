@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint } from '../src/types'; 
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint, DriveFeedback } from '../src/types'; 
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
@@ -41,7 +41,7 @@ interface PortfolioModalProps {
   onSaveToDrive: () => Promise<void>; 
   onLoadFromDrive: () => Promise<void>; 
   isDriveActionLoading: boolean;
-  driveError: string | null; 
+  driveFeedback: DriveFeedback | null; 
 }
 
 const PORTFOLIO_TABS = [
@@ -76,7 +76,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   onSaveToDrive,
   onLoadFromDrive,
   isDriveActionLoading,
-  driveError,
+  driveFeedback,
 }) => {
   const [activeTab, setActiveTab] = useState<PortfolioTabKey>('open');
   const [itemToSell, setItemToSell] = useState<PortfolioEntry | null>(null);
@@ -414,9 +414,9 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
         
         {isConsentGranted && (
           <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-end gap-x-3 gap-y-2">
-            {driveError && (
+             {driveFeedback && driveFeedback.type === 'error' && !isDriveActionLoading && (
               <div className="w-full sm:w-auto text-center sm:text-left text-xs text-[var(--error-text)] p-1.5 bg-[var(--error-bg)]/20 rounded-md mb-2 sm:mb-0 sm:mr-auto">
-                 Google Drive Error: {driveError}
+                 Google Drive Error: {driveFeedback.message}
               </div>
             )}
             <button
@@ -506,7 +506,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             isGoogleApiInitialized={isGoogleApiInitialized}
             onSaveToDrive={onSaveToDrive}
             isDriveActionLoading={isDriveActionLoading}
-            driveError={driveError}
+            driveFeedback={driveFeedback}
           />
         )}
 
@@ -528,7 +528,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             isGoogleApiInitialized={isGoogleApiInitialized}
             onLoadFromDrive={onLoadFromDrive}
             isDriveActionLoading={isDriveActionLoading}
-            driveError={driveError}
+            driveFeedback={driveFeedback}
           />
         )}
 

@@ -4,6 +4,21 @@ import { ChangelogEntry } from './types';
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.13",
+    date: "2025-06-25", // Date updated to reflect the latest change
+    changes: [
+      "Added resizable sidebar sections for desktop users. Section heights can now be adjusted by dragging a handle and are saved to local preferences if consent is granted.",
+      "Improved in-app alert sound: Changed from a simple beep to a more distinct 'ding' or 'chime-like' sound for better notification recognition.",
+      "Added toggleable in-app sound notifications for triggered price alerts (enabled by default). A short beep will play when an alert condition is met if the setting is active.",
+      "Reordered fields in Price Alert modals: 'Condition' (above/below) now appears before 'Target Price' for a more intuitive user flow.",
+      "Added in-modal text confirmations for Google Drive save and load operations. Success messages are green, failures are red, and informational messages (like dev mode active) are also displayed directly in the save/load modals.",
+      "Optimized Favorite Item Loading: Significantly improved the loading speed and reliability of favorite items. Data for all favorited items (latest price, hourly change, and sparkline) is now fetched in parallel. This makes the initial display and refreshes much faster and more resilient to individual item data fetching errors, preventing the entire list from stalling due to a single problematic item.",
+      "Updated the 'Share' icon in the Item Display header to a more universally recognized network/connection symbol for better clarity on its link-sharing functionality.",
+      "Preparing groundwork for upcoming features and improvements.",
+    ],
+    notes: "Focus for this version includes enhanced alert notifications (sound and UI), UI/UX refinements, performance enhancements, and improved layout flexibility for desktop users."
+  },
+  {
     version: "Beta v0.12",
     date: "2025-06-23", 
     changes: [

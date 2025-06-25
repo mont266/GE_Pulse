@@ -1,7 +1,6 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse } from './src/types';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, DriveFeedback, SectionHeights } from './src/types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { googleDriveService } from './services/googleDriveService';
 import { SearchBar } from './components/SearchBar';
@@ -31,9 +30,11 @@ import {
   FAVORITES_STORAGE_KEY, WORDING_PREFERENCE_STORAGE_KEY, DEFAULT_WORDING_PREFERENCE, CONSENT_STORAGE_KEY,
   ALL_USER_PREFERENCE_KEYS, DEFAULT_THEME_ID, CHART_GRID_STORAGE_KEY, CHART_LINE_GLOW_STORAGE_KEY,
   VOLUME_CHART_STORAGE_KEY, ACTIVE_THEME_STORAGE_KEY, DESKTOP_NOTIFICATIONS_ENABLED_KEY,
+  IN_APP_ALERT_SOUNDS_ENABLED_KEY, DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
   DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
-  PORTFOLIO_STORAGE_KEY
+  PORTFOLIO_STORAGE_KEY, SECTION_HEIGHTS_STORAGE_KEY, DEFAULT_SECTION_HEIGHT_PX,
+  MIN_SECTION_HEIGHT_PX, MAX_SECTION_HEIGHT_PX, DESKTOP_BREAKPOINT_RESIZE
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -53,7 +54,63 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.12";
+const APP_VERSION = "Beta v0.13"; 
+
+let audioContextInstance: AudioContext | null = null;
+let isAudioContextInitialized = false;
+
+const initializeAudioContextSafely = () => {
+  if (!isAudioContextInitialized && typeof window !== 'undefined' && window.AudioContext) {
+    try {
+      audioContextInstance = new window.AudioContext();
+      isAudioContextInitialized = true;
+      console.log("AudioContext initialized for alert sounds.");
+    } catch (e) {
+      console.error("Failed to initialize AudioContext for alert sounds:", e);
+      isAudioContextInitialized = false;
+      audioContextInstance = null;
+    }
+  }
+};
+
+const playAlertSound = () => {
+  initializeAudioContextSafely(); 
+
+  if (!audioContextInstance || !isAudioContextInitialized) {
+    console.warn("AudioContext not available or not initialized. Cannot play alert sound.");
+    return;
+  }
+
+  if (audioContextInstance.state === 'suspended') {
+    audioContextInstance.resume().catch(err => console.warn("Could not resume AudioContext:", err));
+  }
+
+  if (audioContextInstance.state !== 'running') {
+     console.warn("AudioContext is not running. Alert sound suppressed.");
+     return;
+  }
+
+  try {
+    const oscillator = audioContextInstance.createOscillator();
+    const gainNode = audioContextInstance.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContextInstance.destination);
+
+    oscillator.type = 'triangle'; 
+    oscillator.frequency.setValueAtTime(1046.50, audioContextInstance.currentTime); 
+
+    const now = audioContextInstance.currentTime;
+    gainNode.gain.setValueAtTime(0.25, now); 
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5); 
+
+    oscillator.start(now);
+    oscillator.stop(now + 0.5); 
+  } catch (error) {
+    console.error("Error playing alert sound:", error);
+  }
+};
+
 
 interface SearchSectionLayoutProps extends SectionRenderProps {
   isSearchSectionCollapsed: boolean;
@@ -77,6 +134,7 @@ interface SearchSectionLayoutProps extends SectionRenderProps {
 
 const SearchSectionLayout = React.memo(function SearchSectionLayout({
   sectionId, isDragAndDropEnabled, handleDragStart, draggedItem,
+  currentHeight, isResizable, onResizeMouseDown, // New props for resizing
   isSearchSectionCollapsed, toggleSearchSection, searchBarWrapperRef, searchTerm, setSearchTerm, handleSearchKeyDown,
   activeDescendantId, filteredItems, itemListWrapperRef, handleSelectItem, getItemIconUrl, activeSuggestionIndex,
   favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems
@@ -97,7 +155,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
         aria-grabbed={isDragAndDropEnabled && draggedItem === sectionId ? 'true' : 'false'}
         className={`${getButtonCursorClass(sectionId)} w-full flex items-center justify-between p-4 md:p-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] transition-colors ${!isSearchSectionCollapsed ? 'rounded-t-lg hover:bg-[var(--bg-tertiary)]/70' : 'rounded-lg hover:bg-[var(--bg-tertiary)]/50'}`}
         aria-expanded={!isSearchSectionCollapsed}
-        aria-controls="search-section-content"
+        aria-controls={`${sectionId}-content-wrapper`}
       >
         <div className="flex-grow flex items-center min-w-0">
           <SearchIcon className="w-6 h-6 text-[var(--text-accent)] mr-3 pointer-events-none flex-shrink-0" />
@@ -106,32 +164,52 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
         <ChevronDownIcon className={`w-6 h-6 text-[var(--text-accent)] transition-transform duration-200 pointer-events-none ${isSearchSectionCollapsed ? '-rotate-90' : ''}`} />
       </button>
       {!isSearchSectionCollapsed && (
-        <div id="search-section-content" className="p-4 md:p-6 rounded-b-lg space-y-4">
-          <div ref={searchBarWrapperRef}>
-            <SearchBar
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onKeyDownHandler={handleSearchKeyDown}
-              activeDescendantId={activeDescendantId}
-              filteredItemsCount={filteredItems.length}
-            />
-          </div>
-          {searchTerm && filteredItems.length > 0 && (
-            <div ref={itemListWrapperRef}>
-              <ItemList
-                items={filteredItems}
-                onSelectItem={(item) => handleSelectItem(item, 'search_results')}
-                getItemIconUrl={getItemIconUrl}
-                activeSuggestionIndex={activeSuggestionIndex}
-                favoriteItemIds={favoriteItemIds}
-                onToggleFavoriteQuickAction={handleToggleFavoriteQuickAction}
-                wordingPreference={wordingPreference}
-                isConsentGranted={isConsentGranted}
+        <div className="rounded-b-lg">
+          <div 
+            id={`${sectionId}-content-wrapper`} 
+            className="p-4 md:p-6 space-y-4"
+            style={{ 
+              maxHeight: isResizable ? `${currentHeight}px` : undefined, 
+              overflowY: 'auto',
+              transition: isResizable ? 'max-height 0.1s linear' : 'none', // Smooth transition only if not actively resizing via JS
+            }}
+          >
+            <div ref={searchBarWrapperRef}>
+              <SearchBar
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                onKeyDownHandler={handleSearchKeyDown}
+                activeDescendantId={activeDescendantId}
+                filteredItemsCount={filteredItems.length}
               />
             </div>
-          )}
-          {searchTerm && filteredItems.length === 0 && !isLoadingItems && (
-            <p className="text-[var(--text-secondary)]">No items found matching "{searchTerm}".</p>
+            {searchTerm && filteredItems.length > 0 && (
+              <div ref={itemListWrapperRef}>
+                <ItemList
+                  items={filteredItems}
+                  onSelectItem={(item) => handleSelectItem(item, 'search_results')}
+                  getItemIconUrl={getItemIconUrl}
+                  activeSuggestionIndex={activeSuggestionIndex}
+                  favoriteItemIds={favoriteItemIds}
+                  onToggleFavoriteQuickAction={handleToggleFavoriteQuickAction}
+                  wordingPreference={wordingPreference}
+                  isConsentGranted={isConsentGranted}
+                />
+              </div>
+            )}
+            {searchTerm && filteredItems.length === 0 && !isLoadingItems && (
+              <p className="text-[var(--text-secondary)]">No items found matching "{searchTerm}".</p>
+            )}
+          </div>
+          {isResizable && (
+            <div
+              className="section-resize-handle"
+              onMouseDown={(e) => onResizeMouseDown(e, sectionId)}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={`Resize Search Item section`}
+              title="Drag to resize section"
+            />
           )}
         </div>
       )}
@@ -139,6 +217,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
   );
 });
 
+// ... (Keep FavoritesListProps, TopMoversSectionProps, AlertsManagerProps interfaces similar, they will also get new resize props via SectionRenderProps) ...
 interface FavoritesListProps extends SectionRenderProps {
   favoriteItemIds: FavoriteItemId[];
   allItems: ItemMapInfo[];
@@ -191,6 +270,7 @@ interface AlertsManagerProps extends SectionRenderProps {
   onToggleCollapse: () => void;
 }
 
+
 type SpecificAppSectionProps = 
   | SearchSectionLayoutProps 
   | FavoritesListProps 
@@ -198,10 +278,96 @@ type SpecificAppSectionProps =
   | AlertsManagerProps;
 
 
+// Helper function to process a single favorite item's data
+const fetchAndProcessFavoriteItemData = async (
+  itemId: FavoriteItemId,
+  allItemsMap: Map<FavoriteItemId, ItemMapInfo>,
+  fetchLPrice: typeof fetchLatestPrice,
+  fetchHData: typeof fetchHistoricalData
+): Promise<{
+  itemId: FavoriteItemId;
+  priceDataResult: LatestPriceData | null | 'error'; 
+  hourlyChangeResult: FavoriteItemHourlyChangeState; 
+  sparklineDataResult: FavoriteItemSparklineState;
+}> => {
+  const itemDetail = allItemsMap.get(itemId);
+  if (!itemDetail) {
+    return { itemId, priceDataResult: 'error', hourlyChangeResult: 'error', sparklineDataResult: 'error' };
+  }
+
+  try {
+    const priceData = await fetchLPrice(itemId);
+
+    if (priceData && priceData.high !== null) {
+      try { 
+        const oneHourHistoricalData = await fetchHData(itemId, '5m');
+        const nowMsSpark = Date.now();
+        const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
+        const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
+        const sparklineResult: FavoriteItemSparklineState = sparklinePoints.length > 1 ? sparklinePoints : 'no_data';
+
+        let priceThen: number | null = null;
+        const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
+        const nowMsCalc = Date.now();
+        const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
+
+        for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+          if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
+            priceThen = sortedHistorical[i].price;
+            break;
+          }
+        }
+        if (priceThen === null && sortedHistorical.length > 0) {
+          let bestFallbackCandidate: ChartDataPoint | null = null;
+          for (let i = sortedHistorical.length - 1; i >= 0; i--) {
+            if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
+              bestFallbackCandidate = sortedHistorical[i];
+              break;
+            }
+          }
+          if (!bestFallbackCandidate && sortedHistorical.length > 0) priceThen = sortedHistorical[0].price;
+          else if (bestFallbackCandidate) priceThen = bestFallbackCandidate.price;
+        }
+
+        let hourlyChange: FavoriteItemHourlyChangeState;
+        if (priceThen !== null && priceData.high !== null) {
+          const changeAbsolute = priceData.high - priceThen;
+          const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
+          hourlyChange = { changeAbsolute, changePercent };
+        } else {
+          hourlyChange = 'no_data';
+        }
+        return { itemId, priceDataResult: priceData, hourlyChangeResult: hourlyChange, sparklineDataResult: sparklineResult };
+      } catch (histErr) {
+        console.error(`Failed to fetch historical data for favorite item ${itemId}:`, histErr);
+        return { itemId, priceDataResult: priceData, hourlyChangeResult: 'error', sparklineDataResult: 'error' };
+      }
+    } else {
+      return { itemId, priceDataResult: priceData === null ? null : priceData, hourlyChangeResult: 'no_data', sparklineDataResult: 'no_data' };
+    }
+  } catch (err) {
+    console.error(`Failed to fetch latest price for favorite item ${itemId}:`, err);
+    return { itemId, priceDataResult: 'error', hourlyChangeResult: 'error', sparklineDataResult: 'error' };
+  }
+};
+
+
 const App: React.FC = () => {
   const initialConsent = getInitialConsentStatus();
   const [consentStatus, setConsentStatus] = useState<'pending' | 'granted' | 'denied'>(initialConsent);
   const isConsentGranted = useMemo(() => consentStatus === 'granted', [consentStatus]);
+
+  const [isDevDriveMode, setIsDevDriveMode] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('devDrive') === 'true';
+  });
+
+  useEffect(() => {
+    if (isDevDriveMode) {
+      console.warn("DEV MODE: Google Drive simulation is active via URL parameter '?devDrive=true'.");
+    }
+  }, [isDevDriveMode]);
+
 
   const trackGaEvent = useCallback((eventName: string, eventParams?: Record<string, any>) => {
     if (isConsentGranted && typeof window.gtag === 'function') {
@@ -211,25 +377,32 @@ const App: React.FC = () => {
 
   const [isGoogleApiInitialized, setIsGoogleApiInitialized] = useState<boolean>(false);
   const [isDriveActionLoading, setIsDriveActionLoading] = useState<boolean>(false);
-  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveFeedbackForModal, setDriveFeedbackForModal] = useState<DriveFeedback | null>(null);
 
   useEffect(() => {
+    if (isDevDriveMode) {
+      console.log("App.tsx: DEV MODE - Skipping Google Drive Service initialization, simulating success.");
+      setIsGoogleApiInitialized(true);
+      setDriveFeedbackForModal({ message: "DEV MODE: Google Drive is simulated.", type: 'info' });
+      return;
+    }
     const initDrive = async () => {
       console.log("App.tsx: Starting Google Drive Service initialization...");
+      setDriveFeedbackForModal({ message: "Initializing Google Drive...", type: 'info'});
       const success = await googleDriveService.initGoogleDriveService();
       setIsGoogleApiInitialized(success);
       if (!success) {
         const initErrorMessage = "Google Drive features are unavailable. API key or Client ID might be missing, invalid, or the service failed to load. Check console for details.";
-        setDriveError(initErrorMessage);
+        setDriveFeedbackForModal({ message: initErrorMessage, type: 'error' });
         console.error("App.tsx: Google Drive Service initialization failed.");
-        // addNotification is not used here to avoid premature notifications during startup issues
       } else {
         console.log("App.tsx: Google Drive Service initialized successfully.");
-        setDriveError(null); // Clear any previous init error
+        setDriveFeedbackForModal({ message: "Google Drive initialized.", type: 'success' }); 
+        setTimeout(() => setDriveFeedbackForModal(null), 3000); 
       }
     };
     initDrive();
-  }, []);
+  }, [isDevDriveMode]);
 
 
   const [allItems, setAllItems] = useState<ItemMapInfo[]>([]);
@@ -265,72 +438,96 @@ const App: React.FC = () => {
     replacePortfolio, 
   } = usePortfolio(isConsentGranted, addNotification);
 
+  const devHandleSaveToDrive = useCallback(async () => {
+    setIsDriveActionLoading(true);
+    setDriveFeedbackForModal({ message: "Simulating save...", type: 'info' });
+    console.log("DEV MODE: Simulating Save to Drive.");
+    await new Promise(resolve => setTimeout(resolve, 750));
+    setDriveFeedbackForModal({ message: "Portfolio saved to Google Drive! (DEV MODE)", type: 'success' });
+    trackGaEvent('portfolio_save_gdrive_success_dev');
+    setIsDriveActionLoading(false);
+  }, [trackGaEvent]);
+
+  const devHandleLoadFromDrive = useCallback(async () => {
+    setIsDriveActionLoading(true);
+    setDriveFeedbackForModal({ message: "Simulating load...", type: 'info' });
+    console.log("DEV MODE: Simulating Load from Drive with mock data.");
+    await new Promise(resolve => setTimeout(resolve, 750)); 
+
+    const mockCannonballEntry: PortfolioEntry = { id: 'dev-cannonball-1', itemId: 2, quantityPurchased: 1000, purchasePricePerItem: 150, purchaseDate: Date.now() - 86400000 * 30, quantitySoldFromThisLot: 0, totalProceedsFromThisLot: 0, totalTaxPaidFromThisLot: 0 };
+    const mockRuneScimEntry: PortfolioEntry = { id: 'dev-scim-1', itemId: 1333, quantityPurchased: 5, purchasePricePerItem: 30000, purchaseDate: Date.now() - 86400000 * 7, quantitySoldFromThisLot: 0, totalProceedsFromThisLot: 0, totalTaxPaidFromThisLot: 0 };
+    const mockPortfolio: PortfolioEntry[] = [mockCannonballEntry, mockRuneScimEntry];
+    
+    replacePortfolio(mockPortfolio);
+    setDriveFeedbackForModal({ message: "Portfolio loaded from Google Drive! (DEV MODE)", type: 'success' });
+    trackGaEvent('portfolio_load_gdrive_success_dev', { entry_count: mockPortfolio.length });
+    setIsDriveActionLoading(false);
+  }, [replacePortfolio, trackGaEvent]);
+
 
   const handleSaveToDrive = useCallback(async () => {
     if (!isGoogleApiInitialized) {
-      addNotification(driveError || "Google Drive is not available.", "error");
+      const msg = driveFeedbackForModal?.message || "Google Drive is not available.";
+      setDriveFeedbackForModal({ message: msg, type: 'error' });
       console.error("handleSaveToDrive: Drive not initialized.");
       return;
     }
     if (portfolioEntries.length === 0) {
-      addNotification("Portfolio is empty. Nothing to save to Drive.", "info");
+      setDriveFeedbackForModal({ message: "Portfolio is empty. Nothing to save to Drive.", type: 'info' });
       return;
     }
     console.log("handleSaveToDrive: Attempting to save...");
-    addNotification("Attempting to save to Google Drive...", "info");
     setIsDriveActionLoading(true);
-    setDriveError(null);
+    setDriveFeedbackForModal({ message: "Saving to Google Drive...", type: 'info' });
     try {
       await googleDriveService.requestAccessToken();
-      console.log("handleSaveToDrive: Access token process completed. Current token state:", window.gapi?.client?.getToken());
+      console.log("handleSaveToDrive: Access token process completed.");
       const portfolioJson = JSON.stringify(portfolioEntries);
       await googleDriveService.savePortfolioToDrive(portfolioJson);
-      addNotification("Portfolio saved to Google Drive successfully!", "success");
+      setDriveFeedbackForModal({ message: "Portfolio saved to Google Drive successfully!", type: 'success' });
       trackGaEvent('portfolio_save_gdrive_success');
     } catch (err: any) {
       console.error("Error saving portfolio to Drive in App.tsx:", err);
       const errorMessage = err.message || "Failed to save portfolio to Google Drive. Check console for details.";
-      addNotification(errorMessage, "error");
-      setDriveError(errorMessage);
+      setDriveFeedbackForModal({ message: errorMessage, type: 'error' });
       trackGaEvent('portfolio_save_gdrive_error', { error_message: errorMessage });
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleApiInitialized, portfolioEntries, addNotification, driveError, trackGaEvent]);
+  }, [isGoogleApiInitialized, portfolioEntries, driveFeedbackForModal, trackGaEvent]);
 
   const handleLoadFromDrive = useCallback(async () => {
     if (!isGoogleApiInitialized) {
-      addNotification(driveError || "Google Drive is not available.", "error");
+      const msg = driveFeedbackForModal?.message || "Google Drive is not available.";
+      setDriveFeedbackForModal({ message: msg, type: 'error' });
       console.error("handleLoadFromDrive: Drive not initialized.");
       return;
     }
     console.log("handleLoadFromDrive: Attempting to load...");
-    addNotification("Attempting to load from Google Drive...", "info");
     setIsDriveActionLoading(true);
-    setDriveError(null);
+    setDriveFeedbackForModal({ message: "Loading from Google Drive...", type: 'info' });
     try {
       await googleDriveService.requestAccessToken();
-      console.log("handleLoadFromDrive: Access token process completed. Current token state:", window.gapi?.client?.getToken());
+      console.log("handleLoadFromDrive: Access token process completed.");
       const portfolioJson = await googleDriveService.loadPortfolioFromDrive();
       if (portfolioJson) {
         const newEntries: PortfolioEntry[] = JSON.parse(portfolioJson);
         replacePortfolio(newEntries); 
-        addNotification("Portfolio loaded from Google Drive successfully!", "success");
+        setDriveFeedbackForModal({ message: "Portfolio loaded from Google Drive successfully!", type: 'success' });
         trackGaEvent('portfolio_load_gdrive_success', { entry_count: newEntries.length });
       } else {
-        addNotification("No portfolio file found on Google Drive or file is empty.", "info");
+        setDriveFeedbackForModal({ message: "No portfolio file found on Google Drive or file is empty.", type: 'info' });
         trackGaEvent('portfolio_load_gdrive_not_found');
       }
     } catch (err: any) {
       console.error("Error loading portfolio from Drive in App.tsx:", err);
       const errorMessage = err.message || "Failed to load portfolio from Google Drive. Check console for details.";
-      addNotification(errorMessage, "error");
-      setDriveError(errorMessage);
+      setDriveFeedbackForModal({ message: errorMessage, type: 'error' });
       trackGaEvent('portfolio_load_gdrive_error', { error_message: errorMessage });
     } finally {
       setIsDriveActionLoading(false);
     }
-  }, [isGoogleApiInitialized, replacePortfolio, addNotification, driveError, trackGaEvent]);
+  }, [isGoogleApiInitialized, replacePortfolio, driveFeedbackForModal, trackGaEvent]);
 
 
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState<boolean>(true);
@@ -343,8 +540,23 @@ const App: React.FC = () => {
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState<boolean>(false);
   const [isPrivacyPolicyModalOpen, setIsPrivacyPolicyModalOpen] = useState<boolean>(false); 
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false); 
-  const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
   
+  const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
+  const prevIsPortfolioModalOpen = usePrevious(isPortfolioModalOpen);
+
+  useEffect(() => {
+    if (!isPortfolioModalOpen && prevIsPortfolioModalOpen) {
+      if (isDevDriveMode) {
+        setDriveFeedbackForModal({ message: "DEV MODE: Google Drive is simulated.", type: 'info' });
+      } else if (!isGoogleApiInitialized) {
+        setDriveFeedbackForModal({ message: "Google Drive features are unavailable. API key or Client ID might be missing, invalid, or the service failed to load. Check console for details.", type: 'error' });
+      } else {
+        setDriveFeedbackForModal(null); 
+      }
+    }
+  }, [isPortfolioModalOpen, prevIsPortfolioModalOpen, isDevDriveMode, isGoogleApiInitialized]);
+  
+
   const [isSetAlertModalOpen, setIsSetAlertModalOpen] = useState<boolean>(false);
   const [itemForSetAlertModal, setItemForSetAlertModal] = useState<ItemMapInfo | null>(null);
   
@@ -388,6 +600,132 @@ const App: React.FC = () => {
 
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+
+  const [isDesktopView, setIsDesktopView] = useState<boolean>(window.innerWidth >= DESKTOP_BREAKPOINT_RESIZE);
+  const [sectionHeights, setSectionHeights] = useState<SectionHeights>(() => {
+    const initialHeights: SectionHeights = {};
+    DEFAULT_SIDEBAR_ORDER.forEach(id => {
+        initialHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+    });
+    return initialHeights;
+  });
+  const [resizingSection, setResizingSection] = useState<{ id: string; initialHeight: number; initialY: number } | null>(null);
+
+
+  useEffect(() => {
+    const checkDesktopView = () => setIsDesktopView(window.innerWidth >= DESKTOP_BREAKPOINT_RESIZE);
+    window.addEventListener('resize', checkDesktopView);
+    checkDesktopView(); // Initial check
+    return () => window.removeEventListener('resize', checkDesktopView);
+  }, []);
+
+  useEffect(() => {
+    if (isConsentGranted && isDesktopView) {
+      try {
+        const savedHeights = localStorage.getItem(SECTION_HEIGHTS_STORAGE_KEY);
+        if (savedHeights) {
+          const parsedHeights = JSON.parse(savedHeights) as SectionHeights;
+          // Ensure all sections in current order have a height, falling back to default
+          const newSectionHeights = { ...sectionHeights }; // Start with current (which might have defaults)
+          let changed = false;
+          DEFAULT_SIDEBAR_ORDER.forEach(id => {
+            if (parsedHeights[id] !== undefined) {
+              newSectionHeights[id] = Math.max(MIN_SECTION_HEIGHT_PX, Math.min(MAX_SECTION_HEIGHT_PX, parsedHeights[id]));
+              changed = true;
+            } else if (newSectionHeights[id] === undefined) { // If not in parsed and not in current defaults
+              newSectionHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+              changed = true;
+            }
+          });
+          if (changed) setSectionHeights(newSectionHeights);
+
+        } else { // No saved heights, ensure defaults for all sections in order
+          const defaultHeights: SectionHeights = {};
+          DEFAULT_SIDEBAR_ORDER.forEach(id => {
+            defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+          });
+          setSectionHeights(defaultHeights);
+        }
+      } catch (e) {
+        console.error("Failed to load section heights from localStorage", e);
+        const defaultHeights: SectionHeights = {};
+        DEFAULT_SIDEBAR_ORDER.forEach(id => {
+          defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+        });
+        setSectionHeights(defaultHeights);
+      }
+    } else if (!isDesktopView) { // Reset to defaults if not desktop
+      const defaultHeights: SectionHeights = {};
+      DEFAULT_SIDEBAR_ORDER.forEach(id => {
+        defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+      });
+      setSectionHeights(defaultHeights);
+    }
+  }, [isConsentGranted, isDesktopView]);
+
+
+  useEffect(() => {
+    if (isConsentGranted && isDesktopView && Object.keys(sectionHeights).length > 0) {
+      try {
+        localStorage.setItem(SECTION_HEIGHTS_STORAGE_KEY, JSON.stringify(sectionHeights));
+      } catch (e) {
+        console.error("Failed to save section heights to localStorage", e);
+      }
+    }
+  }, [sectionHeights, isConsentGranted, isDesktopView]);
+  
+
+  const handleResizeMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>, sectionId: string) => {
+    if (!isDesktopView) return;
+    event.preventDefault();
+    document.body.style.cursor = 'ns-resize'; 
+    document.body.style.userSelect = 'none';
+
+    setResizingSection({
+      id: sectionId,
+      initialHeight: sectionHeights[sectionId] || DEFAULT_SECTION_HEIGHT_PX,
+      initialY: event.clientY,
+    });
+  }, [isDesktopView, sectionHeights]);
+
+  const handleResizeMouseMove = useCallback((event: MouseEvent) => {
+    if (!resizingSection || !isDesktopView) return;
+    event.preventDefault();
+    const deltaY = event.clientY - resizingSection.initialY;
+    let newHeight = resizingSection.initialHeight + deltaY;
+    newHeight = Math.max(MIN_SECTION_HEIGHT_PX, Math.min(MAX_SECTION_HEIGHT_PX, newHeight));
+    
+    setSectionHeights(prev => ({
+      ...prev,
+      [resizingSection.id]: newHeight,
+    }));
+  }, [resizingSection, isDesktopView]);
+
+  const handleResizeMouseUp = useCallback(() => {
+    if (!isDesktopView || !resizingSection) return;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    setResizingSection(null);
+    if(resizingSection) trackGaEvent('resize_section', { section_id: resizingSection.id, new_height: sectionHeights[resizingSection.id]});
+  }, [isDesktopView, resizingSection, trackGaEvent, sectionHeights]);
+
+  useEffect(() => {
+    if (resizingSection) {
+      window.addEventListener('mousemove', handleResizeMouseMove);
+      window.addEventListener('mouseup', handleResizeMouseUp);
+      window.addEventListener('mouseleave', handleResizeMouseUp); // Handle if mouse leaves window
+    } else {
+      window.removeEventListener('mousemove', handleResizeMouseMove);
+      window.removeEventListener('mouseup', handleResizeMouseUp);
+      window.removeEventListener('mouseleave', handleResizeMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleResizeMouseMove);
+      window.removeEventListener('mouseup', handleResizeMouseUp);
+      window.removeEventListener('mouseleave', handleResizeMouseUp);
+    };
+  }, [resizingSection, handleResizeMouseMove, handleResizeMouseUp]);
+
 
   const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => {
     trackGaEvent('toggle_section_collapse', { section_name: 'search', is_collapsed: !prev });
@@ -447,6 +785,29 @@ const App: React.FC = () => {
     return false;
   });
   const [desktopNotificationPermission, setDesktopNotificationPermission] = useState<NotificationPermission>(Notification.permission);
+
+  const [enableInAppAlertSounds, setEnableInAppAlertSounds] = useState<boolean>(() => {
+    if (initialConsent === 'granted') {
+      const saved = localStorage.getItem(IN_APP_ALERT_SOUNDS_ENABLED_KEY);
+      return saved !== null ? JSON.parse(saved) : DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED;
+    }
+    return DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED;
+  });
+  const prevEnableInAppAlertSounds = usePrevious(enableInAppAlertSounds);
+
+  useEffect(() => {
+    if (prevEnableInAppAlertSounds !== undefined && prevEnableInAppAlertSounds !== enableInAppAlertSounds) {
+      addNotification(`In-app alert sounds ${enableInAppAlertSounds ? 'enabled' : 'disabled'}.`, 'info');
+      trackGaEvent('toggle_in_app_alert_sounds', { is_enabled: enableInAppAlertSounds });
+      if (enableInAppAlertSounds) { 
+        initializeAudioContextSafely();
+        if (audioContextInstance?.state === 'suspended') {
+            audioContextInstance.resume().catch(err => console.warn("Could not resume AudioContext on sound toggle:", err));
+        }
+      }
+    }
+  }, [enableInAppAlertSounds, prevEnableInAppAlertSounds, addNotification, trackGaEvent]);
+
 
   const [wordingPreference, setWordingPreference] = useState<WordingPreference>(() => {
     if (initialConsent === 'granted') {
@@ -610,120 +971,86 @@ const App: React.FC = () => {
   ]);
 
   const handleRefreshAllFavorites = useCallback(async (isAutoRefresh: boolean = false) => {
-    if (favoritesRefreshLockRef.current) return;
-    if (isRefreshingFavorites || favoriteItemIds.length === 0 || !allItems.length || !isConsentGranted) return;
-  
+    if (favoritesRefreshLockRef.current && !isAutoRefresh) return; 
+    if (isRefreshingFavorites || favoriteItemIds.length === 0 || allItems.length === 0 || !isConsentGranted) return;
+
     if (!isAutoRefresh) trackGaEvent('refresh_favorites', { count: favoriteItemIds.length });
-    favoritesRefreshLockRef.current = true;
+    
+    if (!isAutoRefresh) favoritesRefreshLockRef.current = true;
     setIsRefreshingFavorites(true);
-    const isMountedRef = { current: true };
-    let allSucceeded = true;
-  
-    const newFavoriteItemPrices: typeof favoriteItemPrices = {};
-    const newFavoriteItemHourlyChanges: typeof favoriteItemHourlyChanges = {};
-    const newFavoriteItemSparklineData: typeof favoriteItemSparklineData = {};
-  
-    for (const itemId of favoriteItemIds) {
-      if (!isMountedRef.current) break;
-      const itemDetail = allItems.find(it => it.id === itemId);
-      if (!itemDetail) continue;
-  
-      newFavoriteItemPrices[itemId] = 'loading';
-      newFavoriteItemHourlyChanges[itemId] = 'loading';
-      newFavoriteItemSparklineData[itemId] = 'loading';
-    }
-    if (isMountedRef.current) {
-      setFavoriteItemPrices(prev => ({ ...prev, ...newFavoriteItemPrices }));
-      setFavoriteItemHourlyChanges(prev => ({ ...prev, ...newFavoriteItemHourlyChanges }));
-      setFavoriteItemSparklineData(prev => ({ ...prev, ...newFavoriteItemSparklineData }));
-    }
-  
-    for (const itemId of favoriteItemIds) {
-      if (!isMountedRef.current) break;
-  
-      try {
-        const priceData = await fetchLatestPrice(itemId);
-        if (!isMountedRef.current) break;
-        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-  
-        if (priceData && priceData.high !== null) {
-          const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
-          if (!isMountedRef.current) break;
-          
-          const nowMsSpark = Date.now();
-          const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
-          const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
-          if (isMountedRef.current) {
-              setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
-          }
-          
-          let priceThen: number | null = null;
-          const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-          const nowMsCalc = Date.now();
-          const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
-          for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-            if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
-              priceThen = sortedHistorical[i].price;
-              break;
+
+    const initialLoadingPrices: Record<FavoriteItemId, 'loading'> = {};
+    const initialLoadingChanges: Record<FavoriteItemId, 'loading'> = {};
+    const initialLoadingSparklines: Record<FavoriteItemId, 'loading'> = {};
+
+    favoriteItemIds.forEach(id => {
+        initialLoadingPrices[id] = 'loading';
+        initialLoadingChanges[id] = 'loading';
+        initialLoadingSparklines[id] = 'loading';
+    });
+    setFavoriteItemPrices(prev => ({ ...prev, ...initialLoadingPrices }));
+    setFavoriteItemHourlyChanges(prev => ({ ...prev, ...initialLoadingChanges }));
+    setFavoriteItemSparklineData(prev => ({ ...prev, ...initialLoadingSparklines }));
+
+    const allItemsMap = new Map(allItems.map(item => [item.id, item]));
+
+    const favoriteDataPromises = favoriteItemIds.map(itemId =>
+        fetchAndProcessFavoriteItemData(itemId, allItemsMap, fetchLatestPrice, fetchHistoricalData)
+    );
+
+    const results = await Promise.allSettled(favoriteDataPromises);
+
+    const newPricesStateUpdate: Record<FavoriteItemId, LatestPriceData | null | 'error'> = {};
+    const newChangesStateUpdate: Record<FavoriteItemId, FavoriteItemHourlyChangeState> = {};
+    const newSparklinesStateUpdate: Record<FavoriteItemId, FavoriteItemSparklineState> = {};
+    let allSucceededThisRefresh = true;
+
+    results.forEach(result => {
+        if (result.status === 'fulfilled') {
+            const { itemId, priceDataResult, hourlyChangeResult, sparklineDataResult } = result.value;
+            newPricesStateUpdate[itemId] = priceDataResult;
+            newChangesStateUpdate[itemId] = hourlyChangeResult;
+            newSparklinesStateUpdate[itemId] = sparklineDataResult;
+            if (priceDataResult === 'error' || hourlyChangeResult === 'error' || sparklineDataResult === 'error') {
+                allSucceededThisRefresh = false;
             }
-          }
-          if (priceThen === null && sortedHistorical.length > 0) {
-             let bestFallbackCandidate: ChartDataPoint | null = null;
-                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                    if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
-                        bestFallbackCandidate = sortedHistorical[i];
-                        break;
-                    }
-                }
-                 if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
-                    priceThen = sortedHistorical[0].price;
-                } else if (bestFallbackCandidate) {
-                    priceThen = bestFallbackCandidate.price;
-                }
-          }
-  
-          if (priceThen !== null && priceData.high !== null) {
-            const changeAbsolute = priceData.high - priceThen;
-            const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
-            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
-          } else {
-            if (isMountedRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
-          }
-        } else { 
-          const currentPriceDataInElse = priceData; 
-          if (isMountedRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: currentPriceDataInElse === null ? 'no_data' : 'error' }));
-          }
+        } else {
+            const failedItemIndex = favoriteDataPromises.findIndex(p => p === (result as any).promise);
+             if (failedItemIndex !== -1 && favoriteItemIds[failedItemIndex]) {
+                const failedItemId = favoriteItemIds[failedItemIndex];
+                newPricesStateUpdate[failedItemId] = 'error';
+                newChangesStateUpdate[failedItemId] = 'error';
+                newSparklinesStateUpdate[failedItemId] = 'error';
+            }
+            console.error(`Unhandled promise rejection during favorite refresh:`, result.reason);
+            allSucceededThisRefresh = false;
         }
-      } catch (err) {
-        console.error(`Failed to refresh data for favourite item ${itemId}`, err);
-        allSucceeded = false;
-        if (isMountedRef.current) {
-          setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
-          setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
-          setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
+    });
+
+    setFavoriteItemPrices(prev => ({ ...prev, ...newPricesStateUpdate }));
+    setFavoriteItemHourlyChanges(prev => ({ ...prev, ...newChangesStateUpdate }));
+    setFavoriteItemSparklineData(prev => ({ ...prev, ...newSparklinesStateUpdate }));
+
+    setIsRefreshingFavorites(false);
+    if (!isAutoRefresh) {
+        favoritesRefreshLockRef.current = false;
+        if (favoriteItemIds.length > 0) {
+            if (allSucceededThisRefresh) {
+                addNotification('Favorite items data refreshed!', 'success');
+            } else {
+                addNotification('Some favorite items could not be refreshed.', 'error');
+            }
         }
-      }
     }
-  
-    if (isMountedRef.current) {
-      setIsRefreshingFavorites(false);
-      if (allSucceeded && favoriteItemIds.length > 0 && !isAutoRefresh) { 
-        addNotification('Favorite items data refreshed!', 'success');
-      } else if (!allSucceeded && favoriteItemIds.length > 0) { 
-        addNotification('Some favorite items could not be refreshed.', 'error');
-      }
-    }
-    favoritesRefreshLockRef.current = false;
-  }, [favoriteItemIds, allItems, addNotification, isConsentGranted, trackGaEvent, isRefreshingFavorites]); 
+  }, [favoriteItemIds, allItems, isConsentGranted, trackGaEvent, addNotification, isRefreshingFavorites]);
+
 
   useEffect(() => {
     let intervalId: number | null = null;
 
     if (isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
       intervalId = window.setInterval(() => {
-        if (!favoritesRefreshLockRef.current && !isRefreshingFavorites) {
+        if (!isRefreshingFavorites) { 
           handleRefreshAllFavorites(true); 
         }
       }, 60 * 1000); 
@@ -734,7 +1061,7 @@ const App: React.FC = () => {
         window.clearInterval(intervalId);
       }
     };
-  }, [isConsentGranted, favoriteItemIds, allItems, handleRefreshAllFavorites, isRefreshingFavorites]);
+  }, [isConsentGranted, favoriteItemIds, allItems.length, handleRefreshAllFavorites, isRefreshingFavorites]);
 
 
   const toggleFavoritesSection = useCallback(() => {
@@ -742,10 +1069,11 @@ const App: React.FC = () => {
       const newCollapsedState = !prev;
       trackGaEvent('toggle_section_collapse', { section_name: 'favorites', is_collapsed: newCollapsedState });
       if (!newCollapsedState && isConsentGranted && favoriteItemIds.length > 0 && allItems.length > 0) {
-        const shouldInitialRefresh = Object.values(favoriteItemPrices).some(price => price === null || price === undefined) || Object.values(favoriteItemPrices).length < favoriteItemIds.length;
-
-        if (!isRefreshingFavorites && !favoritesRefreshLockRef.current && shouldInitialRefresh) { 
-           handleRefreshAllFavorites();
+        const needsInitialLoad = favoriteItemIds.some(id => 
+          favoriteItemPrices[id] === undefined || favoriteItemPrices[id] === null
+        );
+        if (needsInitialLoad && !isRefreshingFavorites && !favoritesRefreshLockRef.current ) { 
+           handleRefreshAllFavorites(false); 
         }
       }
       return newCollapsedState;
@@ -756,6 +1084,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (consentStatus !== 'pending') {
       localStorage.setItem(CONSENT_STORAGE_KEY, consentStatus);
+      if (consentStatus === 'granted') {
+        initializeAudioContextSafely();
+      }
     }
   }, [consentStatus]);
 
@@ -770,6 +1101,10 @@ const App: React.FC = () => {
       price_at_trigger: triggeredAlert.priceAtTrigger
     });
 
+    if (enableInAppAlertSounds && isConsentGranted) {
+      playAlertSound();
+    }
+
     if (enableDesktopNotifications && desktopNotificationPermission === 'granted' && isConsentGranted) {
       if (Notification.permission === 'granted') {
         new Notification(`GE Pulse: ${triggeredAlert.itemName}`, {
@@ -779,7 +1114,7 @@ const App: React.FC = () => {
         });
       }
     }
-  }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl, trackGaEvent]);
+  }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl, trackGaEvent, enableInAppAlertSounds]);
 
   const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
     handleAlertTriggered,
@@ -794,6 +1129,7 @@ const App: React.FC = () => {
     setShowFavoriteSparklines(true); 
     setActiveThemeName(DEFAULT_THEME_ID);
     setEnableDesktopNotifications(false);
+    setEnableInAppAlertSounds(DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED); 
     setWordingPreference(DEFAULT_WORDING_PREFERENCE);
     setFavoriteItemIds([]);
     setFavoriteItemPrices({});
@@ -801,6 +1137,9 @@ const App: React.FC = () => {
     setFavoriteItemSparklineData({});
     setSidebarSectionOrder([...DEFAULT_SIDEBAR_ORDER]); 
     setIsDragAndDropEnabled(false); 
+    const defaultHeights: SectionHeights = {}; // Reset section heights
+    DEFAULT_SIDEBAR_ORDER.forEach(id => defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX);
+    setSectionHeights(defaultHeights);
     if(clearAllAlertsAndStorage) clearAllAlertsAndStorage(); 
     if(clearAllPortfolioData) clearAllPortfolioData();
     addNotification('Preferences have been reset and will no longer be saved.', 'info');
@@ -810,6 +1149,7 @@ const App: React.FC = () => {
     setConsentStatus('granted');
     trackGaEvent('consent_changed', { status: 'granted' });
     addNotification('Thanks! Your preferences will now be saved.', 'success');
+    initializeAudioContextSafely();
   }, [addNotification, trackGaEvent]);
 
   const handleConsentDenied = useCallback(() => {
@@ -867,6 +1207,9 @@ const App: React.FC = () => {
     setFavoriteItemIds(prevIds => {
       if (!prevIds.includes(itemId)) {
         trackGaEvent('toggle_favorite', { item_id: itemId, item_name: getItemName(itemId), action: 'added' });
+        setFavoriteItemPrices(prev => ({ ...prev, [itemId]: null })); 
+        setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: null }));
+        setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: null }));
         return [...prevIds, itemId];
       }
       return prevIds;
@@ -910,115 +1253,69 @@ const App: React.FC = () => {
   }, [favoriteItemIds, isConsentGranted]);
 
   useEffect(() => {
-    if (!allItems.length || !isConsentGranted) return;
-    const isMountedRefHook = { current: true };
+    if (!isConsentGranted || allItems.length === 0 || favoriteItemIds.length === 0) {
+      return;
+    }
 
-    const fetchAllFavoriteDataSequentiallyHook = async () => {
-      for (const itemId of favoriteItemIds) {
-        if (!isMountedRefHook.current) break;
+    const itemsToLoad = favoriteItemIds.filter(id =>
+      favoriteItemPrices[id] === undefined || favoriteItemPrices[id] === null ||
+      favoriteItemHourlyChanges[id] === undefined || favoriteItemHourlyChanges[id] === null ||
+      favoriteItemSparklineData[id] === undefined || favoriteItemSparklineData[id] === null
+    );
 
-        const itemDetail = allItems.find(it => it.id === itemId);
-        if (itemDetail) {
-          const priceState = favoriteItemPrices[itemId];
-          const hourlyState = favoriteItemHourlyChanges[itemId];
-          const sparklineState = favoriteItemSparklineData[itemId];
-          
-          if (priceState && priceState !== 'loading' && priceState !== 'error' &&
-              hourlyState && hourlyState !== 'loading' && hourlyState !== 'error' &&
-              sparklineState && sparklineState !== 'loading' && sparklineState !== 'error' &&
-              priceState !== null && hourlyState !== null && sparklineState !== null
-            ) { 
-             continue; 
-          }
-          
-          if (isMountedRefHook.current) {
-            if (favoriteItemPrices[itemId] !== 'loading') setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'loading' }));
-            if (favoriteItemHourlyChanges[itemId] !== 'loading') setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'loading' }));
-            if (favoriteItemSparklineData[itemId] !== 'loading') setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'loading' }));
-          }
+    if (itemsToLoad.length === 0) {
+      return;
+    }
+    
+    const allItemsMap = new Map(allItems.map(item => [item.id, item]));
 
-          try {
-            const priceData = await fetchLatestPrice(itemId);
-            if (!isMountedRefHook.current) break; 
-            setFavoriteItemPrices(prev => ({ ...prev, [itemId]: priceData }));
-            
-            if (priceData && priceData.high !== null) {
-              try {
-                const oneHourHistoricalData = await fetchHistoricalData(itemId, '5m');
-                if (!isMountedRefHook.current) break;
+    const loadingUpdatesPrices: Record<FavoriteItemId, 'loading'> = {};
+    const loadingUpdatesChanges: Record<FavoriteItemId, 'loading'> = {};
+    const loadingUpdatesSparklines: Record<FavoriteItemId, 'loading'> = {};
 
-                const nowMsSpark = Date.now();
-                const oneHourAgoMsThresholdSpark = nowMsSpark - (60 * 60 * 1000);
-                const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowMsSpark);
-                if (isMountedRefHook.current) {
-                  setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
-                }
+    itemsToLoad.forEach(id => {
+      if (favoriteItemPrices[id] !== 'loading') loadingUpdatesPrices[id] = 'loading';
+      if (favoriteItemHourlyChanges[id] !== 'loading') loadingUpdatesChanges[id] = 'loading';
+      if (favoriteItemSparklineData[id] !== 'loading') loadingUpdatesSparklines[id] = 'loading';
+    });
 
-                let priceThen: number | null = null;
-                const sortedHistorical = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-                const nowMsCalc = Date.now();
-                const oneHourAgoMsThresholdCalc = nowMsCalc - (60 * 60 * 1000);
+    if (Object.keys(loadingUpdatesPrices).length > 0) setFavoriteItemPrices(prev => ({ ...prev, ...loadingUpdatesPrices }));
+    if (Object.keys(loadingUpdatesChanges).length > 0) setFavoriteItemHourlyChanges(prev => ({ ...prev, ...loadingUpdatesChanges }));
+    if (Object.keys(loadingUpdatesSparklines).length > 0) setFavoriteItemSparklineData(prev => ({ ...prev, ...loadingUpdatesSparklines }));
+    
+    const favoriteDataPromises = itemsToLoad.map(itemId =>
+      fetchAndProcessFavoriteItemData(itemId, allItemsMap, fetchLatestPrice, fetchHistoricalData)
+    );
 
-                for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                  if (sortedHistorical[i].timestamp <= oneHourAgoMsThresholdCalc) {
-                    priceThen = sortedHistorical[i].price;
-                    break;
-                  }
-                }
-                
-                if (priceThen === null && sortedHistorical.length > 0) {
-                  let bestFallbackCandidate: ChartDataPoint | null = null;
-                  for (let i = sortedHistorical.length - 1; i >= 0; i--) {
-                      if (sortedHistorical[i].timestamp < oneHourAgoMsThresholdCalc) {
-                          bestFallbackCandidate = sortedHistorical[i];
-                          break;
-                      }
-                  }
-                  if (!bestFallbackCandidate && sortedHistorical.length > 0) { 
-                      priceThen = sortedHistorical[0].price; 
-                  } else if (bestFallbackCandidate) {
-                      priceThen = bestFallbackCandidate.price;
-                  }
-                }
+    Promise.allSettled(favoriteDataPromises).then(results => {
+      const newPricesStateUpdate: Record<FavoriteItemId, LatestPriceData | null | 'error'> = {};
+      const newChangesStateUpdate: Record<FavoriteItemId, FavoriteItemHourlyChangeState> = {};
+      const newSparklinesStateUpdate: Record<FavoriteItemId, FavoriteItemSparklineState> = {};
 
-                if (priceThen !== null && priceData.high !== null) { 
-                  const changeAbsolute = priceData.high - priceThen;
-                  const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (priceData.high > 0 ? Infinity : 0);
-                  if (isMountedRefHook.current) {
-                    setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: { changeAbsolute, changePercent } }));
-                  }
-                } else {
-                  if (isMountedRefHook.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'no_data' }));
-                }
-              } catch (histErr) {
-                console.error(`Failed to fetch 5m historical for sparkline/hourly change (item ${itemId})`, histErr);
-                if (isMountedRefHook.current) {
-                  setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
-                  setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
-                }
-              }
-            } else { 
-               const currentPriceDataInElse = priceData;
-               if (isMountedRefHook.current ) {
-                 setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
-                 setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: (currentPriceDataInElse === null ? 'no_data' : 'error') }));
-               }
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          const { itemId, priceDataResult, hourlyChangeResult, sparklineDataResult } = result.value;
+          newPricesStateUpdate[itemId] = priceDataResult;
+          newChangesStateUpdate[itemId] = hourlyChangeResult;
+          newSparklinesStateUpdate[itemId] = sparklineDataResult;
+        } else {
+            const failedItemIndex = favoriteDataPromises.findIndex(p => p === (result as any).promise);
+             if (failedItemIndex !== -1 && itemsToLoad[failedItemIndex]) {
+                const failedItemId = itemsToLoad[failedItemIndex];
+                newPricesStateUpdate[failedItemId] = 'error';
+                newChangesStateUpdate[failedItemId] = 'error';
+                newSparklinesStateUpdate[failedItemId] = 'error';
             }
-          } catch (err) {
-              console.error(`Failed to fetch price for favourite item ${itemId}`, err);
-              if (isMountedRefHook.current) {
-                setFavoriteItemPrices(prev => ({ ...prev, [itemId]: 'error' }));
-                setFavoriteItemHourlyChanges(prev => ({ ...prev, [itemId]: 'error' }));
-                setFavoriteItemSparklineData(prev => ({ ...prev, [itemId]: 'error' }));
-              }
-            }
-          }
+          console.error(`Unhandled promise rejection during initial favorite load:`, result.reason);
         }
-    };
+      });
 
-    fetchAllFavoriteDataSequentiallyHook();
-    return () => { isMountedRefHook.current = false; };
-  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData]); 
+      setFavoriteItemPrices(prev => ({ ...prev, ...newPricesStateUpdate }));
+      setFavoriteItemHourlyChanges(prev => ({ ...prev, ...newChangesStateUpdate }));
+      setFavoriteItemSparklineData(prev => ({ ...prev, ...newSparklinesStateUpdate }));
+    });
+  }, [favoriteItemIds, allItems, isConsentGranted, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData]);
+
 
   const handleThemeChange = useCallback((themeName: string) => {
     setActiveThemeName(themeName);
@@ -1085,6 +1382,13 @@ const App: React.FC = () => {
   }, [enableDesktopNotifications, isConsentGranted]);
 
   useEffect(() => {
+    if (isConsentGranted) {
+      localStorage.setItem(IN_APP_ALERT_SOUNDS_ENABLED_KEY, JSON.stringify(enableInAppAlertSounds));
+    }
+  }, [enableInAppAlertSounds, isConsentGranted]);
+
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchTerm && 
           searchBarWrapperRef.current && 
@@ -1132,6 +1436,10 @@ const App: React.FC = () => {
       }
     }
   }, [desktopNotificationPermission, enableDesktopNotifications, addNotification, trackGaEvent]);
+
+  const toggleEnableInAppAlertSounds = useCallback(() => {
+    setEnableInAppAlertSounds(prev => !prev);
+  }, []);
 
   const toggleChartGrid = useCallback(() => { 
     setShowChartGrid(prev => {
@@ -1231,67 +1539,19 @@ const App: React.FC = () => {
       }
       
       if (favoriteItemIds.includes(currentItem.id) && isConsentGranted) {
-        if (isMountedRefreshRef.current) setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: latest }));
-        
-        if (latest && latest.high !== null) {
-          if (isMountedRefreshRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'loading' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'loading' }));
-          }
-          try {
-            const oneHourHistoricalData = await fetchHistoricalData(currentItem.id, '5m');
-            const nowForFavMs = Date.now(); 
-
-            const oneHourAgoMsThresholdSpark = nowForFavMs - (60 * 60 * 1000);
-            const sparklinePoints = oneHourHistoricalData.filter(dp => dp.timestamp >= oneHourAgoMsThresholdSpark && dp.timestamp <= nowForFavMs);
-            if (isMountedRefreshRef.current) {
-                setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: sparklinePoints.length > 1 ? sparklinePoints : 'no_data' }));
-            }
+        if (isMountedRefreshRef.current && latest) {
+            const allItemsMap = new Map(allItems.map(item => [item.id, item]));
+            const { priceDataResult, hourlyChangeResult, sparklineDataResult } = await fetchAndProcessFavoriteItemData(currentItem.id, allItemsMap, fetchLatestPrice, fetchHistoricalData);
             
-            let priceThen: number | null = null;
-            const sortedHistoricalFav = [...oneHourHistoricalData].sort((a, b) => a.timestamp - b.timestamp);
-            const oneHourAgoMsThresholdCalc = nowForFavMs - (60 * 60 * 1000);
-            for (let i = sortedHistoricalFav.length - 1; i >= 0; i--) {
-                if (sortedHistoricalFav[i].timestamp <= oneHourAgoMsThresholdCalc) {
-                    priceThen = sortedHistoricalFav[i].price;
-                    break;
-                }
+            if (isMountedRefreshRef.current) {
+                setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: priceDataResult }));
+                setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: hourlyChangeResult }));
+                setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: sparklineDataResult }));
             }
-            if (priceThen === null && sortedHistoricalFav.length > 0) {
-                let bestFallbackCandidate: ChartDataPoint | null = null;
-                for (let i = sortedHistoricalFav.length - 1; i >= 0; i--) {
-                    if (sortedHistoricalFav[i].timestamp < oneHourAgoMsThresholdCalc) {
-                        bestFallbackCandidate = sortedHistoricalFav[i];
-                        break;
-                    }
-                }
-                 if (!bestFallbackCandidate && sortedHistoricalFav.length > 0) {
-                    priceThen = sortedHistoricalFav[0].price;
-                } else if (bestFallbackCandidate) {
-                    priceThen = bestFallbackCandidate.price;
-                }
-            }
-
-            if (priceThen !== null && latest.high !== null) {
-                const changeAbsolute = latest.high - priceThen;
-                const changePercent = priceThen !== 0 ? (changeAbsolute / priceThen) * 100 : (latest.high > 0 ? Infinity : 0);
-                if (isMountedRefreshRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: { changeAbsolute, changePercent } }));
-            } else {
-                if (isMountedRefreshRef.current) setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'no_data' }));
-            }
-          } catch (histErr) {
-             console.error(`Error refreshing 5m data for favorite ${currentItem.id} during main item refresh`, histErr);
-             if (isMountedRefreshRef.current) {
-                setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'error' }));
-                setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'error' }));
-             }
-          }
-        } else { 
-          const currentLatestInElse = latest; 
-          if (isMountedRefreshRef.current) {
-            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
-            setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: currentLatestInElse === null ? 'no_data' : 'error' }));
-          }
+        } else if (isMountedRefreshRef.current && !latest) {
+            setFavoriteItemPrices(prevPrices => ({ ...prevPrices, [currentItem.id]: 'error' }));
+            setFavoriteItemHourlyChanges(prev => ({ ...prev, [currentItem.id]: 'error' }));
+            setFavoriteItemSparklineData(prev => ({ ...prev, [currentItem.id]: 'error' }));
         }
       }
       const itemAlerts = alerts.filter(a => a.itemId === currentItem.id && a.status === 'active');
@@ -1680,7 +1940,14 @@ const App: React.FC = () => {
   }, [isPortfolioModalOpen, handleSelectItemById, togglePortfolioModal]);
 
 
-  const getSectionProps = useCallback((sectionId: string, dndProps: SectionRenderProps): SpecificAppSectionProps => {
+  const getSectionProps = useCallback((sectionId: string, dndPropsBase: Omit<SectionRenderProps, 'currentHeight' | 'isResizable' | 'onResizeMouseDown'>): SpecificAppSectionProps => {
+    const dndProps: SectionRenderProps = {
+      ...dndPropsBase,
+      currentHeight: sectionHeights[sectionId] || DEFAULT_SECTION_HEIGHT_PX,
+      isResizable: isDesktopView,
+      onResizeMouseDown: handleResizeMouseDown,
+    };
+
     switch (sectionId) {
       case SECTION_KEYS.SEARCH:
         return {
@@ -1767,7 +2034,8 @@ const App: React.FC = () => {
         throw new Error(`[App.tsx] getSectionProps: Unhandled sectionId "${sectionId}". This should have been caught earlier.`);
     }
   }, [
-    isSearchSectionCollapsed, toggleSearchSection, searchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems, searchBarWrapperRef, itemListWrapperRef, setSearchTerm,
+    sectionHeights, isDesktopView, handleResizeMouseDown, 
+    isSearchSectionCollapsed, toggleSearchSection, searchTerm, setSearchTerm, handleSearchKeyDown, activeDescendantId, filteredItems, handleSelectItem, getItemIconUrl, activeSuggestionIndex, favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems, searchBarWrapperRef, itemListWrapperRef,
     allItems, handleSelectItemById, removeFavoriteItem, favoriteItemPrices, favoriteItemHourlyChanges, favoriteItemSparklineData, showFavoriteSparklines, isRefreshingFavorites, handleRefreshAllFavorites, handleQuickSetAlertFromFavorites, isFavoritesSectionCollapsed, toggleFavoritesSection,
     topMoversData, isLoadingTopMovers, topMoversError, selectedMoversTimespan, handleSetTopMoversTimespan, handleRefreshTopMovers, isTopMoversSectionCollapsed, memoizedToggleTopMoversSection, topMoversLastFetched, topMoversCalculationMode, setTopMoversCalculationMode, topMoversMetricType, setTopMoversMetricType,
     alerts, addAlert, removeAlert, updateAlert, getItemName, addNotification, isAlertsSectionCollapsed, toggleAlertsSection
@@ -1850,6 +2118,8 @@ const App: React.FC = () => {
           enableDesktopNotifications={enableDesktopNotifications}
           onToggleDesktopNotifications={handleToggleDesktopNotifications}
           desktopNotificationPermission={desktopNotificationPermission}
+          enableInAppAlertSounds={enableInAppAlertSounds}
+          onToggleInAppAlertSounds={toggleEnableInAppAlertSounds}
           wordingPreference={wordingPreference}
           onSetWordingPreference={(pref) => {
             setWordingPreference(pref);
@@ -1925,11 +2195,11 @@ const App: React.FC = () => {
           addNotification={addNotification}
           isConsentGranted={isConsentGranted}
           onSelectItemAndClose={handleSelectPortfolioItemAndCloseModal}
-          isGoogleApiInitialized={isGoogleApiInitialized}
-          onSaveToDrive={handleSaveToDrive}
-          onLoadFromDrive={handleLoadFromDrive}
+          isGoogleApiInitialized={isDevDriveMode || isGoogleApiInitialized}
+          onSaveToDrive={isDevDriveMode ? devHandleSaveToDrive : handleSaveToDrive}
+          onLoadFromDrive={isDevDriveMode ? devHandleLoadFromDrive : handleLoadFromDrive}
           isDriveActionLoading={isDriveActionLoading}
-          driveError={driveError}
+          driveFeedback={driveFeedbackForModal}
         />
       )}
 
@@ -1982,8 +2252,13 @@ const App: React.FC = () => {
               const config = sectionsConfig[sectionId as keyof typeof sectionsConfig];
               if (!config) return null;
               const ComponentToRender = config.Component;
-              const dndRenderProps: SectionRenderProps = { sectionId, isDragAndDropEnabled, handleDragStart, draggedItem };
-              const componentProps = getSectionProps(sectionId, dndRenderProps);
+              const dndRenderPropsBase: Omit<SectionRenderProps, 'currentHeight' | 'isResizable' | 'onResizeMouseDown'> = { 
+                sectionId, 
+                isDragAndDropEnabled, 
+                handleDragStart, 
+                draggedItem 
+              };
+              const componentProps = getSectionProps(sectionId, dndRenderPropsBase);
 
               return (
                 <div 

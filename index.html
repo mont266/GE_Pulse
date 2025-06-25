@@ -1,9 +1,28 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GE Pulse - RuneScape Price Tracker</title>
+    <meta name="description" content="A web application to track Grand Exchange prices from Old School RuneScape, view historical data, and set price alerts. Uses the prices.runescape.wiki API." />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://beta.gepulse.net/" />
+    <meta property="og:title" content="GE Pulse - RuneScape Price Tracker" />
+    <meta property="og:description" content="A web application to track Grand Exchange prices from Old School RuneScape, view historical data, and set price alerts. Uses the prices.runescape.wiki API." />
+    <meta property="og:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%252338bdf8'%3E%3Cpath d='M10 50 Q25 20 40 50 T70 50 Q85 80 90 50'/%3E%3Ccircle cx='90' cy='50' r='5' fill='%2523facc15'/%3E%3C/svg%3E" />
+    <meta property="og:site_name" content="GE Pulse" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary" />
+    <meta property="twitter:url" content="https://beta.gepulse.net/" />
+    <meta property="twitter:title" content="GE Pulse - RuneScape Price Tracker" />
+    <meta property="twitter:description" content="A web application to track Grand Exchange prices from Old School RuneScape, view historical data, and set price alerts. Uses the prices.runescape.wiki API." />
+    <meta property="twitter:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%252338bdf8'%3E%3Cpath d='M10 50 Q25 20 40 50 T70 50 Q85 80 90 50'/%3E%3Ccircle cx='90' cy='50' r='5' fill='%2523facc15'/%3E%3C/svg%3E" />
+
+    <link rel="canonical" href="https://beta.gepulse.net/" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%2338bdf8'><path d='M10 50 Q25 20 40 50 T70 50 Q85 80 90 50'/><circle cx='90' cy='50' r='5' fill='%23facc15'/></svg>">
   
@@ -69,6 +88,61 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
+
+  .section-resize-handle {
+    width: calc(100% - 2rem); /* Adjust for parent padding if necessary, or make parent padding 0 */
+    margin-left: auto;
+    margin-right: auto;
+    height: 12px;
+    background-color: transparent;
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid transparent; /* For spacing if needed */
+    border-bottom: 1px solid transparent; /* For spacing if needed */
+    touch-action: none; /* Prevent scrolling on touch devices when dragging */
+  }
+
+  .section-resize-handle::before {
+    content: "";
+    display: block;
+    width: 40px; /* Width of the visual grabber line */
+    height: 4px; /* Thickness of the grabber line */
+    background-color: var(--border-secondary);
+    border-radius: 2px;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .section-resize-handle:hover::before {
+    background-color: var(--border-accent);
+  }
+  
+  /* Ensure scrollbar visibility for resizable content */
+  [id$="-content-wrapper"] { /* Affects elements with IDs like 'search-content-wrapper' */
+      scrollbar-width: thin; /* Firefox */
+      scrollbar-color: var(--border-secondary) var(--bg-tertiary); /* Firefox */
+  }
+
+  [id$="-content-wrapper"]::-webkit-scrollbar {
+      width: 8px; /* Adjust as needed */
+  }
+
+  [id$="-content-wrapper"]::-webkit-scrollbar-track {
+      background: var(--bg-tertiary); /* Or a slightly darker/lighter shade */
+      border-radius: 4px;
+  }
+
+  [id$="-content-wrapper"]::-webkit-scrollbar-thumb {
+      background-color: var(--border-secondary);
+      border-radius: 4px;
+      border: 2px solid var(--bg-tertiary); /* Creates padding around thumb */
+  }
+
+  [id$="-content-wrapper"]::-webkit-scrollbar-thumb:hover {
+      background-color: var(--border-accent);
+  }
+
 </style>
 <link rel="stylesheet" href="/index.css">
 </head>

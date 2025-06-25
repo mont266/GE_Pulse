@@ -1,5 +1,4 @@
 
-
 import { Timespan, AppTheme, WordingPreference, TopMoversCalculationMode, TopMoversMetricType, PortfolioChartTimespan } from './src/types'; // Updated import path
 
 export const API_BASE_URL = 'https://prices.runescape.wiki/api/v1/osrs';
@@ -39,7 +38,9 @@ export const VOLUME_CHART_STORAGE_KEY = 'gePulseShowVolumeChart';
 export const FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY = 'gePulseShowFavoriteSparklines';
 export const ACTIVE_THEME_STORAGE_KEY = 'gePulseActiveTheme';
 export const DESKTOP_NOTIFICATIONS_ENABLED_KEY = 'gePulseEnableDesktopNotifications';
+export const IN_APP_ALERT_SOUNDS_ENABLED_KEY = 'gePulseEnableInAppAlertSounds'; // New key
 export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
+export const SECTION_HEIGHTS_STORAGE_KEY = 'gePulseSectionHeights'; // New key for resizable sections
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
 export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; 
 
@@ -48,8 +49,15 @@ export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus';
 
 export const DEFAULT_WORDING_PREFERENCE: WordingPreference = 'uk';
 export const DEFAULT_THEME_ID = 'ge-pulse-dark';
+export const DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED = true; // New default
 export const DEFAULT_TOP_MOVERS_CALCULATION_MODE: TopMoversCalculationMode = 'performance';
 export const DEFAULT_TOP_MOVERS_METRIC_TYPE: TopMoversMetricType = 'price';
+
+// Section Resizing Constants
+export const DESKTOP_BREAKPOINT_RESIZE = 768; // md breakpoint
+export const DEFAULT_SECTION_HEIGHT_PX = 288; // Corresponds to max-h-72 (18rem * 16px/rem)
+export const MIN_SECTION_HEIGHT_PX = 150;
+export const MAX_SECTION_HEIGHT_PX = 700; // Approx 70vh to prevent overly large sections
 
 
 // Sidebar section keys - must match keys used in App.tsx's sectionsConfig
@@ -86,7 +94,9 @@ export const ALL_USER_PREFERENCE_KEYS = [
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY,
   ACTIVE_THEME_STORAGE_KEY,
   DESKTOP_NOTIFICATIONS_ENABLED_KEY,
+  IN_APP_ALERT_SOUNDS_ENABLED_KEY, 
   SIDEBAR_ORDER_STORAGE_KEY,
+  SECTION_HEIGHTS_STORAGE_KEY, // Added new key
   DRAG_DROP_ENABLED_STORAGE_KEY,
   PORTFOLIO_STORAGE_KEY, 
 ];

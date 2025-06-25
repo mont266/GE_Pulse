@@ -1,5 +1,4 @@
 
-
 import React, { useEffect } from 'react';
 import { AppTheme, WordingPreference } from '../types'; // TopMoversCalculationMode import removed
 
@@ -20,6 +19,8 @@ interface SettingsModalProps {
   enableDesktopNotifications: boolean;
   onToggleDesktopNotifications: () => void;
   desktopNotificationPermission: NotificationPermission;
+  enableInAppAlertSounds: boolean; // New prop
+  onToggleInAppAlertSounds: () => void; // New prop
   wordingPreference: WordingPreference;
   onSetWordingPreference: (preference: WordingPreference) => void;
   consentStatus: 'pending' | 'granted' | 'denied';
@@ -46,6 +47,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   enableDesktopNotifications,
   onToggleDesktopNotifications,
   desktopNotificationPermission,
+  enableInAppAlertSounds,         // Destructure new prop
+  onToggleInAppAlertSounds,     // Destructure new prop
   wordingPreference,
   onSetWordingPreference,
   consentStatus,
@@ -241,6 +244,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         Click the toggle to request notification permission from your browser.
                       </p>
                     )}
+                    {/* New Toggle for In-App Alert Sounds */}
+                    <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
+                      <span className="text-[var(--text-primary)]">In-App Alert Sounds</span>
+                      <label htmlFor="inAppAlertSoundsToggle" className="flex items-center cursor-pointer">
+                        <div className="relative">
+                          <input 
+                            type="checkbox" 
+                            id="inAppAlertSoundsToggle" 
+                            className="sr-only" 
+                            checked={enableInAppAlertSounds} 
+                            onChange={onToggleInAppAlertSounds}
+                          />
+                          <div className={`block w-12 h-6 rounded-full transition-colors bg-[${enableInAppAlertSounds ? 'var(--toggle-active-bg)' : 'var(--toggle-inactive-bg)'}]`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-[var(--toggle-handle)] w-4 h-4 rounded-full transition-transform ${enableInAppAlertSounds ? 'translate-x-6' : ''}`}></div>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 

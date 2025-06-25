@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry } from '../../src/types';
-import { UploadIcon, PasteIcon, CloudDownloadIcon } from '../Icons'; // Added CloudDownloadIcon
+import { PortfolioEntry, DriveFeedback } from '../../src/types';
+import { UploadIcon, PasteIcon, CloudDownloadIcon } from '../Icons'; 
 
 // Utility function to validate portfolio data structure
 const isValidPortfolioArray = (data: any): data is PortfolioEntry[] => {
@@ -39,11 +39,10 @@ interface ImportPortfolioModalProps {
   onClose: () => void;
   onConfirmImport: (importedData: PortfolioEntry[]) => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
-  // Google Drive Props
   isGoogleApiInitialized: boolean;
   onLoadFromDrive: () => Promise<void>;
   isDriveActionLoading: boolean;
-  driveError: string | null;
+  driveFeedback: DriveFeedback | null;
 }
 
 export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
@@ -54,7 +53,7 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
   isGoogleApiInitialized,
   onLoadFromDrive,
   isDriveActionLoading,
-  driveError,
+  driveFeedback,
 }) => {
   const [importMethod, setImportMethod] = useState<'file' | 'code' | 'drive'>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -114,7 +113,6 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
         const parsedData = JSON.parse(fileContent);
         if (isValidPortfolioArray(parsedData)) {
           onConfirmImport(parsedData);
-          // Success notification handled by onConfirmImport/PortfolioModal
         } else {
           addNotification('Invalid portfolio data structure in the JSON file.', 'error');
         }
@@ -155,14 +153,18 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
   };
   
   const handleLoadFromDriveClick = async () => {
-    if (!isGoogleApiInitialized) {
-        addNotification(driveError || "Google Drive integration is not available or not configured correctly.", "error");
-        return;
-    }
     await onLoadFromDrive(); 
-    // Success/error/confirmation handling is managed by onLoadFromDrive in App.tsx and subsequent replacePortfolio logic
   };
 
+  const getFeedbackTextColor = () => {
+    if (!driveFeedback) return 'text-[var(--text-muted)]';
+    switch (driveFeedback.type) {
+      case 'success': return 'text-[var(--price-high)]';
+      case 'error': return 'text-[var(--error-text)]';
+      case 'info':
+      default: return 'text-[var(--text-secondary)]';
+    }
+  };
 
   if (!isOpen) {
     return null;
@@ -287,7 +289,7 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
                     onClick={handleLoadFromDriveClick}
                     disabled={!isGoogleApiInitialized || isDriveActionLoading}
                     className="w-full flex items-center justify-center bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold py-3 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] disabled:opacity-60 disabled:cursor-not-allowed"
-                    title={!isGoogleApiInitialized ? (driveError || "Google Drive not available") : "Load from Google Drive"}
+                    title={!isGoogleApiInitialized ? (driveFeedback?.message || "Google Drive not available") : "Load from Google Drive"}
                 >
                      {isDriveActionLoading ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current mr-2"></div>
@@ -296,9 +298,11 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
                     )}
                     Load from Google Drive
                 </button>
-                {!isGoogleApiInitialized && (
-                    <p className="text-xs text-center text-[var(--error-text)] mt-1">{driveError || "Google Drive integration is not available."}</p>
-                )}
+                 {driveFeedback && driveFeedback.message && (
+                    <p className={`text-xs text-center mt-2 px-1 py-0.5 rounded ${getFeedbackTextColor()} ${driveFeedback.type === 'error' ? 'bg-[var(--error-bg)]/20' : driveFeedback.type === 'success' ? 'bg-[var(--price-high)]/10' : 'bg-[var(--bg-input-secondary)]'}`}>
+                        {driveFeedback.message}
+                    </p>
+                 )}
             </div>
           )}
         </div>

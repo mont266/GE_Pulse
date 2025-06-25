@@ -66,7 +66,9 @@ export const SetAlertModal: React.FC<SetAlertModalProps> = ({
     if (isOpen) {
       setTargetPriceInput('');
       setCondition('below');
-      priceInputRef.current?.focus();
+      // Price input might not be the first logical input anymore, but focusing it is still fine.
+      // User might want to set condition first then price.
+      priceInputRef.current?.focus(); 
     }
   }, [isOpen]);
 
@@ -151,6 +153,20 @@ export const SetAlertModal: React.FC<SetAlertModalProps> = ({
         ) : (
           <form onSubmit={handleSetAlert} className="space-y-4">
             <div>
+              <label htmlFor="modalCondition" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                Condition
+              </label>
+              <select
+                id="modalCondition"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
+                className="w-full p-2.5 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none"
+              >
+                <option value="below">Price drops below</option>
+                <option value="above">Price rises above</option>
+              </select>
+            </div>
+            <div>
               <label htmlFor="modalTargetPrice" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Target Price (GP)
               </label>
@@ -164,20 +180,6 @@ export const SetAlertModal: React.FC<SetAlertModalProps> = ({
                 className="w-full p-2.5 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                 required
               />
-            </div>
-            <div>
-              <label htmlFor="modalCondition" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-                Condition
-              </label>
-              <select
-                id="modalCondition"
-                value={condition}
-                onChange={(e) => setCondition(e.target.value as 'above' | 'below')}
-                className="w-full p-2.5 bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-md focus:ring-[var(--border-accent)] focus:border-[var(--border-accent)] text-[var(--text-primary)] outline-none"
-              >
-                <option value="below">Price drops below</option>
-                <option value="above">Price rises above</option>
-              </select>
             </div>
             <div className="flex space-x-3 pt-3">
               <button
