@@ -230,6 +230,7 @@ export const AddInvestmentForm: React.FC<AddInvestmentFormProps> = ({
           <div className="relative">
             {selectedItem && (
                <img
+                  loading="lazy"
                   src={`${ITEM_IMAGE_BASE_URL}${selectedItem.icon.replace(/ /g, '_')}`}
                   alt="" 
                   className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-5 h-5 object-contain pointer-events-none"

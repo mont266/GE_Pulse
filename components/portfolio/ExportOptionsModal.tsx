@@ -13,6 +13,7 @@ interface ExportOptionsModalProps {
   onSaveToDrive: () => Promise<void>;
   isDriveActionLoading: boolean;
   driveFeedback: DriveFeedback | null;
+  trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void;
 }
 
 export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
@@ -25,6 +26,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   onSaveToDrive,
   isDriveActionLoading,
   driveFeedback,
+  trackGaEvent,
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -61,10 +63,16 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       addNotification("Portfolio exported to JSON file successfully!", "success");
+      if (trackGaEvent) {
+        trackGaEvent('portfolio_export_local', { method: 'json', status: 'success' });
+      }
       onClose();
     } catch (error) {
       console.error("Error exporting portfolio to JSON:", error);
       addNotification("Failed to export portfolio as JSON.", "error");
+      if (trackGaEvent) {
+        trackGaEvent('portfolio_export_local', { method: 'json', status: 'error', error_message: (error as Error).message });
+      }
     }
   };
 
@@ -73,12 +81,15 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       addNotification("No portfolio data to export.", "info");
       return;
     }
+    if (trackGaEvent) {
+      trackGaEvent('portfolio_export_local', { method: 'code', status: 'success' });
+    }
     onShowCodeModalRequest();
     onClose(); 
   };
 
   const handleSaveToDriveClick = async () => {
-    // Notification of success/failure handled by onSaveToDrive in App.tsx via driveFeedback prop
+    // GA events for Drive save/load are handled in App.tsx (onSaveToDrive/onLoadFromDrive callbacks)
     await onSaveToDrive();
   };
 

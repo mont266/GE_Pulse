@@ -151,6 +151,7 @@ export const EditInvestmentModal: React.FC<EditInvestmentModalProps> = ({
 
         <div className="flex items-center mb-6 p-3 bg-[var(--bg-input-secondary)] rounded-md">
           <img
+            loading="lazy"
             src={`${ITEM_IMAGE_BASE_URL}${itemInfo.icon.replace(/ /g, '_')}`}
             alt={itemInfo.name}
             className="w-12 h-12 mr-4 object-contain flex-shrink-0"

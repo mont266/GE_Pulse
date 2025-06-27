@@ -58,6 +58,7 @@ export const PriceAlertList: React.FC<PriceAlertListProps> = ({ alerts, onRemove
           <div className="flex items-center space-x-3 flex-grow">
             <AlertIcon status={alert.status} />
             <img 
+              loading="lazy"
               src={getItemIconUrl(alert.itemIcon)} 
               alt={alert.itemName} 
               className="w-10 h-10 object-contain flex-shrink-0" 

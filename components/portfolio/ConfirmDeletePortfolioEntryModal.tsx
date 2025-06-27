@@ -84,6 +84,7 @@ export const ConfirmDeletePortfolioEntryModal: React.FC<ConfirmDeletePortfolioEn
         <div className="mb-6 p-3 bg-[var(--bg-input-secondary)] rounded-md space-y-1">
           <div className="flex items-center">
             <img 
+              loading="lazy"
               src={getItemIconUrl(entryToDelete.itemId.toString())} // Assuming getItemIconUrl needs string ID or find item first for icon string
               alt={itemName} 
               className="w-8 h-8 mr-3 object-contain flex-shrink-0"

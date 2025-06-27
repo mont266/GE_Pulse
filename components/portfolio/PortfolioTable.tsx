@@ -1,7 +1,10 @@
-
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { PortfolioEntry, ItemMapInfo, LatestPriceData } from '../../src/types';
-import { TrashIcon, EditIcon } from '../Icons'; // Import EditIcon
+import { TrashIcon, EditIcon, PortfolioIcon } from '../Icons';
+
+type SortKey = 
+  | 'item' | 'qtyRemaining' | 'avgBuy' | 'totalCost' | 'currPrice' | 'currValue' | 'unrealPL' | 'date'
+  | 'qtySold' | 'avgSell' | 'totalProceeds' | 'taxPaid' | 'realPL' | 'saleDate';
 
 interface PortfolioTableProps {
   entries: PortfolioEntry[];
@@ -13,7 +16,7 @@ interface PortfolioTableProps {
   onSellAction?: (entry: PortfolioEntry) => void; 
   onDeleteAction?: (entry: PortfolioEntry) => void; 
   onEditAction?: (entry: PortfolioEntry) => void;
-  onSelectItemAction?: (itemId: number) => void; // New prop for item click
+  onSelectItemAction?: (itemId: number) => void;
 }
 
 const formatGP = (value?: number | null, shorthand: boolean = false): string => {
@@ -41,13 +44,128 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
   onSellAction,
   onDeleteAction, 
   onEditAction,
-  onSelectItemAction, // Destructure new prop
+  onSelectItemAction,
 }) => {
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(() => {
+    // Sensible default sort
+    if (tableType === 'open') {
+      return { key: 'unrealPL', direction: 'desc' };
+    }
+    return { key: 'realPL', direction: 'desc' };
+  });
+
+  const sortedEntries = useMemo(() => {
+    let sortableItems = [...entries];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const getSortableValue = (entry: PortfolioEntry, key: SortKey): string | number | null => {
+          const itemInfo = allItems.find(i => i.id === entry.itemId);
+          if (!itemInfo) return null;
+
+          const qtyPurchased = entry.quantityPurchased;
+          const purchasePrice = entry.purchasePricePerItem;
+          const qtyRemaining = qtyPurchased - entry.quantitySoldFromThisLot;
+          const livePriceData = livePrices[entry.itemId];
+          const currentPrice = livePriceData?.high ?? null;
+
+          switch (key) {
+            case 'item': return getItemName(entry.itemId);
+            case 'date': return entry.purchaseDate;
+            case 'saleDate': return entry.lastSaleDate || entry.purchaseDate;
+            
+            case 'qtyRemaining': return qtyRemaining;
+            case 'avgBuy': return purchasePrice;
+            case 'totalCost':
+              if (tableType === 'open') return qtyRemaining * purchasePrice;
+              return entry.quantitySoldFromThisLot * purchasePrice;
+            
+            case 'currPrice': return currentPrice;
+            case 'currValue': return currentPrice !== null ? qtyRemaining * currentPrice : null;
+            case 'unrealPL': {
+              const costOfRem = qtyRemaining * purchasePrice;
+              const currValue = currentPrice !== null ? qtyRemaining * currentPrice : null;
+              return currValue !== null ? currValue - costOfRem : null;
+            }
+
+            case 'qtySold': return entry.quantitySoldFromThisLot;
+            case 'avgSell': return entry.quantitySoldFromThisLot > 0 ? entry.totalProceedsFromThisLot / entry.quantitySoldFromThisLot : 0;
+            case 'totalProceeds': return entry.totalProceedsFromThisLot;
+            case 'taxPaid': return entry.totalTaxPaidFromThisLot;
+            case 'realPL': {
+              const costOfSold = entry.quantitySoldFromThisLot * purchasePrice;
+              return (entry.totalProceedsFromThisLot - costOfSold) - entry.totalTaxPaidFromThisLot;
+            }
+            default: return null;
+          }
+        };
+
+        const valA = getSortableValue(a, sortConfig.key);
+        const valB = getSortableValue(b, sortConfig.key);
+
+        if (valA === null) return 1;
+        if (valB === null) return -1;
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          return sortConfig.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+        
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+        }
+
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [entries, sortConfig, livePrices, allItems, getItemName, tableType]);
+
+
+  const requestSort = (key: SortKey) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else {
+      if (['unrealPL', 'realPL', 'totalCost', 'currValue', 'date', 'saleDate'].includes(key)) {
+        direction = 'desc';
+      }
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const SortableHeader: React.FC<{ sortKey: SortKey, children: React.ReactNode, numeric?: boolean }> = ({ sortKey, children, numeric }) => {
+    const isSorting = sortConfig?.key === sortKey;
+    return (
+      <th
+        scope="col"
+        className={`sticky top-0 z-10 bg-[var(--bg-input-secondary)] px-3 py-3 text-left text-xs font-medium text-[var(--text-accent)] uppercase tracking-wider ${numeric ? 'text-right' : ''}`}
+      >
+        <button onClick={() => requestSort(sortKey)} className={`flex items-center gap-1 w-full ${numeric ? 'justify-end' : ''} transition-colors hover:text-[var(--text-primary)]`}>
+          {children}
+          <span className="text-base">
+            {isSorting ? (sortConfig.direction === 'asc' ? '▲' : '▼') : <span className="opacity-30">↕</span>}
+          </span>
+        </button>
+      </th>
+    );
+  };
+
   if (entries.length === 0) {
-    return <p className="text-[var(--text-secondary)] text-center py-6">No {tableType} positions found.</p>;
+    return (
+      <div className="relative flex flex-col items-center justify-center text-center py-10 text-[var(--text-secondary)] overflow-hidden">
+        <PortfolioIcon className="absolute w-28 h-28 text-[var(--bg-tertiary)] opacity-60" />
+        <div className="relative">
+            <p className="font-semibold text-base text-[var(--text-primary)]">No {tableType} positions found</p>
+            {tableType === 'open' ? (
+                <p className="text-sm mt-1 text-[var(--text-secondary)]">Use the "Add New" tab to log an investment.</p>
+            ) : (
+                 <p className="text-sm mt-1 text-[var(--text-secondary)]">Sold investments will appear here.</p>
+            )}
+        </div>
+      </div>
+    );
   }
 
-  const columnsOpen = [
+  const columnsOpen: { header: string, accessor: SortKey, numeric?: boolean, shorthand?: boolean }[] = [
     { header: 'Item', accessor: 'item' },
     { header: 'Qty Rem.', accessor: 'qtyRemaining', numeric: true },
     { header: 'Avg. Buy', accessor: 'avgBuy', numeric: true, shorthand: true },
@@ -56,10 +174,9 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
     { header: 'Curr. Value', accessor: 'currValue', numeric: true, shorthand: true },
     { header: 'Unreal. P/L', accessor: 'unrealPL', numeric: true, shorthand: true },
     { header: 'Date', accessor: 'date' },
-    { header: 'Actions', accessor: 'actions'},
   ];
 
-  const columnsClosed = [
+  const columnsClosed: { header: string, accessor: SortKey, numeric?: boolean, shorthand?: boolean }[] = [
     { header: 'Item', accessor: 'item' },
     { header: 'Qty Sold', accessor: 'qtySold', numeric: true },
     { header: 'Avg. Buy', accessor: 'avgBuy', numeric: true, shorthand: true },
@@ -69,7 +186,6 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
     { header: 'Tax Paid', accessor: 'taxPaid', numeric: true, shorthand: true },
     { header: 'Real. P/L', accessor: 'realPL', numeric: true, shorthand: true },
     { header: 'Sale Date', accessor: 'saleDate' },
-    { header: 'Actions', accessor: 'actions' }, // Added Actions column for closed
   ];
 
   const columns = tableType === 'open' ? columnsOpen : columnsClosed;
@@ -80,18 +196,15 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
         <thead className="bg-[var(--bg-input-secondary)]">
           <tr>
             {columns.map(col => (
-              <th
-                key={col.accessor}
-                scope="col"
-                className={`px-3 py-3 text-left text-xs font-medium text-[var(--text-accent)] uppercase tracking-wider ${col.numeric ? 'text-right' : ''} ${col.accessor === 'actions' ? 'text-center' : ''}`}
-              >
+              <SortableHeader key={col.accessor} sortKey={col.accessor} numeric={col.numeric}>
                 {col.header}
-              </th>
+              </SortableHeader>
             ))}
+             <th scope="col" className="sticky top-0 z-10 bg-[var(--bg-input-secondary)] px-3 py-3 text-center text-xs font-medium text-[var(--text-accent)] uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-[var(--bg-secondary)] divide-y divide-[var(--border-primary)]">
-          {entries.map(entry => {
+          {sortedEntries.map(entry => {
             const itemInfo = allItems.find(i => i.id === entry.itemId);
             if (!itemInfo) return null; 
 
@@ -121,14 +234,14 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
                         className="flex items-center group focus:outline-none focus:ring-1 focus:ring-[var(--border-accent)] focus:ring-offset-1 focus:ring-offset-[var(--bg-secondary)] rounded-sm p-0.5 -m-0.5 w-full text-left"
                         aria-label={`View details for ${itemInfo.name}`}
                     >
-                        <img src={getItemIconUrl(itemInfo.icon)} alt="" className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
+                        <img loading="lazy" src={getItemIconUrl(itemInfo.icon)} alt="" className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
                         <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors truncate" title={itemInfo.name}>
                         {itemInfo.name}
                         </span>
                     </button>
                   ) : (
                     <div className="flex items-center">
-                        <img src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
+                        <img loading="lazy" src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-7 h-7 mr-2 object-contain flex-shrink-0" />
                         <span className="text-sm text-[var(--text-primary)] truncate" title={itemInfo.name}>{itemInfo.name}</span>
                     </div>
                   )}

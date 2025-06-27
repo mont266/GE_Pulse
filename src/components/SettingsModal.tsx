@@ -1,4 +1,5 @@
 
+
 import React, { useEffect } from 'react';
 import { AppTheme, WordingPreference } from '../types'; // TopMoversCalculationMode import removed
 
@@ -19,15 +20,15 @@ interface SettingsModalProps {
   enableDesktopNotifications: boolean;
   onToggleDesktopNotifications: () => void;
   desktopNotificationPermission: NotificationPermission;
-  enableInAppAlertSounds: boolean; // New prop
-  onToggleInAppAlertSounds: () => void; // New prop
+  enableInAppAlertSounds: boolean;
+  onToggleInAppAlertSounds: () => void;
   wordingPreference: WordingPreference;
   onSetWordingPreference: (preference: WordingPreference) => void;
   consentStatus: 'pending' | 'granted' | 'denied';
   onGrantConsent: () => void;
   onRevokeConsent: () => void;
   isDragAndDropEnabled: boolean; 
-  onToggleDragAndDrop: () => void; 
+  onToggleDragAndDrop: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -47,15 +48,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   enableDesktopNotifications,
   onToggleDesktopNotifications,
   desktopNotificationPermission,
-  enableInAppAlertSounds,         // Destructure new prop
-  onToggleInAppAlertSounds,     // Destructure new prop
+  enableInAppAlertSounds,
+  onToggleInAppAlertSounds,
   wordingPreference,
   onSetWordingPreference,
   consentStatus,
   onGrantConsent,
   onRevokeConsent,
   isDragAndDropEnabled, 
-  onToggleDragAndDrop, 
+  onToggleDragAndDrop,
 }) => {
 
   useEffect(() => {
@@ -284,7 +285,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-3">Quick Access</h3>
+                  <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-3">Layout Settings</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-[var(--bg-input-secondary)] rounded-md">
                       <span className="text-[var(--text-primary)]">Enable Section Reordering</span>

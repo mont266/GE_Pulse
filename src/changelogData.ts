@@ -1,20 +1,38 @@
-
 import { ChangelogEntry } from './types';
 
 // Entries should be in reverse chronological order (newest first)
 export const changelogEntries: ChangelogEntry[] = [
   {
+    version: "Beta v0.14",
+    date: "2025-06-27",
+    changes: [
+      "Hyperlinked item images on the main item display to their corresponding Old School RuneScape Wiki pages, opening in a new tab.",
+      "Added a 'Reset Section Heights' button for desktop users, conveniently located above the sidebar sections. The button appears only when section heights have been customized.",
+      "Added visual feedback for chart loading. The price chart now dims and displays a loading spinner while new data is being fetched for a different timespan, providing a smoother user experience.",
+      "Added sortable columns to the portfolio tables. Users can now click on headers for 'Open' and 'Closed' positions to sort by P/L, date, name, and other metrics.",
+      "Enhanced empty state displays: Added large, contextual background icons to the Favorites List, Portfolio tables, and main Item Display area for a more polished UI when no content is present.",
+      "Integrated fuzzy search (`fuse.js`) into the main item search bar to provide more forgiving and relevant search results, correcting for typos and partial matches.",
+      "Added a 'New' indicator for updates. It appears on the changelog button in the footer and on the latest changelog entry when a new version is released. The indicator is cleared after the user views the changelog.",
+      "Added 'Top Trade' to Portfolio Snapshot: Displays the item name (clickable) and net profit of the user's most profitable closed trade.",
+      "Refined UI for 'Top Trade' in Portfolio Snapshot: Item name is now white by default, blue on hover/focus, and without underline on hover, matching app-wide link styling.",
+      "Added RuneScape Name (RSN) input to Portfolio Snapshot, allowing users to personalize the snapshot title (e.g., 'YourUsername's Snapshot'). RSN is saved to local preferences if consent is granted.",
+      "The 'Your Snapshot' title in the Portfolio modal is now positioned further to the left of its section for improved layout.",
+      "Implemented lazy loading for images to get faster initial load times for the site.",
+      "iOS compatiability update",
+    ],
+    notes: "This major update focuses on widespread UI/UX enhancements and critical compatibility fixes. Key features include a more intelligent fuzzy search, sortable portfolio tables, and improved visual feedback across the app. The portfolio snapshot is enhanced with a 'Top Trade' view and RSN personalization. Importantly, this release also includes crucial updates to ensure compatibility with iOS devices."
+  },
+  {
     version: "Beta v0.13",
-    date: "2025-06-25", // Date updated to reflect the latest change
+    date: "2025-06-25", 
     changes: [
       "Added resizable sidebar sections for desktop users. Section heights can now be adjusted by dragging a handle and are saved to local preferences if consent is granted.",
       "Improved in-app alert sound: Changed from a simple beep to a more distinct 'ding' or 'chime-like' sound for better notification recognition.",
       "Added toggleable in-app sound notifications for triggered price alerts (enabled by default). A short beep will play when an alert condition is met if the setting is active.",
       "Reordered fields in Price Alert modals: 'Condition' (above/below) now appears before 'Target Price' for a more intuitive user flow.",
-      "Added in-modal text confirmations for Google Drive save and load operations. Success messages are green, failures are red, and informational messages (like dev mode active) are also displayed directly in the save/load modals.",
+      "Added in-modal text confirmations for Google Drive save and load operations. Success messages are green, failures are red, and informational messages (like dev mode active) are displayed directly in the save/load modals.",
       "Optimized Favorite Item Loading: Significantly improved the loading speed and reliability of favorite items. Data for all favorited items (latest price, hourly change, and sparkline) is now fetched in parallel. This makes the initial display and refreshes much faster and more resilient to individual item data fetching errors, preventing the entire list from stalling due to a single problematic item.",
       "Updated the 'Share' icon in the Item Display header to a more universally recognized network/connection symbol for better clarity on its link-sharing functionality.",
-      "Preparing groundwork for upcoming features and improvements.",
     ],
     notes: "Focus for this version includes enhanced alert notifications (sound and UI), UI/UX refinements, performance enhancements, and improved layout flexibility for desktop users."
   },

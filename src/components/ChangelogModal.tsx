@@ -7,9 +7,10 @@ interface ChangelogModalProps {
   isOpen: boolean;
   onClose: () => void;
   entries: ChangelogEntry[];
+  hasNewUpdate?: boolean;
 }
 
-export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose, entries }) => {
+export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose, entries, hasNewUpdate }) => {
   const [expandedEntries, setExpandedEntries] = useState<string[]>(() =>
     entries.length > 0 ? [entries[0].version] : []
   );
@@ -81,6 +82,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose,
           ) : (
             entries.map((entry, index) => {
               const isExpanded = expandedEntries.includes(entry.version);
+              const isLatestAndNew = index === 0 && hasNewUpdate;
               return (
                 <div key={entry.version} className={`py-1 ${index < entries.length -1 ? 'border-b border-[var(--border-primary)]' : ''}`}>
                   <button
@@ -90,7 +92,14 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose,
                     aria-controls={`changelog-details-${entry.version}`}
                   >
                     <div className="text-left">
-                      <h3 className="text-lg font-semibold text-[var(--text-accent)]">{entry.version}</h3>
+                      <h3 className="text-lg font-semibold text-[var(--text-accent)] flex items-center gap-2">
+                        <span>{entry.version}</span>
+                        {isLatestAndNew && (
+                            <span className="px-2 py-0.5 text-[0.6rem] font-bold leading-none text-white bg-[var(--price-high)] rounded-full animate-pulse">
+                            NEW
+                            </span>
+                        )}
+                      </h3>
                       <p className="text-xs text-[var(--text-muted)]">
                         {new Date(entry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                       </p>

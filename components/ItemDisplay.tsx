@@ -179,16 +179,28 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
     }
   }
 
+  const wikiUrl = `https://oldschool.runescape.wiki/w/${item.name.replace(/ /g, '_')}`;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center sm:items-start p-4 bg-[var(--bg-secondary-alpha)] rounded-lg gap-4">
-        <img
-          key={item.id} 
-          src={currentImageUrl}
-          alt={item.name}
-          className="w-20 h-20 sm:w-24 sm:h-24 object-contain flex-shrink-0"
-          onError={handleImageError}
-        />
+        <a
+          href={wikiUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary-alpha)] transition-transform hover:scale-105"
+          title={`View ${item.name} on the OSRS Wiki`}
+          aria-label={`View ${item.name} on the OSRS Wiki`}
+        >
+          <img
+            loading="lazy"
+            key={item.id} 
+            src={currentImageUrl}
+            alt={item.name}
+            className="w-20 h-20 sm:w-24 sm:h-24 object-contain"
+            onError={handleImageError}
+          />
+        </a>
         <div className="text-center sm:text-left flex-grow">
           <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <h2 className="text-3xl font-bold text-[var(--text-accent)]">{item.name}</h2>
@@ -212,7 +224,7 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
                   {isFavorited ? (
                     <FilledHeartIcon className="w-7 h-7 text-[var(--favorite-icon-favorited)]" />
                   ) : (
-                    <EmptyHeartIcon className="w-7 h-7 text-[var(--favorite-icon-default)] hover:text-[var(--favorite-icon-favorited)]" />
+                    <EmptyHeartIcon className="w-7 h-7 text-[var(--icon-button-default-text)] hover:text-[var(--favorite-icon-favorited)]" />
                   )}
                 </button>
                 <button
@@ -256,33 +268,42 @@ export const ItemDisplay: React.FC<ItemDisplayProps> = ({
         </div>
       </div>
 
-      {isLoading && (
-        <div className="flex flex-col items-center justify-center h-64">
-          <LoadingSpinner />
-          <p className="mt-2 text-[var(--text-secondary)]">Loading price data...</p>
-        </div>
-      )}
-      {error && !isLoading && <p className="text-[var(--price-low)] text-center py-4">{error}</p>}
-      
-      {!isLoading && !error && (
-        <>
-          <TimespanSelector selectedTimespan={selectedTimespan} onSelectTimespan={onTimespanChange} />
-          <div className="h-[500px] md:h-[600px] w-full">
-            {historicalData.length > 0 ? (
-              <PriceChart 
-                data={historicalData} 
-                showGrid={showChartGrid} 
-                showLineGlow={showChartLineGlow}
-                showVolumeChart={showVolumeChart} 
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-[var(--text-muted)]">
-                <p>No historical data available for this timespan.</p>
-              </div>
-            )}
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-[var(--bg-secondary)]/70 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-lg">
+            <LoadingSpinner />
+            <p className="mt-2 text-[var(--text-secondary)]">Loading price data...</p>
           </div>
-        </>
-      )}
+        )}
+        
+        {error && !isLoading && (
+          <div className="h-[500px] md:h-[600px] flex items-center justify-center">
+             <p className="text-[var(--price-low)] text-center py-4">{error}</p>
+          </div>
+        )}
+      
+        {!error && (
+          <>
+            <TimespanSelector selectedTimespan={selectedTimespan} onSelectTimespan={onTimespanChange} />
+            <div className="h-[500px] md:h-[600px] w-full">
+              {historicalData.length > 0 ? (
+                <PriceChart 
+                  data={historicalData} 
+                  showGrid={showChartGrid} 
+                  showLineGlow={showChartLineGlow}
+                  showVolumeChart={showVolumeChart} 
+                />
+              ) : (
+                !isLoading && (
+                  <div className="flex items-center justify-center h-full text-[var(--text-muted)]">
+                    <p>No historical data available for this timespan.</p>
+                  </div>
+                )
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

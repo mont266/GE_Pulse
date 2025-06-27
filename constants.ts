@@ -27,6 +27,7 @@ export const PORTFOLIO_CHART_TIMESPAN_OPTIONS: { label: string; value: Portfolio
 export const ALERT_CHECK_INTERVAL = 60 * 1000; // 60 seconds
 export const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const AUTO_REFRESH_INTERVAL_SECONDS = 300; // 5 minutes
+export const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Storage Keys
 export const FAVORITES_STORAGE_KEY = 'gePulseFavoriteItems';
@@ -43,6 +44,10 @@ export const SIDEBAR_ORDER_STORAGE_KEY = 'gePulseSidebarOrder';
 export const SECTION_HEIGHTS_STORAGE_KEY = 'gePulseSectionHeights'; // New key for resizable sections
 export const DRAG_DROP_ENABLED_STORAGE_KEY = 'gePulseDragDropEnabled';
 export const PORTFOLIO_STORAGE_KEY = 'gePulsePortfolio'; 
+export const RSN_STORAGE_KEY = 'gePulseUserRsn'; // Key for RSN
+export const ITEM_MAPPING_CACHE_KEY = 'gePulseItemMappingCache';
+export const ITEM_MAPPING_TIMESTAMP_KEY = 'gePulseItemMappingTimestamp';
+export const LAST_SEEN_CHANGELOG_VERSION_STORAGE_KEY = 'gePulseLastSeenChangelogVersion';
 
 export const CONSENT_STORAGE_KEY = 'gePulseConsentStatus'; 
 
@@ -99,6 +104,10 @@ export const ALL_USER_PREFERENCE_KEYS = [
   SECTION_HEIGHTS_STORAGE_KEY, // Added new key
   DRAG_DROP_ENABLED_STORAGE_KEY,
   PORTFOLIO_STORAGE_KEY, 
+  RSN_STORAGE_KEY, // Added RSN key
+  ITEM_MAPPING_CACHE_KEY,
+  ITEM_MAPPING_TIMESTAMP_KEY,
+  LAST_SEEN_CHANGELOG_VERSION_STORAGE_KEY,
 ];
 
 

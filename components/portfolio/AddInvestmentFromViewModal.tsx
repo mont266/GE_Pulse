@@ -179,6 +179,7 @@ export const AddInvestmentFromViewModal: React.FC<AddInvestmentFromViewModalProp
 
         <div className="flex items-center mb-6 p-3 bg-[var(--bg-input-secondary)] rounded-md">
           <img
+            loading="lazy"
             src={getItemIconUrl(itemToAdd.icon)}
             alt={itemToAdd.name}
             className="w-12 h-12 mr-4 object-contain flex-shrink-0"

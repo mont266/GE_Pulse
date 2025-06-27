@@ -62,6 +62,7 @@ const MoverListItem: React.FC<{
         aria-label={`View details for ${item.name}, ${metricType} change ${displayChange}`}
       >
         <img
+          loading="lazy"
           src={getItemIconUrl(item.icon)}
           alt=""
           className="w-7 h-7 object-contain flex-shrink-0 sm:mt-0.5" 

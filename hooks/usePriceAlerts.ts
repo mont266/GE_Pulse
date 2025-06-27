@@ -8,7 +8,9 @@ type FetchPriceFn = (itemId: number) => Promise<LatestPriceData | null>;
 export const usePriceAlerts = (
   onAlertTriggered: (alert: PriceAlert) => void,
   fetchPrice: FetchPriceFn,
-  isConsentGranted: boolean // Added to control localStorage access
+  isConsentGranted: boolean,
+  trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void,
+  getItemName?: (itemId: number) => string
 ) => {
   const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
     if (isConsentGranted) {
@@ -22,9 +24,9 @@ export const usePriceAlerts = (
     return [];
   });
 
-  const alertsRef = useRef(alerts); // Create a ref to hold the current alerts
+  const alertsRef = useRef(alerts); 
   useEffect(() => {
-    alertsRef.current = alerts; // Keep the ref updated
+    alertsRef.current = alerts; 
   }, [alerts]);
 
 
@@ -36,14 +38,11 @@ export const usePriceAlerts = (
         console.error("Error saving alerts to localStorage:", error);
       }
     }
-    // If consent is not granted, alerts are only in-memory for the session.
-    // If consent is revoked, App.tsx handles clearing the localStorage directly.
   }, [alerts, isConsentGranted]);
 
-  // Effect to clear in-memory alerts if consent is revoked
   useEffect(() => {
     if (!isConsentGranted) {
-      setAlerts([]); // Clear in-memory alerts if consent is no longer granted
+      setAlerts([]); 
     }
   }, [isConsentGranted]);
 
@@ -59,10 +58,27 @@ export const usePriceAlerts = (
   }, []);
 
   const removeAlert = useCallback((alertId: string) => {
+    if (trackGaEvent && getItemName && isConsentGranted) {
+      const alertToRemove = alertsRef.current.find(alert => alert.id === alertId);
+      if (alertToRemove) {
+        trackGaEvent('remove_price_alert', { item_id: alertToRemove.itemId, item_name: getItemName(alertToRemove.itemId) });
+      }
+    }
     setAlerts(prevAlerts => prevAlerts.filter(alert => alert.id !== alertId));
-  }, []);
+  }, [trackGaEvent, getItemName, isConsentGranted]);
 
   const updateAlert = useCallback((alertId: string, updatedValues: { targetPrice: number; condition: 'above' | 'below' }) => {
+    if (trackGaEvent && getItemName && isConsentGranted) {
+      const alertToUpdate = alertsRef.current.find(alert => alert.id === alertId && alert.status === 'active');
+      if (alertToUpdate) {
+        trackGaEvent('update_price_alert', {
+          item_id: alertToUpdate.itemId,
+          item_name: getItemName(alertToUpdate.itemId),
+          target_price: updatedValues.targetPrice,
+          condition: updatedValues.condition
+        });
+      }
+    }
     setAlerts(prevAlerts =>
       prevAlerts.map(alert => {
         if (alert.id === alertId && alert.status === 'active') {
@@ -75,14 +91,14 @@ export const usePriceAlerts = (
         return alert;
       })
     );
-  }, []);
+  }, [trackGaEvent, getItemName, isConsentGranted]);
 
   const checkAlerts = useCallback(async (alertsToCheck: PriceAlert[], specificPrices?: Record<number, LatestPriceData>) => {
-    const currentAlertsState = alertsRef.current; // Read from ref
-    const updatedAlertsFromState = [...currentAlertsState]; // Make a mutable copy
+    const currentAlertsState = alertsRef.current; 
+    const updatedAlertsFromState = [...currentAlertsState]; 
     let anyAlertTriggeredThisCheck = false;
 
-    for (const alertToCheck of alertsToCheck) { // Iterate over the subset passed in
+    for (const alertToCheck of alertsToCheck) { 
       if (alertToCheck.status !== 'active') continue;
 
       const originalAlertIndex = updatedAlertsFromState.findIndex(a => a.id === alertToCheck.id);
@@ -122,11 +138,11 @@ export const usePriceAlerts = (
     if (anyAlertTriggeredThisCheck) {
       setAlerts(updatedAlertsFromState); 
     }
-  }, [fetchPrice, onAlertTriggered, setAlerts]); // Removed 'alerts' from deps, alertsRef handles it
+  }, [fetchPrice, onAlertTriggered]); 
 
   useEffect(() => {
     const activeAlertsToCheck = alertsRef.current.filter(alert => alert.status === 'active');
-    if (activeAlertsToCheck.length === 0 || !isConsentGranted) return; // Added isConsentGranted check
+    if (activeAlertsToCheck.length === 0 || !isConsentGranted) return;
 
     const intervalId = setInterval(() => {
       console.log('Periodically checking alerts...', new Date().toLocaleTimeString());
@@ -137,12 +153,10 @@ export const usePriceAlerts = (
     }, ALERT_CHECK_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [checkAlerts, isConsentGranted]); // checkAlerts is now stable
+  }, [checkAlerts, isConsentGranted]); 
 
   const clearAllAlertsAndStorage = useCallback(() => {
     setAlerts([]);
-    // App.tsx will handle removing from localStorage based on ALL_USER_PREFERENCE_KEYS
-    // which includes ALERTS_STORAGE_KEY.
   }, []);
 
   return { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage };

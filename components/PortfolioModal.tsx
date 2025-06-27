@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint, DriveFeedback } from '../src/types'; 
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint, DriveFeedback, PortfolioSummaryProps } from '../src/types'; 
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
@@ -13,8 +13,8 @@ import { DisplayCodeModal } from './portfolio/DisplayCodeModal';
 import { ImportPortfolioModal } from './portfolio/ImportPortfolioModal';
 import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal'; 
 import { PortfolioPerformanceTab } from './portfolio/PortfolioPerformanceTab';
-import { LoadingSpinner } from './LoadingSpinner'; 
-import { TrashIcon, UploadIcon, DownloadIcon, CloudUploadIcon, CloudDownloadIcon } from './Icons'; 
+import { LoadingSpinner } from '../components/LoadingSpinner'; 
+import { TrashIcon, UploadIcon, DownloadIcon, CloudUploadIcon, CloudDownloadIcon } from '../components/Icons'; 
 import { fetchHistoricalData as appFetchHistoricalData } from '../services/runescapeService';
 
 
@@ -35,13 +35,15 @@ interface PortfolioModalProps {
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   isConsentGranted: boolean; 
   onSelectItemAndClose: (itemId: number) => void;
+  userRsn: string; 
+  onUserRsnChange: (newRsn: string) => void; 
 
-  // Google Drive Props
   isGoogleApiInitialized: boolean;
   onSaveToDrive: () => Promise<void>; 
   onLoadFromDrive: () => Promise<void>; 
   isDriveActionLoading: boolean;
   driveFeedback: DriveFeedback | null; 
+  trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void;
 }
 
 const PORTFOLIO_TABS = [
@@ -71,12 +73,14 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   addNotification,
   isConsentGranted,
   onSelectItemAndClose,
-  // Google Drive Props
+  userRsn, 
+  onUserRsnChange, 
   isGoogleApiInitialized,
   onSaveToDrive,
   onLoadFromDrive,
   isDriveActionLoading,
   driveFeedback,
+  trackGaEvent,
 }) => {
   const [activeTab, setActiveTab] = useState<PortfolioTabKey>('open');
   const [itemToSell, setItemToSell] = useState<PortfolioEntry | null>(null);
@@ -341,6 +345,9 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
                 getItemName={getItemName} 
                 onRefreshPrices={fetchAllLivePrices}
                 isLoadingPrices={isLoadingPrices}
+                onSelectItemAndClose={onSelectItemAndClose}
+                userRsn={userRsn}
+                onUserRsnChange={onUserRsnChange}
             />
         )}
 
@@ -507,6 +514,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
             onSaveToDrive={onSaveToDrive}
             isDriveActionLoading={isDriveActionLoading}
             driveFeedback={driveFeedback}
+            trackGaEvent={trackGaEvent}
           />
         )}
 

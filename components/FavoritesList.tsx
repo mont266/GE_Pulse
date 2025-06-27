@@ -136,13 +136,15 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                 Enable preference storage in settings to use {favTermEmpty}s.
               </p>
             ) : favoriteItems.length === 0 ? (
-              <p className="text-[var(--text-secondary)] text-center py-3">
-                No {favTermEmpty} items yet. Click the <span className="inline-block align-middle mx-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="var(--favorite-icon-default)" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                  </svg>
-                </span> icon on an item's page to add it!
-              </p>
+              <div className="relative flex flex-col items-center justify-center text-center py-8 text-[var(--text-secondary)] overflow-hidden">
+                <EmptyHeartIcon className="absolute w-28 h-28 text-[var(--bg-tertiary)] opacity-70" />
+                <div className="relative">
+                  <p className="font-semibold text-base text-[var(--text-primary)]">No {favTermEmpty} items yet</p>
+                  <p className="text-sm mt-1 text-[var(--text-secondary)]">
+                    Click the <EmptyHeartIcon className="w-4 h-4 inline-block align-text-bottom mx-0.5" /> icon on an item to add it here.
+                  </p>
+                </div>
+              </div>
             ) : (
               <ul className="space-y-2">
                 {favoriteItems.map(item => {
@@ -199,6 +201,7 @@ export const FavoritesList: React.FC<FavoritesListProps> = ({
                         aria-label={`View details for ${item.name}`}
                       >
                         <img
+                          loading="lazy"
                           src={getItemIconUrl(item.icon)}
                           alt="" 
                           className="w-8 h-8 object-contain flex-shrink-0"

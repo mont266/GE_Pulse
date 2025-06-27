@@ -77,6 +77,7 @@ export const ItemList: React.FC<ItemListProps> = ({
               `}
             >
               <img 
+                loading="lazy"
                 src={getItemIconUrl(item.icon)} 
                 alt=""
                 className="w-8 h-8 mr-3 object-contain flex-shrink-0" 

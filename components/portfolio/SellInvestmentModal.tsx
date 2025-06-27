@@ -154,7 +154,7 @@ export const SellInvestmentModal: React.FC<SellInvestmentModalProps> = ({
         </div>
         
         <div className="flex items-center mb-4 p-3 bg-[var(--bg-input-secondary)] rounded-md">
-            <img src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-10 h-10 mr-3 object-contain"/>
+            <img loading="lazy" src={getItemIconUrl(itemInfo.icon)} alt={itemInfo.name} className="w-10 h-10 mr-3 object-contain"/>
             <div>
                 <p className="text-sm text-[var(--text-secondary)]">
                     Lot purchased on: {new Date(entryToSell.purchaseDate).toLocaleDateString()}

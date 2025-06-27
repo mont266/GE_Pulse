@@ -1,21 +1,18 @@
 {
-  "name": "ge-pulse",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "ge-pulse-app",
+  "version": "1.0.0",
+  "description": "GE Pulse Frontend",
+  "main": "index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "mkdir -p dist && npx esbuild index.tsx --bundle --outfile=dist/bundle.js --jsx=automatic --format=iife --target=es6 --loader:.ts=tsx && cp index.html dist/index.html && sed -i 's|type=\"module\" src=\"/index.tsx\"|src=\"/bundle.js\" defer|g' dist/index.html && cp metadata.json dist/metadata.json"
   },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "recharts": "^2.15.3"
-  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "typescript": "~5.7.2",
-    "vite": "^6.2.0"
+    "esbuild": "^0.20.2",
+    "node-fetch": "^2.6.7",
+    "ts-node": "^10.9.1"
   }
 }

@@ -230,6 +230,17 @@ export interface DriveFeedback {
   type: 'success' | 'error' | 'info';
 }
 
+export interface PortfolioSummaryProps {
+  entries: PortfolioEntry[];
+  livePrices: Record<number, LatestPriceData | null>;
+  getItemName: (itemId: number) => string;
+  onRefreshPrices: () => void;
+  isLoadingPrices: boolean;
+  onSelectItemAndClose?: (itemId: number) => void;
+  userRsn?: string; // Added for RSN display and input
+  onUserRsnChange: (newRsn: string) => void; // Added for RSN input
+}
+
 
 // Declare google object if not already available globally
 declare global {

@@ -5,6 +5,7 @@ interface FeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void;
 }
 
 type FeedbackType = 'feature' | 'bug' | 'general';
@@ -21,7 +22,7 @@ function usePrevious<T>(value: T): T | undefined {
 
 const HUMAN_CHECK_EXPECTED_ANSWER = "5"; // For "2 + 3"
 
-export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, addNotification }) => {
+export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, addNotification, trackGaEvent }) => {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('feature');
   const [message, setMessage] = useState<string>('');
   const [humanCheck, setHumanCheck] = useState<string>('');
@@ -99,6 +100,9 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
         setSubmitStatus('success');
         setSubmitMessage('Thank you! Your feedback has been submitted.');
         addNotification('Feedback submitted successfully!', 'success');
+        if (trackGaEvent) {
+            trackGaEvent('feedback_submit', { feedback_type: feedbackType, status: 'success' });
+        }
         setTimeout(() => {
             setFeedbackType('feature');
             setMessage('');
@@ -111,14 +115,22 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, a
         const errorText = await response.text();
         console.error("Netlify form submission error response:", errorText);
         setSubmitStatus('error');
-        setSubmitMessage(`Submission failed. Server responded with ${response.status}. Please try again.`);
+        const errorMessage = `Submission failed. Server responded with ${response.status}. Please try again.`;
+        setSubmitMessage(errorMessage);
         addNotification('Feedback submission failed.', 'error');
+        if (trackGaEvent) {
+            trackGaEvent('feedback_submit', { feedback_type: feedbackType, status: 'error', error_message: `Server responded with ${response.status}` });
+        }
       }
     } catch (error) {
       console.error('Netlify form submission error:', error);
       setSubmitStatus('error');
-      setSubmitMessage('An error occurred during submission. Please check your connection and try again.');
+      const errorMessage = 'An error occurred during submission. Please check your connection and try again.';
+      setSubmitMessage(errorMessage);
       addNotification('Feedback submission error.', 'error');
+      if (trackGaEvent) {
+        trackGaEvent('feedback_submit', { feedback_type: feedbackType, status: 'error', error_message: (error as Error).message || 'Unknown submission error' });
+      }
     }
   };
 

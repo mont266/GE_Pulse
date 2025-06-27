@@ -1,6 +1,8 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, DriveFeedback, SectionHeights } from './src/types';
+import Fuse from 'fuse.js';
+import { ItemMapInfo, LatestPriceData, ChartDataPoint, PriceAlert, Timespan, NotificationMessage, AppTheme, TimespanAPI, FavoriteItemId, FavoriteItemHourlyChangeData, FavoriteItemHourlyChangeState, WordingPreference, FavoriteItemSparklineState, ChartDataPoint as SparklineDataPoint, TopMoversTimespan, SectionRenderProps, TopMoversData, TopMoversCalculationMode, TopMoversMetricType, PortfolioEntry, LatestPriceApiResponse, DriveFeedback, SectionHeights, PortfolioSummaryProps } from './src/types';
 import { fetchItemMapping, fetchLatestPrice, fetchHistoricalData } from './services/runescapeService';
 import { googleDriveService } from './services/googleDriveService';
 import { SearchBar } from './components/SearchBar';
@@ -33,8 +35,9 @@ import {
   IN_APP_ALERT_SOUNDS_ENABLED_KEY, DEFAULT_IN_APP_ALERT_SOUNDS_ENABLED,
   FAVORITE_SPARKLINES_VISIBLE_STORAGE_KEY, SIDEBAR_ORDER_STORAGE_KEY, DEFAULT_SIDEBAR_ORDER, SECTION_KEYS,
   DRAG_DROP_ENABLED_STORAGE_KEY, DEFAULT_TOP_MOVERS_CALCULATION_MODE, DEFAULT_TOP_MOVERS_METRIC_TYPE,
-  PORTFOLIO_STORAGE_KEY, SECTION_HEIGHTS_STORAGE_KEY, DEFAULT_SECTION_HEIGHT_PX,
-  MIN_SECTION_HEIGHT_PX, MAX_SECTION_HEIGHT_PX, DESKTOP_BREAKPOINT_RESIZE
+  PORTFOLIO_STORAGE_KEY, RSN_STORAGE_KEY, SECTION_HEIGHTS_STORAGE_KEY, DEFAULT_SECTION_HEIGHT_PX,
+  MIN_SECTION_HEIGHT_PX, MAX_SECTION_HEIGHT_PX, DESKTOP_BREAKPOINT_RESIZE,
+  LAST_SEEN_CHANGELOG_VERSION_STORAGE_KEY, ITEM_MAPPING_CACHE_KEY, ITEM_MAPPING_TIMESTAMP_KEY, CACHE_DURATION_MS
 } from './constants'; 
 import { DragEvent } from 'react';
 
@@ -54,7 +57,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.13"; 
+const APP_VERSION = "Beta v0.14"; 
 
 let audioContextInstance: AudioContext | null = null;
 let isAudioContextInitialized = false;
@@ -438,6 +441,28 @@ const App: React.FC = () => {
     replacePortfolio, 
   } = usePortfolio(isConsentGranted, addNotification);
 
+  const [userRsn, setUserRsn] = useState<string>(() => {
+    if (initialConsent === 'granted') {
+      return localStorage.getItem(RSN_STORAGE_KEY) || '';
+    }
+    return '';
+  });
+  const prevUserRsn = usePrevious(userRsn);
+
+  useEffect(() => {
+    if (isConsentGranted) {
+      localStorage.setItem(RSN_STORAGE_KEY, userRsn);
+    }
+     if (userRsn !== prevUserRsn && prevUserRsn !== undefined) { // Avoid initial event
+      trackGaEvent('set_rsn');
+    }
+  }, [userRsn, isConsentGranted, prevUserRsn, trackGaEvent]);
+
+  const handleUserRsnChange = useCallback((newRsn: string) => {
+    setUserRsn(newRsn);
+  }, []);
+
+
   const devHandleSaveToDrive = useCallback(async () => {
     setIsDriveActionLoading(true);
     setDriveFeedbackForModal({ message: "Simulating save...", type: 'info' });
@@ -543,6 +568,22 @@ const App: React.FC = () => {
   
   const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
   const prevIsPortfolioModalOpen = usePrevious(isPortfolioModalOpen);
+
+  const [hasNewUpdate, setHasNewUpdate] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isConsentGranted && changelogEntries.length > 0) {
+      const latestVersion = changelogEntries[0].version;
+      const seenVersion = localStorage.getItem(LAST_SEEN_CHANGELOG_VERSION_STORAGE_KEY);
+      if (latestVersion !== seenVersion) {
+        setHasNewUpdate(true);
+      } else {
+        setHasNewUpdate(false);
+      }
+    } else {
+      setHasNewUpdate(false);
+    }
+  }, [isConsentGranted]);
 
   useEffect(() => {
     if (!isPortfolioModalOpen && prevIsPortfolioModalOpen) {
@@ -1116,10 +1157,16 @@ const App: React.FC = () => {
     }
   }, [addNotification, enableDesktopNotifications, desktopNotificationPermission, isConsentGranted, getItemIconUrl, trackGaEvent, enableInAppAlertSounds]);
 
+  const getItemName = useCallback((itemId: number): string => {
+    return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
+  }, [allItems]);
+
   const { alerts, addAlert, removeAlert, updateAlert, checkAlerts, clearAllAlertsAndStorage } = usePriceAlerts(
     handleAlertTriggered,
     fetchLatestPrice,
-    isConsentGranted 
+    isConsentGranted,
+    trackGaEvent,
+    getItemName
   );
 
   const resetPreferencesToDefault = useCallback(() => {
@@ -1137,6 +1184,7 @@ const App: React.FC = () => {
     setFavoriteItemSparklineData({});
     setSidebarSectionOrder([...DEFAULT_SIDEBAR_ORDER]); 
     setIsDragAndDropEnabled(false); 
+    setUserRsn(''); // Clear RSN
     const defaultHeights: SectionHeights = {}; // Reset section heights
     DEFAULT_SIDEBAR_ORDER.forEach(id => defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX);
     setSectionHeights(defaultHeights);
@@ -1166,10 +1214,6 @@ const App: React.FC = () => {
     trackGaEvent('consent_changed', { status: 'revoked' });
   }, [resetPreferencesToDefault, trackGaEvent]);
 
-  const getItemName = useCallback((itemId: number): string => {
-    return allItems.find(item => item.id === itemId)?.name || 'Unknown Item';
-  }, [allItems]);
-  
   useEffect(() => {
     if (isConsentGranted) {
       localStorage.setItem(WORDING_PREFERENCE_STORAGE_KEY, wordingPreference);
@@ -1194,9 +1238,9 @@ const App: React.FC = () => {
       }
   
       if (itemChangedId && action) {
-        const itemName = getItemName(itemChangedId);
-        if (itemName !== 'Unknown Item') {
-          addNotification(`${itemName} ${action === 'added' ? 'added to' : 'removed from'} ${favTerm}.`, action === 'added' ? 'success' : 'info');
+        const itemNameValue = getItemName(itemChangedId);
+        if (itemNameValue !== 'Unknown Item') {
+          addNotification(`${itemNameValue} ${action === 'added' ? 'added to' : 'removed from'} ${favTerm}.`, action === 'added' ? 'success' : 'info');
         }
       }
     }
@@ -1335,11 +1379,45 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const loadInitialData = async () => {
+      setError(null);
+      setIsLoadingItems(true);
+
+      if (isConsentGranted) {
+        try {
+          const cachedDataJSON = localStorage.getItem(ITEM_MAPPING_CACHE_KEY);
+          const cachedTimestamp = localStorage.getItem(ITEM_MAPPING_TIMESTAMP_KEY);
+
+          if (cachedDataJSON && cachedTimestamp) {
+            const age = Date.now() - Number(cachedTimestamp);
+            if (age < CACHE_DURATION_MS) {
+              const cachedData = JSON.parse(cachedDataJSON);
+              setAllItems(cachedData);
+              setIsLoadingItems(false);
+              console.log("Loaded item mapping from cache.");
+              return;
+            } else {
+              console.log("Item mapping cache is stale. Fetching new data.");
+            }
+          }
+        } catch (e) {
+          console.error("Failed to read or parse item mapping from cache:", e);
+        }
+      }
+
       try {
-        setError(null);
-        setIsLoadingItems(true);
+        console.log("Fetching new item mapping from API.");
         const items = await fetchItemMapping();
         setAllItems(items);
+        if (isConsentGranted) {
+          try {
+            localStorage.setItem(ITEM_MAPPING_CACHE_KEY, JSON.stringify(items));
+            localStorage.setItem(ITEM_MAPPING_TIMESTAMP_KEY, Date.now().toString());
+            console.log("Saved new item mapping to cache.");
+          } catch (e) {
+            console.error("Failed to save item mapping to cache:", e);
+            addNotification('Could not save item data to cache. It may be too large for your browser\'s storage.', 'error');
+          }
+        }
       } catch (err) {
         console.error(err);
         setError('Failed to load item list. The RuneScape Wiki API might be down or there was a network issue.');
@@ -1349,7 +1427,8 @@ const App: React.FC = () => {
       }
     };
     loadInitialData();
-  }, [addNotification]);
+  }, [isConsentGranted, addNotification]);
+
 
   useEffect(() => {
     if (isConsentGranted) {
@@ -1683,20 +1762,34 @@ const App: React.FC = () => {
     };
   }, [isAutoRefreshEnabled, selectedItem, manualRefreshTrigger, refreshCurrentItemData]);
 
+  const fuse = useMemo(() => {
+    if (allItems.length > 0) {
+      const options = {
+        keys: ['name'],
+        includeScore: true,
+        threshold: 0.4,
+        minMatchCharLength: 2,
+      };
+      return new Fuse(allItems, options);
+    }
+    return null;
+  }, [allItems]);
+
   const prevSearchTerm = usePrevious(searchTerm);
   const filteredItems = useMemo(() => {
-    if (!searchTerm) {
+    if (!searchTerm || !fuse) {
       return [];
     }
-    const results = allItems
-      .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
-      .slice(0, 20);
+    const results = fuse
+      .search(searchTerm)
+      .slice(0, 20)
+      .map(result => result.item);
     
     if (results.length > 0 && searchTerm !== prevSearchTerm && searchTerm.length > 1) { 
-        trackGaEvent('search_performed', { search_term: searchTerm, results_count: results.length });
+        trackGaEvent('search_performed', { search_term: searchTerm, results_count: results.length, search_method: 'fuzzy' });
     }
     return results;
-  }, [allItems, searchTerm, prevSearchTerm, trackGaEvent]); 
+  }, [fuse, searchTerm, prevSearchTerm, trackGaEvent]); 
 
   useEffect(() => {
     if (activeSuggestionIndex >= filteredItems.length && searchTerm) { 
@@ -1742,10 +1835,24 @@ const App: React.FC = () => {
     if (!isSettingsOpen) trackGaEvent('view_settings');
     setIsSettingsOpen(prev => !prev);
   }
+  
   const toggleChangelogModal = () => {
-    if(!isChangelogModalOpen) trackGaEvent('view_changelog');
+    // If modal is being opened, track the event.
+    if (!isChangelogModalOpen) {
+      trackGaEvent('view_changelog');
+    } else {
+      // If modal is being closed and there was a new update, mark it as "seen".
+      if (hasNewUpdate) {
+        if (isConsentGranted && changelogEntries.length > 0) {
+          const latestVersion = changelogEntries[0].version;
+          localStorage.setItem(LAST_SEEN_CHANGELOG_VERSION_STORAGE_KEY, latestVersion);
+          setHasNewUpdate(false);
+        }
+      }
+    }
     setIsChangelogModalOpen(prev => !prev);
-  }
+  };
+
   const togglePrivacyPolicyModal = () => {
     if(!isPrivacyPolicyModalOpen) trackGaEvent('view_privacy_policy');
     setIsPrivacyPolicyModalOpen(prev => !prev);
@@ -1799,8 +1906,16 @@ const App: React.FC = () => {
       targetPrice,
       condition,
     });
+    // Note: addAlert itself (via usePriceAlerts) now handles GA event for "set_price_alert"
+    // if trackGaEvent & getItemName are passed to usePriceAlerts.
+    // However, the original addAlert in App.tsx was already a 'set_price_alert' GA event source.
+    // We can keep the 'set_price_alert' here or rely on usePriceAlerts.
+    // For clarity, let's assume usePriceAlerts might not track specific UI origin, so keep this one for now.
+    // Original `addAlert` for `usePriceAlerts` doesn't take itemName/Icon, it derives it or is passed.
+    // The GA event in `usePriceAlerts` for adding is not there (it's for remove/update).
+    // So, this `trackGaEvent` here IS necessary for adding via this modal.
     addNotification(`Alert set for ${item.name}!`, 'success');
-    trackGaEvent('set_price_alert', { item_id: item.id, item_name: item.name, target_price: targetPrice, condition: condition });
+    trackGaEvent('set_price_alert', { item_id: item.id, item_name: item.name, target_price: targetPrice, condition: condition, origin: 'set_alert_modal' });
     closeSetAlertModal();
   }, [addAlert, addNotification, closeSetAlertModal, trackGaEvent]);
 
@@ -1938,6 +2053,22 @@ const App: React.FC = () => {
       handleSelectItemById(itemId, undefined, undefined, 'portfolio_item_click'); 
     }, 50); 
   }, [isPortfolioModalOpen, handleSelectItemById, togglePortfolioModal]);
+
+  const handleResetSectionHeights = useCallback(() => {
+    const defaultHeights: SectionHeights = {};
+    DEFAULT_SIDEBAR_ORDER.forEach(id => {
+      defaultHeights[id] = DEFAULT_SECTION_HEIGHT_PX;
+    });
+    setSectionHeights(defaultHeights);
+    addNotification('Section heights have been reset to default.', 'success');
+    trackGaEvent('reset_section_heights');
+  }, [addNotification, trackGaEvent]);
+
+  const isResetNeeded = useMemo(() => {
+    if (!isDesktopView) return false;
+    // Check if any height value is different from the default
+    return Object.values(sectionHeights).some(h => h !== DEFAULT_SECTION_HEIGHT_PX);
+  }, [sectionHeights, isDesktopView]);
 
 
   const getSectionProps = useCallback((sectionId: string, dndPropsBase: Omit<SectionRenderProps, 'currentHeight' | 'isResizable' | 'onResizeMouseDown'>): SpecificAppSectionProps => {
@@ -2138,6 +2269,7 @@ const App: React.FC = () => {
           isOpen={isChangelogModalOpen} 
           onClose={toggleChangelogModal} 
           entries={changelogEntries}
+          hasNewUpdate={hasNewUpdate}
         />
       )}
 
@@ -2153,6 +2285,7 @@ const App: React.FC = () => {
           isOpen={isFeedbackModalOpen}
           onClose={toggleFeedbackModal}
           addNotification={addNotification}
+          trackGaEvent={trackGaEvent}
         />
       )}
 
@@ -2186,7 +2319,7 @@ const App: React.FC = () => {
           }}
           replacePortfolio={(newEntries) => {
             replacePortfolio(newEntries);
-            trackGaEvent('portfolio_import', { entry_count: newEntries.length });
+            trackGaEvent('portfolio_import_local', { method: 'json_or_code', entry_count: newEntries.length, status: 'success' });
           }} 
           allItems={allItems}
           getItemIconUrl={getItemIconUrl}
@@ -2195,11 +2328,14 @@ const App: React.FC = () => {
           addNotification={addNotification}
           isConsentGranted={isConsentGranted}
           onSelectItemAndClose={handleSelectPortfolioItemAndCloseModal}
+          userRsn={userRsn}
+          onUserRsnChange={handleUserRsnChange}
           isGoogleApiInitialized={isDevDriveMode || isGoogleApiInitialized}
           onSaveToDrive={isDevDriveMode ? devHandleSaveToDrive : handleSaveToDrive}
           onLoadFromDrive={isDevDriveMode ? devHandleLoadFromDrive : handleLoadFromDrive}
           isDriveActionLoading={isDriveActionLoading}
           driveFeedback={driveFeedbackForModal}
+          trackGaEvent={trackGaEvent}
         />
       )}
 
@@ -2248,6 +2384,17 @@ const App: React.FC = () => {
             className="md:col-span-1 space-y-6"
             onDragOver={handleDragOverContainer} 
           >
+            {isDesktopView && isResetNeeded && (
+              <div className="flex justify-center -mb-2">
+                <button
+                  onClick={handleResetSectionHeights}
+                  className="px-3 py-1 text-xs rounded-full font-medium transition-all duration-200 ease-in-out bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)] focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)]"
+                  aria-label="Reset all sidebar section heights to their default value"
+                >
+                  Reset Section Heights
+                </button>
+              </div>
+            )}
             {sidebarSectionOrder.map(sectionId => {
               const config = sectionsConfig[sectionId as keyof typeof sectionsConfig];
               if (!config) return null;
@@ -2325,12 +2472,16 @@ const App: React.FC = () => {
                 }}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <p className="text-xl">Select an item to view its details.</p>
-                <p className="mt-1">Use the search bar on the left to find items, or select a {favTerm}.</p>
+              <div className="relative flex flex-col items-center justify-center h-full text-center text-[var(--text-secondary)] overflow-hidden">
+                <SearchIcon className="absolute w-40 h-40 text-[var(--bg-primary)] opacity-70" />
+                <div className="relative">
+                  <p className="text-xl font-semibold text-[var(--text-primary)]">Select an item to view its details</p>
+                  <p className="mt-1 text-base">
+                    Use the search bar on the left to find an item,
+                    <br className="hidden sm:block" />
+                    or click an item from your {favTerm}s list.
+                  </p>
+                </div>
               </div>
             )}
           </main>
@@ -2340,8 +2491,13 @@ const App: React.FC = () => {
         <p>Data sourced from <a href="https://prices.runescape.wiki/api/v1/osrs/mapping" target="_blank" rel="noopener noreferrer" className="text-[var(--link-text)] hover:text-[var(--link-text-hover)]">prices.runescape.wiki API</a>.</p>
         <p>This is a fan-made project and is not affiliated with Jagex Ltd.</p>
         <p className="mt-2">
-          <button onClick={toggleChangelogModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
-            View Changelog
+          <button onClick={toggleChangelogModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline inline-flex items-center gap-1.5">
+            <span>View Changelog</span>
+            {hasNewUpdate && (
+                <span className="px-2 py-0.5 text-[0.6rem] font-bold leading-none text-white bg-[var(--price-high)] rounded-full animate-pulse">
+                NEW
+                </span>
+            )}
           </button>
            <span className="mx-2 text-[var(--text-muted)]">|</span>
            <button onClick={toggleFeedbackModal} className="text-[var(--link-text)] hover:text-[var(--link-text-hover)] underline">
