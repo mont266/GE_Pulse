@@ -836,6 +836,29 @@ const App: React.FC = () => {
   });
   const prevEnableInAppAlertSounds = usePrevious(enableInAppAlertSounds);
 
+  const initAudioOnInteraction = useCallback(() => {
+    if (!isAudioContextInitialized && isConsentGranted && enableInAppAlertSounds) {
+      console.log("First user interaction detected, attempting to initialize AudioContext.");
+      initializeAudioContextSafely();
+      if (audioContextInstance?.state === 'suspended') {
+          audioContextInstance.resume().catch(err => console.warn("Could not resume AudioContext on interaction:", err));
+      }
+    }
+  }, [isAudioContextInitialized, isConsentGranted, enableInAppAlertSounds]);
+
+  useEffect(() => {
+    if (!isAudioContextInitialized && isConsentGranted && enableInAppAlertSounds) {
+      window.addEventListener('click', initAudioOnInteraction, { once: true });
+      window.addEventListener('keydown', initAudioOnInteraction, { once:true });
+
+      return () => {
+        window.removeEventListener('click', initAudioOnInteraction);
+        window.removeEventListener('keydown', initAudioOnInteraction);
+      };
+    }
+  }, [isAudioContextInitialized, isConsentGranted, enableInAppAlertSounds, initAudioOnInteraction]);
+
+
   useEffect(() => {
     if (prevEnableInAppAlertSounds !== undefined && prevEnableInAppAlertSounds !== enableInAppAlertSounds) {
       addNotification(`In-app alert sounds ${enableInAppAlertSounds ? 'enabled' : 'disabled'}.`, 'info');
@@ -1125,9 +1148,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (consentStatus !== 'pending') {
       localStorage.setItem(CONSENT_STORAGE_KEY, consentStatus);
-      if (consentStatus === 'granted') {
-        initializeAudioContextSafely();
-      }
+      // The call to initializeAudioContextSafely() was removed from here
+      // as it caused crashes on iOS Safari for returning users.
     }
   }, [consentStatus]);
 

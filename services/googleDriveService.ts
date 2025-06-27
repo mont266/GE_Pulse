@@ -1,4 +1,3 @@
-
 // Ensure gapi and google types are available globally after scripts load
 
 // Helper to get values from window object, falling back to undefined
@@ -37,23 +36,6 @@ interface GDriveFile {
   mimeType: string;
 }
 
-const loadScript = (src: string, id: string): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (document.getElementById(id)) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.id = id;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = (e) => reject(new Error(`Failed to load script ${src}: ${e}`));
-    document.head.appendChild(script);
-  });
-};
-
 export const initGoogleDriveService = async (): Promise<boolean> => {
   console.log("Google Drive Service: Attempting initialization...");
   if (gapiClientInitialized && tokenClient) {
@@ -72,10 +54,6 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
   console.log("Google Drive Service: API_KEY and CLIENT_ID seem present.");
 
   try {
-    console.log("Google Drive Service: Loading GAPI script if not present...");
-    if (!window.gapi) {
-        await loadScript('https://apis.google.com/js/api.js', 'gapi-script');
-    }
     console.log("Google Drive Service: Waiting for window.gapi.load...");
     await new Promise<void>((resolve, reject) => {
         const interval = setInterval(() => {
@@ -106,10 +84,6 @@ export const initGoogleDriveService = async (): Promise<boolean> => {
     gapiClientInitialized = true;
     console.log("Google Drive Service: GAPI client initialized.");
 
-    console.log("Google Drive Service: Loading GIS script if not present...");
-    if (!(window.google && window.google.accounts && window.google.accounts.oauth2)) {
-      await loadScript('https://accounts.google.com/gsi/client', 'gis-script');
-    }
     console.log("Google Drive Service: Waiting for GIS token client initialization function...");
      await new Promise<void>((resolve, reject) => {
         const interval = setInterval(() => {
