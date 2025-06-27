@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "mkdir -p dist && npx esbuild index.tsx --bundle --outfile=dist/bundle.js --jsx=automatic --format=iife --target=es6 --loader:.ts=tsx && cp index.html dist/index.html && sed -i 's|type=\"module\" src=\"/index.tsx\"|src=\"/bundle.js\" defer|g' dist/index.html && cp metadata.json dist/metadata.json"
+    "build": "mkdir -p dist && npx esbuild index.tsx --bundle --outfile=dist/bundle.js --jsx=automatic --format=iife --target=es6 --loader:.ts=tsx && cp index.html dist/index.html && sed -i 's~type=\"module\" src=\"/index.tsx\"~src=\"/bundle.js\" defer~g' dist/index.html && cp metadata.json dist/metadata.json && cp robots.txt dist/robots.txt"
   },
   "keywords": [],
   "author": "",
