@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PortfolioEntry, ItemMapInfo, ChartDataPoint as PriceChartDataPoint, PortfolioChartTimespan, PortfolioPerformanceDataPoint, TimespanAPI } from '../../src/types';
 import { PortfolioPerformanceChart } from './PortfolioPerformanceChart';
@@ -11,6 +12,7 @@ interface PortfolioPerformanceTabProps {
   fetchHistoricalData: (itemId: number, timespan: TimespanAPI) => Promise<PriceChartDataPoint[]>;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   getItemName: (itemId: number) => string;
+  showChartLineGlow: boolean;
 }
 
 const getStartDateForTimespan = (timespan: PortfolioChartTimespan, firstPurchaseDate: number | null): Date => {
@@ -51,6 +53,7 @@ export const PortfolioPerformanceTab: React.FC<PortfolioPerformanceTabProps> = (
   fetchHistoricalData,
   addNotification,
   getItemName,
+  showChartLineGlow,
 }) => {
   const [selectedTimespan, setSelectedTimespan] = useState<PortfolioChartTimespan>('1M');
   const [chartData, setChartData] = useState<PortfolioPerformanceDataPoint[]>([]);
@@ -175,8 +178,8 @@ export const PortfolioPerformanceTab: React.FC<PortfolioPerformanceTabProps> = (
   }, [calculatePerformanceData]);
 
   return (
-    <div className="space-y-4 p-2 sm:p-0">
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-2 my-2">
+    <div className="h-full flex flex-col space-y-4 p-2 sm:p-0">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-2 my-2 flex-shrink-0">
         <div className="flex justify-center flex-wrap gap-2 sm:gap-3">
           {PORTFOLIO_CHART_TIMESPAN_OPTIONS.map(option => (
             <button
@@ -215,35 +218,41 @@ export const PortfolioPerformanceTab: React.FC<PortfolioPerformanceTabProps> = (
 
 
       {isLoading && (
-        <div className="flex flex-col items-center justify-center h-64">
+        <div className="flex flex-col items-center justify-center flex-grow">
           <LoadingSpinner />
           <p className="mt-4 text-lg text-[var(--text-secondary)]">Calculating performance data...</p>
         </div>
       )}
       {error && !isLoading && (
-        <div className="text-center py-10 text-[var(--error-text)] bg-[var(--error-bg)]/20 rounded-md">
-          <p className="font-semibold">Error loading performance chart:</p>
-          <p className="text-sm">{error}</p>
+        <div className="flex-grow flex items-center justify-center text-center py-10 text-[var(--error-text)] bg-[var(--error-bg)]/20 rounded-md">
+          <div>
+            <p className="font-semibold">Error loading performance chart:</p>
+            <p className="text-sm">{error}</p>
+          </div>
         </div>
       )}
       {!isLoading && !error && chartData.length === 0 && portfolioEntries.length > 0 && (
-         <div className="text-center py-10 text-[var(--text-muted)]">
-            <p>No performance data to display for the selected timespan or current portfolio.</p>
-            <p className="text-xs">This could be due to missing price history or a very new portfolio.</p>
+         <div className="flex-grow flex items-center justify-center text-center py-10 text-[var(--text-muted)]">
+            <div>
+              <p>No performance data to display for the selected timespan or current portfolio.</p>
+              <p className="text-xs">This could be due to missing price history or a very new portfolio.</p>
+            </div>
         </div>
       )}
       {!isLoading && !error && chartData.length === 0 && portfolioEntries.length === 0 && (
-         <div className="text-center py-10 text-[var(--text-muted)]">
-            <p>Your portfolio is empty.</p>
-            <p className="text-xs">Add some investments to see performance data.</p>
+         <div className="flex-grow flex items-center justify-center text-center py-10 text-[var(--text-muted)]">
+            <div>
+              <p>Your portfolio is empty.</p>
+              <p className="text-xs">Add some investments to see performance data.</p>
+            </div>
         </div>
       )}
       {!isLoading && !error && chartData.length > 0 && (
-        <div className="h-[400px] sm:h-[500px] w-full bg-[var(--bg-input-secondary)] p-2 rounded-md">
-          <PortfolioPerformanceChart data={chartData} showRealizedPLLine={showRealizedPLLine} />
+        <div className="flex-grow min-h-0 w-full bg-[var(--bg-input-secondary)] p-2 rounded-md">
+          <PortfolioPerformanceChart data={chartData} showRealizedPLLine={showRealizedPLLine} showChartLineGlow={showChartLineGlow} />
         </div>
       )}
-       <p className="text-xs text-[var(--text-muted)] text-center pt-2 mt-2 border-t border-[var(--border-primary)]">
+       <p className="text-xs text-[var(--text-muted)] text-center pt-2 mt-2 border-t border-[var(--border-primary)] flex-shrink-0">
         Performance chart shows estimated daily profit. Data accuracy depends on available historical prices.
       </p>
     </div>

@@ -7,6 +7,19 @@ const { execSync } = require('child_process');
 // to avoid issues with module resolution during Netlify's function bundling.
 const changelogEntries = [
   {
+    version: "Beta v0.15",
+    date: "2025-06-28",
+    changes: [
+      "Added a global keyboard shortcut (Cmd/Ctrl + K) to open and focus the main item search bar from anywhere in the app.",
+      "The portfolio performance chart is now displayed in a full-screen view on mobile devices to improve readability and user experience.",
+      "Enhanced portfolio import/export to include the user's RuneScape Name (RSN), ensuring it's saved and restored along with investment data.",
+      "Extended the 'Chart Line Glow' setting to the Portfolio Performance chart, applying the effect to both the 'Total Profit' and 'Realized P/L' lines when enabled.",
+      "Added 'Estimated Profit' to the item sale modal, showing the potential net profit after GE tax and item cost.",
+      "Added 'Break-Even Price' to the Open Positions table and the item sale modal, indicating the minimum sale price needed to avoid a loss after tax.",
+    ],
+    notes: "This update enhances the Portfolio Tracker with more detailed financial insights and improves app-wide usability by introducing a global search shortcut (Cmd/Ctrl + K)."
+  },
+  {
     version: "Beta v0.14",
     date: "2025-06-27",
     changes: [

@@ -1,9 +1,6 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { PortfolioEntry, LatestPriceData, PortfolioSummaryProps } from '../../src/types';
 import { EditIcon } from '../../components/Icons'; // Ensure EditIcon is imported
-
-interface LocalPortfolioSummaryProps extends PortfolioSummaryProps {}
 
 const formatGPSummary = (value: number | null): string => {
   if (value === null || isNaN(value)) return 'N/A';
@@ -23,7 +20,7 @@ const RefreshIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 
-export const PortfolioSummary: React.FC<LocalPortfolioSummaryProps> = ({
+export const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({
     entries,
     livePrices,
     getItemName,

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PortfolioEntry } from '../../src/types';
+import { PortfolioEntry, PortfolioBackup } from '../../src/types';
 import { CopyIcon, CheckIcon, CrossIcon } from '../Icons';
 
 interface DisplayCodeModalProps {
@@ -8,6 +8,7 @@ interface DisplayCodeModalProps {
   onClose: () => void;
   portfolioEntries: PortfolioEntry[];
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+  userRsn: string;
 }
 
 export const DisplayCodeModal: React.FC<DisplayCodeModalProps> = ({
@@ -15,6 +16,7 @@ export const DisplayCodeModal: React.FC<DisplayCodeModalProps> = ({
   onClose,
   portfolioEntries,
   addNotification,
+  userRsn,
 }) => {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -22,13 +24,17 @@ export const DisplayCodeModal: React.FC<DisplayCodeModalProps> = ({
   const base64Code = useMemo(() => {
     if (!isOpen || portfolioEntries.length === 0) return '';
     try {
-      const jsonString = JSON.stringify(portfolioEntries);
+      const backupData: PortfolioBackup = {
+        rsn: userRsn,
+        entries: portfolioEntries,
+      };
+      const jsonString = JSON.stringify(backupData);
       return btoa(jsonString); // Base64 encode
     } catch (error) {
       console.error("Error generating Base64 code:", error);
       return "Error generating code.";
     }
-  }, [isOpen, portfolioEntries]);
+  }, [isOpen, portfolioEntries, userRsn]);
 
   // Effect to reset status when modal opens or closes
   useEffect(() => {

@@ -8,17 +8,18 @@ interface SearchBarProps {
   filteredItemsCount: number;
 }
 
-export const SearchBar = React.memo(function SearchBarImpl({ 
+export const SearchBar = React.memo(React.forwardRef<HTMLInputElement, SearchBarProps>(function SearchBarImpl({ 
   searchTerm, 
   setSearchTerm,
   onKeyDownHandler,
   activeDescendantId,
   filteredItemsCount
-}: SearchBarProps) {
+}, ref) {
   const isListVisible = !!searchTerm && filteredItemsCount > 0;
 
   return (
     <input
+      ref={ref}
       type="text"
       placeholder="E.g., Dragon Scimitar"
       value={searchTerm}
@@ -33,4 +34,4 @@ export const SearchBar = React.memo(function SearchBarImpl({
       aria-activedescendant={activeDescendantId}
     />
   );
-});
+}));

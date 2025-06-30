@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { PortfolioEntry, ItemMapInfo, LatestPriceData } from '../../src/types';
 import { TrashIcon, EditIcon, PortfolioIcon } from '../Icons';
+import { calculateBreakEvenPrice } from '../../utils/taxUtils';
 
 type SortKey = 
-  | 'item' | 'qtyRemaining' | 'avgBuy' | 'totalCost' | 'currPrice' | 'currValue' | 'unrealPL' | 'date'
+  | 'item' | 'qtyRemaining' | 'avgBuy' | 'breakEvenPrice' | 'totalCost' | 'currPrice' | 'currValue' | 'unrealPL' | 'date'
   | 'qtySold' | 'avgSell' | 'totalProceeds' | 'taxPaid' | 'realPL' | 'saleDate';
 
 interface PortfolioTableProps {
@@ -75,6 +76,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
             
             case 'qtyRemaining': return qtyRemaining;
             case 'avgBuy': return purchasePrice;
+            case 'breakEvenPrice': return calculateBreakEvenPrice(entry.purchasePricePerItem, entry.itemId);
             case 'totalCost':
               if (tableType === 'open') return qtyRemaining * purchasePrice;
               return entry.quantitySoldFromThisLot * purchasePrice;
@@ -125,7 +127,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     } else {
-      if (['unrealPL', 'realPL', 'totalCost', 'currValue', 'date', 'saleDate'].includes(key)) {
+      if (['unrealPL', 'realPL', 'totalCost', 'currValue', 'date', 'saleDate', 'breakEvenPrice'].includes(key)) {
         direction = 'desc';
       }
     }
@@ -169,6 +171,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
     { header: 'Item', accessor: 'item' },
     { header: 'Qty Rem.', accessor: 'qtyRemaining', numeric: true },
     { header: 'Avg. Buy', accessor: 'avgBuy', numeric: true, shorthand: true },
+    { header: 'B/E Price', accessor: 'breakEvenPrice', numeric: true, shorthand: true },
     { header: 'Total Cost', accessor: 'totalCost', numeric: true, shorthand: true },
     { header: 'Curr. Price', accessor: 'currPrice', numeric: true, shorthand: true },
     { header: 'Curr. Value', accessor: 'currValue', numeric: true, shorthand: true },
@@ -217,6 +220,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
             const costOfRemaining = qtyRemaining * purchasePrice;
             const currentValue = currentMarketPrice !== null ? qtyRemaining * currentMarketPrice : null;
             const unrealizedPL = currentValue !== null ? currentValue - costOfRemaining : null;
+            const breakEvenPrice = calculateBreakEvenPrice(entry.purchasePricePerItem, entry.itemId);
 
             const qtySoldThisLot = entry.quantitySoldFromThisLot;
             const costOfSold = qtySoldThisLot * purchasePrice;
@@ -251,6 +255,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({
                   <>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-secondary)] text-right">{qtyRemaining.toLocaleString()}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-secondary)] text-right" title={formatGP(purchasePrice)}>{formatGP(purchasePrice, true)}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-secondary)] text-right" title={formatGP(breakEvenPrice)}>{formatGP(breakEvenPrice, true)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-[var(--text-secondary)] text-right" title={formatGP(costOfRemaining)}>{formatGP(costOfRemaining, true)}</td>
                     <td className={`px-3 py-3 whitespace-nowrap text-sm text-right ${currentMarketPrice === null ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`} title={formatGP(currentMarketPrice)}>{formatGP(currentMarketPrice, true)}</td>
                     <td className={`px-3 py-3 whitespace-nowrap text-sm text-right ${currentValue === null ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]'}`} title={formatGP(currentValue)}>{formatGP(currentValue, true)}</td>

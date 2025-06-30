@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { PortfolioEntry, ItemMapInfo } from '../../src/types'; // Corrected path
 import { ITEM_IMAGE_BASE_URL } from '../../constants';
-import { calculateGeTax } from '../../utils/taxUtils'; // Import tax utility
+import { calculateGeTax, calculateBreakEvenPrice } from '../../utils/taxUtils'; // Import both utilities
 
 interface SellInvestmentModalProps {
   isOpen: boolean;
@@ -61,6 +60,8 @@ export const SellInvestmentModal: React.FC<SellInvestmentModalProps> = ({
   const [salePriceInput, setSalePriceInput] = useState('');
   const [saleDate, setSaleDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [estimatedTax, setEstimatedTax] = useState<number>(0);
+  const [estimatedProfit, setEstimatedProfit] = useState<number>(0);
+  const [breakEvenPrice, setBreakEvenPrice] = useState<number>(0);
   const quantityInputRef = useRef<HTMLInputElement>(null);
 
   const itemInfo = entryToSell ? allItems.find(i => i.id === entryToSell.itemId) : null;
@@ -68,26 +69,38 @@ export const SellInvestmentModal: React.FC<SellInvestmentModalProps> = ({
 
 
   useEffect(() => {
-    if (isOpen && entryToSell) {
+    if (isOpen && entryToSell && itemInfo) {
       const remainingQty = entryToSell.quantityPurchased - entryToSell.quantitySoldFromThisLot;
       setQuantityToSellInput(remainingQty.toString());
       setSalePriceInput('');
       setSaleDate(new Date().toISOString().split('T')[0]);
-      setEstimatedTax(0); // Reset tax on open
+      setEstimatedTax(0);
+      setEstimatedProfit(0);
+
+      const bePrice = calculateBreakEvenPrice(entryToSell.purchasePricePerItem, itemInfo.id);
+      setBreakEvenPrice(bePrice);
+      
       quantityInputRef.current?.focus();
       quantityInputRef.current?.select();
     }
-  }, [isOpen, entryToSell]);
+  }, [isOpen, entryToSell, itemInfo]);
 
-  // Calculate estimated tax dynamically
+  // Calculate estimated tax and profit dynamically
   useEffect(() => {
     if (entryToSell && itemInfo) {
       const quantity = parseInt(quantityToSellInput, 10);
       const price = parseShorthandPrice(salePriceInput);
       if (!isNaN(quantity) && quantity > 0 && price !== null && price >= 0) {
-        setEstimatedTax(calculateGeTax(price, quantity, itemInfo.id));
+        const tax = calculateGeTax(price, quantity, itemInfo.id);
+        setEstimatedTax(tax);
+
+        const proceeds = price * quantity;
+        const cost = entryToSell.purchasePricePerItem * quantity;
+        const profit = proceeds - cost - tax;
+        setEstimatedProfit(profit);
       } else {
         setEstimatedTax(0);
+        setEstimatedProfit(0);
       }
     }
   }, [quantityToSellInput, salePriceInput, entryToSell, itemInfo]);
@@ -217,9 +230,23 @@ export const SellInvestmentModal: React.FC<SellInvestmentModalProps> = ({
                 />
             </div>
             
-            <div className="mt-3 p-2 bg-[var(--bg-input-secondary)] rounded-md text-sm">
-                <span className="text-[var(--text-muted)]">Estimated Tax for this Sale: </span>
-                <span className="font-medium text-[var(--text-primary)]">{estimatedTax.toLocaleString()} GP</span>
+            <div className="mt-3 p-3 bg-[var(--bg-input-secondary)] rounded-md text-sm space-y-1">
+                <div>
+                    <span className="text-[var(--text-muted)]">Estimated Tax for this Sale: </span>
+                    <span className="font-medium text-[var(--text-primary)]">{estimatedTax.toLocaleString()} GP</span>
+                </div>
+                <div>
+                    <span className="text-[var(--text-muted)]">Estimated Profit for this Sale: </span>
+                    <span className={`font-medium ${estimatedProfit >= 0 ? 'text-[var(--price-high)]' : 'text-[var(--price-low)]'}`}>
+                        {estimatedProfit.toLocaleString()} GP
+                    </span>
+                </div>
+                <div>
+                    <span className="text-[var(--text-muted)]">Break-Even Sale Price: </span>
+                    <span className="font-medium text-[var(--text-primary)]">
+                        {breakEvenPrice.toLocaleString()} GP
+                    </span>
+                </div>
             </div>
 
 

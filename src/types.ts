@@ -225,6 +225,11 @@ export interface PortfolioEntry {
 
 export type PortfolioEntryUpdate = Partial<Pick<PortfolioEntry, 'quantityPurchased' | 'purchasePricePerItem' | 'purchaseDate'>>;
 
+export interface PortfolioBackup {
+  rsn?: string;
+  entries: PortfolioEntry[];
+}
+
 export interface DriveFeedback {
   message: string;
   type: 'success' | 'error' | 'info';

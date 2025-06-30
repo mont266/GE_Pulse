@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PortfolioPerformanceDataPoint } from '../../src/types';
@@ -6,6 +7,7 @@ import { PortfolioPerformanceDataPoint } from '../../src/types';
 interface PortfolioPerformanceChartProps {
   data: PortfolioPerformanceDataPoint[];
   showRealizedPLLine: boolean;
+  showChartLineGlow: boolean;
 }
 
 interface CustomTooltipProps {
@@ -61,7 +63,7 @@ const formatProfitTick = (profit: number) => {
   return profit.toLocaleString();
 };
 
-export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps> = ({ data, showRealizedPLLine }) => {
+export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps> = ({ data, showRealizedPLLine, showChartLineGlow }) => {
   if (!data || data.length === 0) {
     return <div className="flex items-center justify-center h-full text-[var(--text-muted)]"><p>No performance data to display.</p></div>;
   }
@@ -95,6 +97,18 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
     return [finalMin, finalMax];
   }, [data, showRealizedPLLine]);
 
+  const profitLineStyle = useMemo(() => (
+    showChartLineGlow 
+        ? { filter: 'drop-shadow(0px 0px 3px var(--chart-line-glow)) drop-shadow(0px 0px 6px var(--chart-line-glow))' }
+        : {}
+  ), [showChartLineGlow]);
+
+  const realizedPLLineStyle = useMemo(() => (
+      showChartLineGlow
+          ? { filter: 'drop-shadow(0px 0px 3px var(--price-high)) drop-shadow(0px 0px 6px var(--price-high))' }
+          : {}
+  ), [showChartLineGlow]);
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart
@@ -126,7 +140,8 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
           dot={{ r: 2, fill: 'var(--chart-line)'}}
           activeDot={{ r: 6, stroke: 'var(--chart-line-active-dot)', fill: 'var(--chart-line-active-dot)', strokeWidth: 1 }}
           name="Total Portfolio Profit"
-          connectNulls={false} 
+          connectNulls={false}
+          style={profitLineStyle}
         />
         {showRealizedPLLine && (
           <Line
@@ -139,6 +154,7 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
             name="Cumulative Realized P/L"
             connectNulls={false}
             strokeDasharray="5 5" // Optional: make it a dashed line
+            style={realizedPLLineStyle}
           />
         )}
       </LineChart>

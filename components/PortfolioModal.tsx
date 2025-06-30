@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint, DriveFeedback, PortfolioSummaryProps } from '../src/types'; 
+import { PortfolioEntry, ItemMapInfo, LatestPriceData, PortfolioEntryUpdate, ChartDataPoint, DriveFeedback, PortfolioSummaryProps, PortfolioBackup } from '../src/types'; 
 import { AddInvestmentForm } from './portfolio/AddInvestmentForm';
 import { PortfolioTable } from './portfolio/PortfolioTable';
 import { PortfolioSummary } from './portfolio/PortfolioSummary';
@@ -14,8 +14,9 @@ import { ImportPortfolioModal } from './portfolio/ImportPortfolioModal';
 import { ConfirmImportOverwriteModal } from './portfolio/ConfirmImportOverwriteModal'; 
 import { PortfolioPerformanceTab } from './portfolio/PortfolioPerformanceTab';
 import { LoadingSpinner } from '../components/LoadingSpinner'; 
-import { TrashIcon, UploadIcon, DownloadIcon, CloudUploadIcon, CloudDownloadIcon } from '../components/Icons'; 
+import { TrashIcon, UploadIcon, DownloadIcon, CloudUploadIcon, CloudDownloadIcon, ChartBarIcon } from '../components/Icons'; 
 import { fetchHistoricalData as appFetchHistoricalData } from '../services/runescapeService';
+import { PortfolioPerformanceFullScreenModal } from './portfolio/PortfolioPerformanceFullScreenModal';
 
 
 interface PortfolioModalProps {
@@ -44,6 +45,7 @@ interface PortfolioModalProps {
   isDriveActionLoading: boolean;
   driveFeedback: DriveFeedback | null; 
   trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void;
+  showChartLineGlow: boolean;
 }
 
 const PORTFOLIO_TABS = [
@@ -54,6 +56,8 @@ const PORTFOLIO_TABS = [
 ] as const;
 
 type PortfolioTabKey = typeof PORTFOLIO_TABS[number]['key'];
+
+const MOBILE_BREAKPOINT = 768;
 
 
 export const PortfolioModal: React.FC<PortfolioModalProps> = ({
@@ -81,6 +85,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   isDriveActionLoading,
   driveFeedback,
   trackGaEvent,
+  showChartLineGlow,
 }) => {
   const [activeTab, setActiveTab] = useState<PortfolioTabKey>('open');
   const [itemToSell, setItemToSell] = useState<PortfolioEntry | null>(null);
@@ -100,12 +105,24 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   
   const [isConfirmImportOverwriteModalOpen, setIsConfirmImportOverwriteModalOpen] = useState<boolean>(false);
-  const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioEntry[] | null>(null); 
+  const [importedDataToConfirm, setImportedDataToConfirm] = useState<PortfolioBackup | null>(null); 
+  
+  const [isDesktopView, setIsDesktopView] = useState(window.innerWidth >= MOBILE_BREAKPOINT);
+  const [isPerformanceChartFullScreen, setIsPerformanceChartFullScreen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktopView(window.innerWidth >= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (isConfirmImportOverwriteModalOpen) setIsConfirmImportOverwriteModalOpen(false);
+        if (isPerformanceChartFullScreen) setIsPerformanceChartFullScreen(false);
+        else if (isConfirmImportOverwriteModalOpen) setIsConfirmImportOverwriteModalOpen(false);
         else if (isDisplayCodeModalOpen) setIsDisplayCodeModalOpen(false);
         else if (isExportOptionsModalOpen) setIsExportOptionsModalOpen(false);
         else if (isImportModalOpen) setIsImportModalOpen(false);
@@ -126,6 +143,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
     isOpen, onClose, isSellModalOpen, isConfirmDeleteModalOpen, 
     isConfirmClearAllModalOpen, isEditModalOpen, isExportOptionsModalOpen,
     isDisplayCodeModalOpen, isImportModalOpen, isConfirmImportOverwriteModalOpen,
+    isPerformanceChartFullScreen,
   ]);
   
   const fetchAllLivePrices = useCallback(async () => {
@@ -232,7 +250,7 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
     setIsDisplayCodeModalOpen(true);
   };
 
-  const handleConfirmImport = (importedData: PortfolioEntry[]) => {
+  const handleConfirmImport = (importedData: PortfolioBackup) => {
     if (portfolioEntries.length > 0) {
         addNotification('Please review the import confirmation.', 'info');
         setImportedDataToConfirm(importedData);
@@ -240,7 +258,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
         setIsConfirmImportOverwriteModalOpen(true);
     } else {
         addNotification('Importing portfolio...', 'info');
-        replacePortfolio(importedData);
+        replacePortfolio(importedData.entries);
+        if (importedData.rsn) {
+            onUserRsnChange(importedData.rsn);
+        }
         fetchAllLivePrices().then(() => {
             addNotification("Portfolio restored successfully!", "success");
         }).catch(err => {
@@ -256,7 +277,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
         return;
     }
     addNotification('Import confirmed. Processing portfolio replacement...', 'info');
-    replacePortfolio(importedDataToConfirm);
+    replacePortfolio(importedDataToConfirm.entries);
+    if (importedDataToConfirm.rsn) {
+      onUserRsnChange(importedDataToConfirm.rsn);
+    }
     
     fetchAllLivePrices().then(() => {
         addNotification("Portfolio restored successfully!", "success");
@@ -305,249 +329,280 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({
 
 
   return (
-    <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[70] p-2 sm:p-4" 
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="portfolio-modal-title"
-    >
+    <>
       <div
-        className="bg-[var(--bg-secondary)] p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-4xl text-[var(--text-primary)] h-[95vh] max-h-[1000px] flex flex-col"
-        onClick={e => e.stopPropagation()}
+        className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[70] p-2 sm:p-4" 
+        onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="portfolio-modal-title"
       >
-        <div className="flex justify-between items-center mb-4 sm:mb-6">
-          <h2 id="portfolio-modal-title" className="text-2xl sm:text-3xl font-semibold text-[var(--text-accent)]">My Portfolio</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
-            aria-label="Close portfolio"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {(isLoadingPrices || isDriveActionLoading) && (
-          <div className="absolute inset-0 bg-[var(--bg-secondary)]/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
-            <LoadingSpinner />
-            <p className="ml-3 text-[var(--text-accent)]">
-              {isDriveActionLoading ? 'Accessing Google Drive...' : 'Refreshing market data...'}
-            </p>
+        <div
+          className="bg-[var(--bg-secondary)] p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-4xl text-[var(--text-primary)] h-[95vh] max-h-[1000px] flex flex-col"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex justify-between items-center mb-4 sm:mb-6">
+            <h2 id="portfolio-modal-title" className="text-2xl sm:text-3xl font-semibold text-[var(--text-accent)]">My Portfolio</h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-[var(--icon-button-hover-bg)] transition-colors"
+              aria-label="Close portfolio"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-[var(--icon-button-default-text)] hover:text-[var(--icon-button-hover-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-        )}
-        
-        {(activeTab === 'open' || activeTab === 'closed' || activeTab === 'performance') && (
-            <PortfolioSummary 
-                entries={portfolioEntries} 
-                livePrices={livePrices} 
-                getItemName={getItemName} 
-                onRefreshPrices={fetchAllLivePrices}
-                isLoadingPrices={isLoadingPrices}
-                onSelectItemAndClose={onSelectItemAndClose}
-                userRsn={userRsn}
-                onUserRsnChange={onUserRsnChange}
-            />
-        )}
+
+          {(isLoadingPrices || isDriveActionLoading) && (
+            <div className="absolute inset-0 bg-[var(--bg-secondary)]/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
+              <LoadingSpinner />
+              <p className="ml-3 text-[var(--text-accent)]">
+                {isDriveActionLoading ? 'Accessing Google Drive...' : 'Refreshing market data...'}
+              </p>
+            </div>
+          )}
+          
+          {(activeTab === 'open' || activeTab === 'closed' || activeTab === 'performance') && (
+              <PortfolioSummary 
+                  entries={portfolioEntries} 
+                  livePrices={livePrices} 
+                  getItemName={getItemName} 
+                  onRefreshPrices={fetchAllLivePrices}
+                  isLoadingPrices={isLoadingPrices}
+                  onSelectItemAndClose={onSelectItemAndClose}
+                  userRsn={userRsn}
+                  onUserRsnChange={onUserRsnChange}
+              />
+          )}
 
 
-        <div className="my-4 sm:my-6 border-b border-[var(--border-primary)]">
-          <nav className="flex space-x-1 sm:space-x-2" aria-label="Tabs">
-            {PORTFOLIO_TABS.map((tab) => (
+          <div className="my-4 sm:my-6 border-b border-[var(--border-primary)]">
+            <nav className="flex space-x-1 sm:space-x-2" aria-label="Tabs">
+              {PORTFOLIO_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-3 py-2 sm:px-4 font-medium text-xs sm:text-sm rounded-t-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)]
+                    ${activeTab === tab.key
+                      ? 'bg-[var(--bg-tertiary)] text-[var(--text-accent)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input-secondary)]/70'
+                    }`}
+                  aria-current={activeTab === tab.key ? 'page' : undefined}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          
+          <div className="flex-grow overflow-y-auto pr-1">
+              {activeTab === 'add' && (
+                  <AddInvestmentForm
+                      allItems={allItems}
+                      onAddInvestment={addPortfolioEntry}
+                      addNotification={addNotification}
+                      isConsentGranted={isConsentGranted}
+                      fetchLatestPrice={fetchLatestPrice} 
+                  />
+              )}
+              {activeTab === 'open' && (
+                   <PortfolioTable
+                      entries={openPositions}
+                      allItems={allItems}
+                      getItemIconUrl={getItemIconUrl}
+                      getItemName={getItemName}
+                      livePrices={livePrices}
+                      onSellAction={handleOpenSellModal}
+                      onDeleteAction={handleOpenConfirmDeleteModal}
+                      onEditAction={handleOpenEditModal}
+                      onSelectItemAction={onSelectItemAndClose}
+                      tableType="open"
+                  />
+              )}
+              {activeTab === 'closed' && (
+                  <PortfolioTable
+                      entries={closedPositions}
+                      allItems={allItems}
+                      getItemIconUrl={getItemIconUrl}
+                      getItemName={getItemName}
+                      livePrices={{}} 
+                      onEditAction={handleOpenEditModal}
+                      onDeleteAction={handleOpenConfirmDeleteModal}
+                      onSelectItemAction={onSelectItemAndClose}
+                      tableType="closed"
+                  />
+              )}
+              {activeTab === 'performance' && (
+                  isDesktopView ? (
+                    <PortfolioPerformanceTab
+                        portfolioEntries={portfolioEntries}
+                        allItems={allItems}
+                        fetchHistoricalData={appFetchHistoricalData}
+                        addNotification={addNotification}
+                        getItemName={getItemName}
+                        showChartLineGlow={showChartLineGlow}
+                    />
+                  ) : (
+                    <div className="text-center py-10 flex flex-col items-center justify-center h-full">
+                        <ChartBarIcon className="w-16 h-16 text-[var(--bg-tertiary)] mb-4" />
+                        <p className="text-base text-[var(--text-primary)] mb-2">Performance chart is best viewed full-screen on mobile.</p>
+                        <button 
+                            onClick={() => setIsPerformanceChartFullScreen(true)}
+                            className="mt-4 px-6 py-2.5 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]"
+                        >
+                            View Fullscreen Chart
+                        </button>
+                    </div>
+                  )
+              )}
+          </div>
+          
+          {isConsentGranted && (
+            <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-end gap-x-3 gap-y-2">
+               {driveFeedback && driveFeedback.type === 'error' && !isDriveActionLoading && (
+                <div className="w-full sm:w-auto text-center sm:text-left text-xs text-[var(--error-text)] p-1.5 bg-[var(--error-bg)]/20 rounded-md mb-2 sm:mb-0 sm:mr-auto">
+                   Google Drive Error: {driveFeedback.message}
+                </div>
+              )}
               <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-2 sm:px-4 font-medium text-xs sm:text-sm rounded-t-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-accent)]
-                  ${activeTab === tab.key
-                    ? 'bg-[var(--bg-tertiary)] text-[var(--text-accent)]'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input-secondary)]/70'
-                  }`}
-                aria-current={activeTab === tab.key ? 'page' : undefined}
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
+                aria-label="Import portfolio data"
+                disabled={isDriveActionLoading}
               >
-                {tab.label}
+                <UploadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Import
               </button>
-            ))}
-          </nav>
+              <button
+                onClick={() => setIsExportOptionsModalOpen(true)}
+                disabled={portfolioEntries.length === 0 || isDriveActionLoading}
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Export portfolio data"
+              >
+                <DownloadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Export
+              </button>
+              <button
+                onClick={() => setIsConfirmClearAllModalOpen(true)}
+                disabled={portfolioEntries.length === 0 || isDriveActionLoading}
+                className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Clear all portfolio data"
+              >
+                <TrashIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
+                Clear All
+              </button>
+            </div>
+          )}
         </div>
-        
-        <div className="flex-grow overflow-y-auto pr-1">
-            {activeTab === 'add' && (
-                <AddInvestmentForm
-                    allItems={allItems}
-                    onAddInvestment={addPortfolioEntry}
-                    addNotification={addNotification}
-                    isConsentGranted={isConsentGranted}
-                    fetchLatestPrice={fetchLatestPrice} 
-                />
-            )}
-            {activeTab === 'open' && (
-                 <PortfolioTable
-                    entries={openPositions}
-                    allItems={allItems}
-                    getItemIconUrl={getItemIconUrl}
-                    getItemName={getItemName}
-                    livePrices={livePrices}
-                    onSellAction={handleOpenSellModal}
-                    onDeleteAction={handleOpenConfirmDeleteModal}
-                    onEditAction={handleOpenEditModal}
-                    onSelectItemAction={onSelectItemAndClose}
-                    tableType="open"
-                />
-            )}
-            {activeTab === 'closed' && (
-                <PortfolioTable
-                    entries={closedPositions}
-                    allItems={allItems}
-                    getItemIconUrl={getItemIconUrl}
-                    getItemName={getItemName}
-                    livePrices={{}} 
-                    onEditAction={handleOpenEditModal}
-                    onDeleteAction={handleOpenConfirmDeleteModal}
-                    onSelectItemAction={onSelectItemAndClose}
-                    tableType="closed"
-                />
-            )}
-             {activeTab === 'performance' && (
-                <PortfolioPerformanceTab
-                    portfolioEntries={portfolioEntries}
-                    allItems={allItems}
-                    fetchHistoricalData={appFetchHistoricalData}
-                    addNotification={addNotification}
-                    getItemName={getItemName}
-                />
-            )}
-        </div>
-        
-        {isConsentGranted && (
-          <div className="mt-auto pt-4 border-t border-[var(--border-primary)] flex flex-col sm:flex-row items-center justify-end gap-x-3 gap-y-2">
-             {driveFeedback && driveFeedback.type === 'error' && !isDriveActionLoading && (
-              <div className="w-full sm:w-auto text-center sm:text-left text-xs text-[var(--error-text)] p-1.5 bg-[var(--error-bg)]/20 rounded-md mb-2 sm:mb-0 sm:mr-auto">
-                 Google Drive Error: {driveFeedback.message}
-              </div>
-            )}
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70"
-              aria-label="Import portfolio data"
-              disabled={isDriveActionLoading}
-            >
-              <UploadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-              Import
-            </button>
-            <button
-              onClick={() => setIsExportOptionsModalOpen(true)}
-              disabled={portfolioEntries.length === 0 || isDriveActionLoading}
-              className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--bg-interactive)] hover:bg-[var(--bg-interactive-hover)] text-[var(--text-on-interactive)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--border-accent)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Export portfolio data"
-            >
-              <DownloadIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-              Export
-            </button>
-            <button
-              onClick={() => setIsConfirmClearAllModalOpen(true)}
-              disabled={portfolioEntries.length === 0 || isDriveActionLoading}
-              className="flex items-center text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-[var(--error-bg)] hover:bg-[var(--error-bg)]/80 text-[var(--error-text)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--error-text)]/70 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Clear all portfolio data"
-            >
-              <TrashIcon className="w-4 h-4 mr-1.5 sm:mr-2" />
-              Clear All
-            </button>
-          </div>
-        )}
-
-
-        {isSellModalOpen && itemToSell && (
-          <SellInvestmentModal
-            isOpen={isSellModalOpen}
-            onClose={handleCloseSellModal}
-            entryToSell={itemToSell}
-            allItems={allItems}
-            getItemIconUrl={getItemIconUrl}
-            getItemName={getItemName}
-            onConfirmSale={handleConfirmSale}
-            addNotification={addNotification}
-          />
-        )}
-
-        {isConfirmDeleteModalOpen && entryToDelete && (
-          <ConfirmDeletePortfolioEntryModal
-            isOpen={isConfirmDeleteModalOpen}
-            onClose={handleCloseConfirmDeleteModal}
-            entryToDelete={entryToDelete}
-            onConfirmDelete={handleConfirmDeleteEntry}
-            getItemIconUrl={getItemIconUrl}
-            getItemName={getItemName}
-          />
-        )}
-
-        {isConfirmClearAllModalOpen && (
-            <ConfirmClearAllPortfolioModal
-                isOpen={isConfirmClearAllModalOpen}
-                onClose={() => setIsConfirmClearAllModalOpen(false)}
-                onConfirmClearAll={() => {
-                    clearAllPortfolioData();
-                    addNotification("Portfolio data cleared successfully!", "success");
-                }}
-            />
-        )}
-
-        {isEditModalOpen && entryToEdit && (
-          <EditInvestmentModal
-            isOpen={isEditModalOpen}
-            onClose={handleCloseEditModal}
-            entryToEdit={entryToEdit}
-            itemInfo={allItems.find(item => item.id === entryToEdit.itemId) || null}
-            onConfirmEdit={handleConfirmEdit}
-            addNotification={addNotification}
-          />
-        )}
-
-        {isExportOptionsModalOpen && (
-          <ExportOptionsModal
-            isOpen={isExportOptionsModalOpen}
-            onClose={() => setIsExportOptionsModalOpen(false)}
-            portfolioEntries={portfolioEntries}
-            onShowCodeModalRequest={handleShowCodeModalRequest}
-            addNotification={addNotification}
-            isGoogleApiInitialized={isGoogleApiInitialized}
-            onSaveToDrive={onSaveToDrive}
-            isDriveActionLoading={isDriveActionLoading}
-            driveFeedback={driveFeedback}
-            trackGaEvent={trackGaEvent}
-          />
-        )}
-
-        {isDisplayCodeModalOpen && (
-          <DisplayCodeModal
-            isOpen={isDisplayCodeModalOpen}
-            onClose={() => setIsDisplayCodeModalOpen(false)}
-            portfolioEntries={portfolioEntries}
-            addNotification={addNotification}
-          />
-        )}
-
-        {isImportModalOpen && (
-          <ImportPortfolioModal
-            isOpen={isImportModalOpen}
-            onClose={() => setIsImportModalOpen(false)}
-            onConfirmImport={handleConfirmImport} 
-            addNotification={addNotification}
-            isGoogleApiInitialized={isGoogleApiInitialized}
-            onLoadFromDrive={onLoadFromDrive}
-            isDriveActionLoading={isDriveActionLoading}
-            driveFeedback={driveFeedback}
-          />
-        )}
-
-        {isConfirmImportOverwriteModalOpen && (
-          <ConfirmImportOverwriteModal
-            isOpen={isConfirmImportOverwriteModalOpen}
-            onConfirm={executeConfirmedImport}
-            onCancel={cancelImportOverwrite}
-          />
-        )}
       </div>
-    </div>
+
+      {isPerformanceChartFullScreen && (
+          <PortfolioPerformanceFullScreenModal
+            isOpen={isPerformanceChartFullScreen}
+            onClose={() => setIsPerformanceChartFullScreen(false)}
+            portfolioEntries={portfolioEntries}
+            allItems={allItems}
+            fetchHistoricalData={appFetchHistoricalData}
+            addNotification={addNotification}
+            getItemName={getItemName}
+            showChartLineGlow={showChartLineGlow}
+          />
+        )}
+
+
+      {isSellModalOpen && itemToSell && (
+        <SellInvestmentModal
+          isOpen={isSellModalOpen}
+          onClose={handleCloseSellModal}
+          entryToSell={itemToSell}
+          allItems={allItems}
+          getItemIconUrl={getItemIconUrl}
+          getItemName={getItemName}
+          onConfirmSale={handleConfirmSale}
+          addNotification={addNotification}
+        />
+      )}
+
+      {isConfirmDeleteModalOpen && entryToDelete && (
+        <ConfirmDeletePortfolioEntryModal
+          isOpen={isConfirmDeleteModalOpen}
+          onClose={handleCloseConfirmDeleteModal}
+          entryToDelete={entryToDelete}
+          onConfirmDelete={handleConfirmDeleteEntry}
+          getItemIconUrl={getItemIconUrl}
+          getItemName={getItemName}
+        />
+      )}
+
+      {isConfirmClearAllModalOpen && (
+          <ConfirmClearAllPortfolioModal
+              isOpen={isConfirmClearAllModalOpen}
+              onClose={() => setIsConfirmClearAllModalOpen(false)}
+              onConfirmClearAll={() => {
+                  clearAllPortfolioData();
+                  addNotification("Portfolio data cleared successfully!", "success");
+              }}
+          />
+      )}
+
+      {isEditModalOpen && entryToEdit && (
+        <EditInvestmentModal
+          isOpen={isEditModalOpen}
+          onClose={handleCloseEditModal}
+          entryToEdit={entryToEdit}
+          itemInfo={allItems.find(item => item.id === entryToEdit.itemId) || null}
+          onConfirmEdit={handleConfirmEdit}
+          addNotification={addNotification}
+        />
+      )}
+
+      {isExportOptionsModalOpen && (
+        <ExportOptionsModal
+          isOpen={isExportOptionsModalOpen}
+          onClose={() => setIsExportOptionsModalOpen(false)}
+          portfolioEntries={portfolioEntries}
+          onShowCodeModalRequest={handleShowCodeModalRequest}
+          addNotification={addNotification}
+          isGoogleApiInitialized={isGoogleApiInitialized}
+          onSaveToDrive={onSaveToDrive}
+          isDriveActionLoading={isDriveActionLoading}
+          driveFeedback={driveFeedback}
+          trackGaEvent={trackGaEvent}
+          userRsn={userRsn}
+        />
+      )}
+
+      {isDisplayCodeModalOpen && (
+        <DisplayCodeModal
+          isOpen={isDisplayCodeModalOpen}
+          onClose={() => setIsDisplayCodeModalOpen(false)}
+          portfolioEntries={portfolioEntries}
+          addNotification={addNotification}
+          userRsn={userRsn}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <ImportPortfolioModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onConfirmImport={handleConfirmImport} 
+          addNotification={addNotification}
+          isGoogleApiInitialized={isGoogleApiInitialized}
+          onLoadFromDrive={onLoadFromDrive}
+          isDriveActionLoading={isDriveActionLoading}
+          driveFeedback={driveFeedback}
+        />
+      )}
+
+      {isConfirmImportOverwriteModalOpen && (
+        <ConfirmImportOverwriteModal
+          isOpen={isConfirmImportOverwriteModalOpen}
+          onConfirm={executeConfirmedImport}
+          onCancel={cancelImportOverwrite}
+        />
+      )}
+    </>
   );
 };

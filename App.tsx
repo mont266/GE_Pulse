@@ -57,7 +57,7 @@ const getInitialConsentStatus = (): 'pending' | 'granted' | 'denied' => {
   return 'pending';
 };
 
-const APP_VERSION = "Beta v0.14"; 
+const APP_VERSION = "Beta v0.15"; 
 
 let audioContextInstance: AudioContext | null = null;
 let isAudioContextInitialized = false;
@@ -77,7 +77,7 @@ const initializeAudioContextSafely = () => {
 };
 
 const playAlertSound = () => {
-  initializeAudioContextSafely(); 
+  // initializeAudioContextSafely(); // This call is removed. AudioContext must be initialized by a user gesture.
 
   if (!audioContextInstance || !isAudioContextInitialized) {
     console.warn("AudioContext not available or not initialized. Cannot play alert sound.");
@@ -133,6 +133,7 @@ interface SearchSectionLayoutProps extends SectionRenderProps {
   wordingPreference: WordingPreference;
   isConsentGranted: boolean;
   isLoadingItems: boolean;
+  searchInputRef: React.Ref<HTMLInputElement>;
 }
 
 const SearchSectionLayout = React.memo(function SearchSectionLayout({
@@ -140,7 +141,8 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
   currentHeight, isResizable, onResizeMouseDown, // New props for resizing
   isSearchSectionCollapsed, toggleSearchSection, searchBarWrapperRef, searchTerm, setSearchTerm, handleSearchKeyDown,
   activeDescendantId, filteredItems, itemListWrapperRef, handleSelectItem, getItemIconUrl, activeSuggestionIndex,
-  favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems
+  favoriteItemIds, handleToggleFavoriteQuickAction, wordingPreference, isConsentGranted, isLoadingItems,
+  searchInputRef
 }: SearchSectionLayoutProps) {
   const getButtonCursorClass = (currentSectionId: string) => {
     if (isDragAndDropEnabled) {
@@ -179,6 +181,7 @@ const SearchSectionLayout = React.memo(function SearchSectionLayout({
           >
             <div ref={searchBarWrapperRef}>
               <SearchBar
+                ref={searchInputRef}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
                 onKeyDownHandler={handleSearchKeyDown}
@@ -421,6 +424,7 @@ const App: React.FC = () => {
   
   const notificationIdCounterRef = useRef(0);
   const favoritesRefreshLockRef = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     notificationIdCounterRef.current += 1;
@@ -768,10 +772,13 @@ const App: React.FC = () => {
   }, [resizingSection, handleResizeMouseMove, handleResizeMouseUp]);
 
 
-  const toggleSearchSection = () => setIsSearchSectionCollapsed(prev => {
-    trackGaEvent('toggle_section_collapse', { section_name: 'search', is_collapsed: !prev });
+  const toggleSearchSection = useCallback(() => setIsSearchSectionCollapsed(prev => {
+    if (prev) { // only track expand events for now, or adjust as needed
+      trackGaEvent('toggle_section_collapse', { section_name: 'search', is_collapsed: false });
+    }
     return !prev;
-  });
+  }), [trackGaEvent]);
+
   const toggleAlertsSection = () => setIsAlertsSectionCollapsed(prev => {
     trackGaEvent('toggle_section_collapse', { section_name: 'alerts', is_collapsed: !prev });
     return !prev;
@@ -2092,6 +2099,30 @@ const App: React.FC = () => {
     return Object.values(sectionHeights).some(h => h !== DEFAULT_SECTION_HEIGHT_PX);
   }, [sectionHeights, isDesktopView]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        trackGaEvent('search_shortcut_used');
+
+        if (isSearchSectionCollapsed) {
+          toggleSearchSection();
+          setTimeout(() => {
+            searchInputRef.current?.focus();
+          }, 100);
+        } else {
+          searchInputRef.current?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [isSearchSectionCollapsed, toggleSearchSection, trackGaEvent]);
+
 
   const getSectionProps = useCallback((sectionId: string, dndPropsBase: Omit<SectionRenderProps, 'currentHeight' | 'isResizable' | 'onResizeMouseDown'>): SpecificAppSectionProps => {
     const dndProps: SectionRenderProps = {
@@ -2122,6 +2153,7 @@ const App: React.FC = () => {
           wordingPreference,
           isConsentGranted,
           isLoadingItems,
+          searchInputRef,
         };
       case SECTION_KEYS.FAVORITES:
         return {
@@ -2358,6 +2390,7 @@ const App: React.FC = () => {
           isDriveActionLoading={isDriveActionLoading}
           driveFeedback={driveFeedbackForModal}
           trackGaEvent={trackGaEvent}
+          showChartLineGlow={showChartLineGlow}
         />
       )}
 

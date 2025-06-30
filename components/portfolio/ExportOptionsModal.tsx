@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { PortfolioEntry, DriveFeedback } from '../../src/types';
+import { PortfolioEntry, DriveFeedback, PortfolioBackup } from '../../src/types';
 import { DownloadIcon, CodeIcon, CloudUploadIcon } from '../Icons'; 
 
 interface ExportOptionsModalProps {
@@ -14,6 +14,7 @@ interface ExportOptionsModalProps {
   isDriveActionLoading: boolean;
   driveFeedback: DriveFeedback | null;
   trackGaEvent?: (eventName: string, eventParams?: Record<string, any>) => void;
+  userRsn: string;
 }
 
 export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
@@ -27,6 +28,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   isDriveActionLoading,
   driveFeedback,
   trackGaEvent,
+  userRsn,
 }) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -52,7 +54,11 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       return;
     }
     try {
-      const jsonString = JSON.stringify(portfolioEntries, null, 2);
+      const backupData: PortfolioBackup = {
+        rsn: userRsn,
+        entries: portfolioEntries,
+      };
+      const jsonString = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PortfolioEntry, DriveFeedback } from '../../src/types';
+import { PortfolioEntry, DriveFeedback, PortfolioBackup } from '../../src/types';
 import { UploadIcon, PasteIcon, CloudDownloadIcon } from '../Icons'; 
 
 // Utility function to validate portfolio data structure
@@ -37,7 +37,7 @@ function usePrevious<T>(value: T): T | undefined {
 interface ImportPortfolioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirmImport: (importedData: PortfolioEntry[]) => void;
+  onConfirmImport: (importedData: PortfolioBackup) => void;
   addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
   isGoogleApiInitialized: boolean;
   onLoadFromDrive: () => Promise<void>;
@@ -111,8 +111,13 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
       try {
         const fileContent = event.target?.result as string;
         const parsedData = JSON.parse(fileContent);
+        
         if (isValidPortfolioArray(parsedData)) {
-          onConfirmImport(parsedData);
+          // Handle old format
+          onConfirmImport({ entries: parsedData });
+        } else if (parsedData && typeof parsedData === 'object' && isValidPortfolioArray(parsedData.entries)) {
+          // Handle new format
+          onConfirmImport({ entries: parsedData.entries, rsn: parsedData.rsn });
         } else {
           addNotification('Invalid portfolio data structure in the JSON file.', 'error');
         }
@@ -141,8 +146,13 @@ export const ImportPortfolioModal: React.FC<ImportPortfolioModalProps> = ({
     try {
       const jsonString = atob(processedCode);
       const parsedData = JSON.parse(jsonString);
+      
       if (isValidPortfolioArray(parsedData)) {
-        onConfirmImport(parsedData);
+        // Handle old format
+        onConfirmImport({ entries: parsedData });
+      } else if (parsedData && typeof parsedData === 'object' && isValidPortfolioArray(parsedData.entries)) {
+        // Handle new format
+        onConfirmImport({ entries: parsedData.entries, rsn: parsedData.rsn });
       } else {
         addNotification('Invalid portfolio data structure in the provided code.', 'error');
       }
