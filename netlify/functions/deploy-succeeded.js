@@ -179,40 +179,7 @@ exports.handler = async (event) => {
     };
   }
   
-  // 2. Check if the changelog file was actually updated in this deploy
-  const currentCommit = process.env.COMMIT_REF;
-  const prevCommit = process.env.CACHED_COMMIT_REF;
-
-  // Only check for changes if we have both commit references, and they are different.
-  // The first deploy won't have a prevCommit, so we'll post.
-  if (currentCommit && prevCommit && currentCommit !== prevCommit) {
-    try {
-      console.log(`Checking for changes between commits ${prevCommit.slice(0, 7)} and ${currentCommit.slice(0, 7)}...`);
-      // Use git to get a list of changed files between the last successful deploy and this one.
-      const changedFilesOutput = execSync(`git diff --name-only ${prevCommit} ${currentCommit}`).toString();
-      const changedFiles = changedFilesOutput.split('\n');
-
-      console.log('Files changed in this deploy:', changedFiles);
-
-      // If our specific changelog file is NOT in the list of changes, exit successfully.
-      if (!changedFiles.includes(CHANGELOG_FILE_PATH)) {
-        console.log(`Changelog file '${CHANGELOG_FILE_PATH}' was not updated. Skipping Discord notification.`);
-        return {
-          statusCode: 200,
-          body: 'Changelog not updated, notification skipped.',
-        };
-      }
-      console.log(`Changelog file '${CHANGELOG_FILE_PATH}' was updated. Proceeding with notification.`);
-    } catch (gitError) {
-      // This might happen in certain local dev environments or if git isn't available.
-      // In a real Netlify build environment, this should succeed. We'll log a warning and proceed.
-      console.warn("Could not execute git diff. Proceeding with notification as a fallback.", gitError);
-    }
-  } else {
-     console.log("No previous commit reference found, or commits are the same. This is likely the first deploy. Proceeding with notification.");
-  }
-
-  // 3. Get the most recent changelog entry
+  // 2. Get the most recent changelog entry
   if (!changelogEntries || changelogEntries.length === 0) {
     console.log("No changelog entries found. Skipping Discord notification.");
     return {
@@ -221,6 +188,50 @@ exports.handler = async (event) => {
     };
   }
   const latestEntry = changelogEntries[0];
+
+  // 3. Compare current deploy with previous deploy to see if we should notify
+  const currentCommit = process.env.COMMIT_REF;
+  const prevCommit = process.env.CACHED_COMMIT_REF;
+
+  // Don't post on re-deploys of the same commit.
+  if (currentCommit === prevCommit) {
+    console.log("Re-deploy of the same commit. Skipping Discord notification.");
+    return { statusCode: 200, body: 'Re-deploy detected. Notification skipped.' };
+  }
+  
+  // If this is not the very first deploy (i.e., we have a previous commit to compare against)
+  if (prevCommit) {
+    try {
+      // Get the content of the changelog file from the PREVIOUS deploy
+      const prevChangelogFileContent = execSync(`git show ${prevCommit}:${CHANGELOG_FILE_PATH}`).toString();
+      
+      // Extract the version from the first entry in the old file content.
+      // This regex finds the first "version: '...'" or "version: \"...\""
+      const match = prevChangelogFileContent.match(/version:\s*["']([^"']+)["']/);
+      const prevLatestVersion = match ? match[1] : null;
+
+      console.log(`Current latest version: ${latestEntry.version}`);
+      console.log(`Previous latest version: ${prevLatestVersion}`);
+
+      // If the latest version is the same as the previous deploy's latest version, skip.
+      if (latestEntry.version === prevLatestVersion) {
+        console.log("Latest changelog version has not changed. Skipping notification.");
+        return {
+          statusCode: 200,
+          body: 'Changelog version has not changed. Notification skipped.',
+        };
+      }
+      console.log('Changelog version has changed. Proceeding with notification.');
+
+    } catch (gitError) {
+      // This can happen if the file is new or git command fails.
+      // In this case, we should proceed with the notification as it's a significant change.
+      console.warn("Could not get previous changelog version, proceeding with notification as a fallback.", gitError.message);
+    }
+  } else {
+      console.log("No previous commit reference found. This is likely the first deploy. Proceeding with notification.");
+  }
+
 
   // 4. Format the data into a beautiful Discord Embed
   const discordPayload = {
