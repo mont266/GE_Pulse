@@ -4,23 +4,29 @@
   "description": "GE Pulse Frontend",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "mkdir -p dist && npx esbuild index.tsx --bundle --outfile=dist/bundle.js --jsx=automatic --format=iife --target=es6 --loader:.ts=tsx && cp index.html dist/index.html && sed -i 's~type=\"module\" src=\"/index.tsx\"~src=\"/bundle.js\" defer~g' dist/index.html && cp metadata.json dist/metadata.json && cp robots.txt dist/robots.txt"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "fuse.js": "7.1.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "recharts": "2.12.7"
+    "fuse.js": "^7.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "esbuild": "^0.20.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
     "node-fetch": "^2.6.7",
-    "ts-node": "^10.9.1"
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "ts-node": "^10.9.1",
+    "vite": "^5.3.1"
   }
 }

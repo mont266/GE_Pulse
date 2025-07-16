@@ -22,7 +22,7 @@
     <meta property="twitter:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%252338bdf8'%3E%3Cpath d='M10 50 Q25 20 40 50 T70 50 Q85 80 90 50'/%3E%3Ccircle cx='90' cy='50' r='5' fill='%2523facc15'/%3E%3C/svg%3E" />
 
     <link rel="canonical" href="https://beta.gepulse.net/" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/index.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%2338bdf8'><path d='M10 50 Q25 20 40 50 T70 50 Q85 80 90 50'/><circle cx='90' cy='50' r='5' fill='%23facc15'/></svg>">
   
     <!-- Google tag (gtag.js) -->
@@ -38,110 +38,16 @@
     <!-- Google API & Identity Services -->
     <script async defer src="https://apis.google.com/js/api.js"></script>
     <script async defer src="https://accounts.google.com/gsi/client"></script>
-
-<style>
-  /* Glow effect for the main price chart line - DEBUGGING with strong RED glow */
-  /*
-  .recharts-line .recharts-line-path {
-    filter: drop-shadow(0px 0px 8px red) drop-shadow(0px 0px 15px red);
-  }
-  */
-  .title-neon-glow {
-    /* Base text color is set by text-[var(--text-accent)] in App.tsx */
-    text-shadow: 
-      0 0 0.5px var(--text-accent), /* Innermost, sharpest glow (very subtle) */
-      0 0 1.5px var(--text-accent), /* Inner softer glow (very subtle) */
-      0 0 4px var(--logo-pulse-color),  /* Medium glow (further reduced) */
-      0 0 8px var(--logo-pulse-color);  /* Outer softer glow (further reduced) */
-  }
-
-  @keyframes pulse-dot {
-    0%, 100% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    50% {
-      transform: scale(1.1); /* Slightly larger */
-      opacity: 0.85;       /* Slightly more transparent */
-    }
-  }
-
-  .logo-dot-pulse {
-    animation: pulse-dot 4.5s ease-in-out infinite; /* Slower pulse */
-    transform-origin: center; /* Ensures scaling happens from the center of the dot */
-  }
-
-  .line-clamp-2 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .section-resize-handle {
-    width: calc(100% - 2rem); /* Adjust for parent padding if necessary, or make parent padding 0 */
-    margin-left: auto;
-    margin-right: auto;
-    height: 12px;
-    background-color: transparent;
-    cursor: ns-resize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-top: 1px solid transparent; /* For spacing if needed */
-    border-bottom: 1px solid transparent; /* For spacing if needed */
-    touch-action: none; /* Prevent scrolling on touch devices when dragging */
-  }
-
-  .section-resize-handle::before {
-    content: "";
-    display: block;
-    width: 40px; /* Width of the visual grabber line */
-    height: 4px; /* Thickness of the grabber line */
-    background-color: var(--border-secondary);
-    border-radius: 2px;
-    transition: background-color 0.2s ease-in-out;
-  }
-
-  .section-resize-handle:hover::before {
-    background-color: var(--border-accent);
-  }
-  
-  /* Ensure scrollbar visibility for resizable content */
-  [id$="-content-wrapper"] { /* Affects elements with IDs like 'search-content-wrapper' */
-      scrollbar-width: thin; /* Firefox */
-      scrollbar-color: var(--border-secondary) var(--bg-tertiary); /* Firefox */
-  }
-
-  [id$="-content-wrapper"]::-webkit-scrollbar {
-      width: 8px; /* Adjust as needed */
-  }
-
-  [id$="-content-wrapper"]::-webkit-scrollbar-track {
-      background: var(--bg-tertiary); /* Or a slightly darker/lighter shade */
-      border-radius: 4px;
-  }
-
-  [id$="-content-wrapper"]::-webkit-scrollbar-thumb {
-      background-color: var(--border-secondary);
-      border-radius: 4px;
-      border: 2px solid var(--bg-tertiary); /* Creates padding around thumb */
-  }
-
-  [id$="-content-wrapper"]::-webkit-scrollbar-thumb:hover {
-      background-color: var(--border-accent);
-  }
-
-</style>
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
-    "fuse.js": "https://esm.sh/fuse.js@7.1.0",
-    "recharts": "https://esm.sh/recharts@2.12.7"
+    "react": "https://esm.sh/react@^19.1.0",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "fuse.js": "https://esm.sh/fuse.js@^7.1.0",
+    "recharts": "https://esm.sh/recharts@^3.1.0",
+    "vite": "https://esm.sh/vite@^7.0.4",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^4.6.0"
   }
 }
 </script>
@@ -165,7 +71,6 @@
       <textarea name="message"></textarea>
       <input type="text" name="human-check" /> {/* Added human check field for Netlify */}
     </form>
-    <script src="/bundle.js" defer></script>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

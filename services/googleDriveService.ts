@@ -1,26 +1,7 @@
 // Ensure gapi and google types are available globally after scripts load
 
-// Helper to get values from window object, falling back to undefined
-// Also checks if Netlify's placeholder syntax is present, indicating an injection issue.
-const getWindowVariable = (key: string): string | undefined => {
-  if (typeof window !== 'undefined' && (window as any)[key]) {
-    const value = (window as any)[key];
-    if (typeof value === 'string' && value.startsWith("{{") && value.endsWith("}}")) {
-      console.warn(`Google Drive Service: Environment variable ${key} appears to be an unreplaced Netlify placeholder: ${value}. Ensure the variable is set in Netlify's build environment.`);
-      return undefined;
-    }
-    if (value === "undefined") {
-        console.warn(`Google Drive Service: Environment variable ${key} was resolved to the string "undefined". Ensure the variable is correctly set in Netlify.`);
-        return undefined;
-    }
-    return value;
-  }
-  console.warn(`Google Drive Service: window.${key} is not defined.`);
-  return undefined;
-};
-
-const API_KEY = getWindowVariable('GOOGLE_API_KEY');
-const CLIENT_ID = getWindowVariable('GOOGLE_CLIENT_ID');
+const API_KEY = process.env.GOOGLE_API_KEY;
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];

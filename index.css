@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Glow effect for the main price chart line - DEBUGGING with strong RED glow */
+/*
+.recharts-line .recharts-line-path {
+  filter: drop-shadow(0px 0px 8px red) drop-shadow(0px 0px 15px red);
+}
+*/
+.title-neon-glow {
+  /* Base text color is set by text-[var(--text-accent)] in App.tsx */
+  text-shadow: 
+    0 0 0.5px var(--text-accent), /* Innermost, sharpest glow (very subtle) */
+    0 0 1.5px var(--text-accent), /* Inner softer glow (very subtle) */
+    0 0 4px var(--logo-pulse-color),  /* Medium glow (further reduced) */
+    0 0 8px var(--logo-pulse-color);  /* Outer softer glow (further reduced) */
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1); /* Slightly larger */
+    opacity: 0.85;       /* Slightly more transparent */
+  }
+}
+
+.logo-dot-pulse {
+  animation: pulse-dot 4.5s ease-in-out infinite; /* Slower pulse */
+  transform-origin: center; /* Ensures scaling happens from the center of the dot */
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.section-resize-handle {
+  width: calc(100% - 2rem); /* Adjust for parent padding if necessary, or make parent padding 0 */
+  margin-left: auto;
+  margin-right: auto;
+  height: 12px;
+  background-color: transparent;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid transparent; /* For spacing if needed */
+  border-bottom: 1px solid transparent; /* For spacing if needed */
+  touch-action: none; /* Prevent scrolling on touch devices when dragging */
+}
+
+.section-resize-handle::before {
+  content: "";
+  display: block;
+  width: 40px; /* Width of the visual grabber line */
+  height: 4px; /* Thickness of the grabber line */
+  background-color: var(--border-secondary);
+  border-radius: 2px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.section-resize-handle:hover::before {
+  background-color: var(--border-accent);
+}
+
+/* Ensure scrollbar visibility for resizable content */
+[id$="-content-wrapper"] { /* Affects elements with IDs like 'search-content-wrapper' */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: var(--border-secondary) var(--bg-tertiary); /* Firefox */
+}
+
+[id$="-content-wrapper"]::-webkit-scrollbar {
+    width: 8px; /* Adjust as needed */
+}
+
+[id$="-content-wrapper"]::-webkit-scrollbar-track {
+    background: var(--bg-tertiary); /* Or a slightly darker/lighter shade */
+    border-radius: 4px;
+}
+
+[id$="-content-wrapper"]::-webkit-scrollbar-thumb {
+    background-color: var(--border-secondary);
+    border-radius: 4px;
+    border: 2px solid var(--bg-tertiary); /* Creates padding around thumb */
+}
+
+[id$="-content-wrapper"]::-webkit-scrollbar-thumb:hover {
+    background-color: var(--border-accent);
+}
